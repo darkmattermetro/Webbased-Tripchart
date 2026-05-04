@@ -242,10 +242,10 @@ function displayResult(data, dutyNo, dayType) {
     
     // WEF and Remarks (from original)
     if (data.wef || data.remarks) {
-        html += '<div style="background:rgba(0,212,255,0.1);padding:10px 15px;border-radius:8px;margin-bottom:15px;border:1px solid rgba(0,212,255,0.2);display:flex;gap:20px;flex-wrap:wrap;">";
+        html += '<div style="background:rgba(0,212,255,0.1);padding:10px 15px;border-radius:8px;margin-bottom:15px;border:1px solid rgba(0,212,255,0.2);display:flex;gap:20px;flex-wrap:wrap;">';
         if (data.wef) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">WEF</div><div style="color:var(--cyan);font-weight:bold;">' + data.wef + '</div></div>';
         if (data.remarks) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">REMARKS</div><div style="color:var(--orange);">' + data.remarks + '</div></div>';
-        html += '</div>";
+        html += '</div>';
     }
     
     // Sign on/off info display
