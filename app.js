@@ -110,7 +110,12 @@ async function getDutyData(type, dutyNo) {
             .eq('day_type', type)
             .order('id', { ascending: true });
         
-        if (error || !data || data.length === 0) {
+        if (error) {
+            console.error('Supabase error:', error);
+            return { error: 'Database error: ' + error.message };
+        }
+        
+        if (!data || data.length === 0) {
             return { error: 'No database found for ' + type };
         }
         
@@ -324,7 +329,7 @@ async function handleRegister() {
     const passwordHash = hashPassword(password);
     
     try {
-        const { data: existing } = await sb.from('profiles').select('emp_id').eq('emp_id', normalizedId).single();
+        const { data: existing } = await sb.from('profiles').select('emp_id').eq('emp_id', normalizedId);
         if (existing) {
             errorDiv.textContent = 'Emp ID already registered!';
             errorDiv.style.display = 'block';
@@ -450,6 +455,18 @@ async function clearData(type) {
         await sb.from('trip_data').delete().eq('day_type', type);
         alert(type + ' data cleared!');
     } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+function updateAdminUI(accessLevel) {
+    const adminTabs = document.querySelectorAll('.admin-only-tab');
+    const usersTab = document.getElementById('tabUsers');
+    if (accessLevel === 'admin') {
+        adminTabs.forEach(tab => tab.style.display = 'inline-block');
+        if (usersTab) usersTab.style.display = 'inline-block';
+    } else {
+        adminTabs.forEach(tab => tab.style.display = 'none');
+        if (usersTab) usersTab.style.display = 'none';
+    }
 }
 
 function switchAdminTab(tab) {
@@ -796,13 +813,26 @@ async function handleLogin() {
         hash = hash & hash;
     }
     try {
-        const { data } = await sb.from('profiles').select('*').eq('emp_id', eid.toUpperCase()).single();
-        if (data && data.password_hash === hash.toString()) {
-            currentUser = { empId: data.emp_id, name: data.full_name };
+        const { data, error } = await sb.from('profiles').select('*').eq('emp_id', eid.toUpperCase());
+        if (error) {
+            console.error('Login error:', error);
+            err.textContent = 'Database error: ' + error.message;
+            err.style.display = 'block';
+            return;
+        }
+        if (!data || data.length === 0) {
+            err.textContent = 'Invalid credentials!';
+            err.style.display = 'block';
+            return;
+        }
+        const userData = data[0];
+        if (userData.password_hash === hash.toString()) {
+            currentUser = { empId: userData.emp_id, name: userData.full_name, accessLevel: userData.access_level };
             document.getElementById('loggedInUserHeader').classList.add('show');
-            document.getElementById('headerUserName').textContent = data.full_name;
-            document.getElementById('headerUserId').textContent = data.emp_id;
+            document.getElementById('headerUserName').textContent = userData.full_name;
+            document.getElementById('headerUserId').textContent = userData.emp_id;
             toggleLoginModal();
+            updateAdminUI(userData.access_level);
         } else {
             err.textContent = 'Invalid credentials!';
             err.style.display = 'block';
