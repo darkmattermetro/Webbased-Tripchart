@@ -119,6 +119,18 @@ async function getDutyData(type, dutyNo) {
             return { error: 'No database found for ' + type };
         }
         
+        // Fetch WEF and remarks from app_config
+        let wef = '', remarks = '';
+        try {
+            const { data: configData } = await sb.from('app_config').select('config_key, config_value');
+            if (configData) {
+                configData.forEach(c => {
+                    if (c.config_key === type + '_wef') wef = c.config_value;
+                    if (c.config_key === type + '_remarks') remarks = c.config_value;
+                });
+            }
+        } catch (e) {}
+        
         const searchDuty = dutyNo.toString().trim().toLowerCase().replace('.0', '');
         let found = false;
         const roster = [];
@@ -157,7 +169,7 @@ async function getDutyData(type, dutyNo) {
         
         const rakeGaps = analyzeRakeRelievers(data);
         
-        return { roster: roster, totalKm: totalKm.toFixed(2), rakeGaps: rakeGaps };
+        return { roster: roster, totalKm: totalKm.toFixed(2), rakeGaps: rakeGaps, wef: wef, remarks: remarks };
     } catch (e) { return { error: e.toString() }; }
 }
 
@@ -228,7 +240,15 @@ function displayResult(data, dutyNo, dayType) {
     
     let html = '<div class="result-card"><h3 style="color:var(--cyan);margin-bottom:15px;">Duty ' + dutyNo + ' - ' + dayType + '</h3>';
     
-    // Sign on/off info display - all from firstRow (where duty_no exists)
+    // WEF and Remarks (from original)
+    if (data.wef || data.remarks) {
+        html += '<div style="background:rgba(0,212,255,0.1);padding:10px 15px;border-radius:8px;margin-bottom:15px;border:1px solid rgba(0,212,255,0.2);display:flex;gap:20px;flex-wrap:wrap;">";
+        if (data.wef) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">WEF</div><div style="color:var(--cyan);font-weight:bold;">' + data.wef + '</div></div>';
+        if (data.remarks) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">REMARKS</div><div style="color:var(--orange);">' + data.remarks + '</div></div>';
+        html += '</div>";
+    }
+    
+    // Sign on/off info display
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:20px;">' +
         '<div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:10px;border:1px solid rgba(0,212,255,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN ON</div>' +
@@ -263,7 +283,7 @@ function displayResult(data, dutyNo, dayType) {
     });
     html += '</table></div>';
     
-    // Break/Reliever Schedule - only show gaps for current duty's rakes
+    // Break/Reliever Schedule - show ALL gaps for duty's rakes (original behavior)
     const dutyRakes = [...new Set(data.roster.map(r => r.rake_id).filter(x => x))];
     const gapKeys = data.rakeGaps ? Object.keys(data.rakeGaps).filter(gap => {
         const rakeId = gap.split('|')[0];
@@ -832,7 +852,16 @@ async function handleLogin() {
             document.getElementById('headerUserName').textContent = userData.full_name;
             document.getElementById('headerUserId').textContent = userData.emp_id;
             toggleLoginModal();
-            updateAdminUI(userData.access_level);
+            // Navigate to admin page
+            showPage('pageAdmin');
+            // Show admin tabs if admin
+            if (userData.access_level === 'admin') {
+                document.querySelectorAll('.admin-only-tab').forEach(tab => tab.style.display = 'inline-block');
+                document.getElementById('tabUsers').style.display = 'inline-block';
+            }
+            // Update admin info
+            document.getElementById('adminLoggedEmpId').textContent = userData.emp_id;
+            document.getElementById('adminLoggedLevel').textContent = userData.access_level;
         } else {
             err.textContent = 'Invalid credentials!';
             err.style.display = 'block';
