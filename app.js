@@ -237,6 +237,7 @@ function analyzeRakeRelievers(tripData) {
 function displayResult(data, dutyNo, dayType) {
     const container = document.getElementById('resultContent');
     const firstRow = data.roster[0] || {};
+    const lastRow = data.roster[data.roster.length - 1] || {};
     
     let html = '<div class="result-card"><h3 style="color:var(--cyan);margin-bottom:15px;">Duty ' + dutyNo + ' - ' + dayType + '</h3>';
     
@@ -248,7 +249,7 @@ function displayResult(data, dutyNo, dayType) {
         html += '</div>';
     }
     
-    // Sign on/off info display
+    // Sign on/off info + Driving Hours (from original code.txt)
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:20px;">' +
         '<div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:10px;border:1px solid rgba(0,212,255,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN ON</div>' +
@@ -257,12 +258,16 @@ function displayResult(data, dutyNo, dayType) {
         '</div>' +
         '<div style="background:rgba(239,68,68,0.15);padding:12px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN OFF</div>' +
-            '<div style="color:var(--red);font-weight:bold;">' + (firstRow.sign_off_loc || '-') + '</div>' +
-            '<div style="color:var(--orange);font-family:Syncopate;">' + (firstRow.sign_off_time || '-') + '</div>' +
+            '<div style="color:var(--red);font-weight:bold;">' + (lastRow.sign_off_loc || '-') + '</div>' +
+            '<div style="color:var(--orange);font-family:Syncopate;">' + (lastRow.sign_off_time || '-') + '</div>' +
         '</div>' +
         '<div style="background:rgba(34,197,94,0.15);padding:12px;border-radius:10px;border:1px solid rgba(34,197,94,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">RUNNING TIME</div>' +
             '<div style="color:var(--green);font-weight:bold;font-family:Syncopate;">' + (firstRow.running_time || '-') + '</div>' +
+        '</div>' +
+        '<div style="background:rgba(168,85,247,0.15);padding:12px;border-radius:10px;border:1px solid rgba(168,85,247,0.3);">' +
+            '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">DUTY REMARKS</div>' +
+            '<div style="color:var(--purple);font-weight:bold;">' + (firstRow.duty_remarks || '-') + '</div>' +
         '</div>' +
     '</div>';
     
