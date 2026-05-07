@@ -329,25 +329,60 @@
                         <p style="color:rgba(255,255,255,0.6);text-align:center;padding:40px;">Select options and generate report</p>
                     </div>
                     <button class="jarvis-btn btn-green" onclick="generateKmReport()">🛣️ GENERATE KM REPORT</button>
+                    <button class="jarvis-btn btn-sm" onclick="downloadKmExcel()" style="margin-top:10px;background:linear-gradient(135deg,var(--green),#15803d);">📥 EXPORT KM EXCEL</button>
                 </div>
                 
                 <!-- Tab: Tetra Key -->
                 <div id="adminTabTetra" class="admin-tab-content" style="display:none;">
                     <div class="section-header" style="border-left-color:var(--red);background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(200,0,0,0.1));">
                         <div class="section-icon" style="background:linear-gradient(135deg,var(--red),#b91c1b);">🔑</div>
-                        <div class="section-title">Tetra Key Generator</div>
+                        <div class="section-title">Tetra Key Report</div>
                     </div>
-                    <div class="input-group">
-                        <label class="input-label">Select Day Type</label>
-                        <select id="tetraDayType" class="jarvis-select">
-                            <option value="Weekday">Weekday</option>
-                            <option value="Saturday">Saturday</option>
-                            <option value="Sunday">Sunday</option>
-                            <option value="Special">Special</option>
-                        </select>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:15px;">
+                        <div class="input-group" style="margin-bottom:0;">
+                            <label class="input-label">Day Type</label>
+                            <select id="tetraDayType" class="jarvis-select">
+                                <option value="Weekday">Weekday</option>
+                                <option value="Saturday">Saturday</option>
+                                <option value="Sunday">Sunday</option>
+                                <option value="Special">Special</option>
+                            </select>
+                        </div>
+                        <div class="input-group" style="margin-bottom:0;">
+                            <label class="input-label">Station</label>
+                            <select id="tetraStation" class="jarvis-select">
+                                <option value="ALL">All Stations</option>
+                                <option value="KKDA">KKDA</option>
+                                <option value="PBGW">PBGW</option>
+                                <option value="DDSC">DDSC</option>
+                                <option value="IPE">IPE</option>
+                                <option value="MUPR">MUPR</option>
+                                <option value="MKPR">MKPR</option>
+                                <option value="SAKP">SAKP</option>
+                                <option value="SVVR">SVVR</option>
+                                <option value="NZM">NZM</option>
+                            </select>
+                        </div>
+                        <div class="input-group" style="margin-bottom:0;">
+                            <label class="input-label">Direction</label>
+                            <select id="tetraDirection" class="jarvis-select">
+                                <option value="ALL">All</option>
+                                <option value="BOARDING">Boarding (Outgoing)</option>
+                                <option value="ALIGHTING">Deboarding (Incoming)</option>
+                            </select>
+                        </div>
                     </div>
-                    <button class="jarvis-btn btn-red" onclick="generateTetraKey()">🔑 GENERATE TETRA KEY</button>
-                    <div id="tetraKeyOutput" style="margin-top:15px;"></div>
+                    <button class="jarvis-btn btn-red" onclick="generateTetraReport()" style="margin-bottom:15px;">🔑 GENERATE TETRA KEY REPORT</button>
+                    <div id="tetraWrapper" style="display:none;">
+                        <div class="summary-grid" style="margin-bottom:15px;">
+                            <div class="summary-box"><div class="label">Total Keys</div><div class="value red" id="tetraCount">-</div></div>
+                            <div class="summary-box"><div class="label">Incoming ↓</div><div class="value cyan" id="tetraIncoming">-</div></div>
+                            <div class="summary-box"><div class="label">Outgoing ↑</div><div class="value orange" id="tetraOutgoing">-</div></div>
+                            <div class="summary-box"><div class="label">Rakes</div><div class="value green" id="tetraRakeCount">-</div></div>
+                        </div>
+                    </div>
+                    <button class="jarvis-btn btn-green" onclick="downloadTetraExcel()" style="margin-bottom:15px;">📥 EXPORT EXCEL</button>
+                    <div id="tetraKeyOutput"></div>
                 </div>
                 
                 <!-- Tab: Form Builder -->
@@ -381,23 +416,51 @@
                         <div class="glass-card" style="padding:15px;">
                             <h4 style="color:var(--cyan);margin-bottom:10px;font-size:13px;">Allowed Admin IDs</h4>
                             <div id="adminIdsList" style="font-size:12px;margin-bottom:10px;max-height:150px;overflow-y:auto;"></div>
-                            <div style="display:flex;gap:5px;">
-                                <input type="text" id="newAdminId" class="jarvis-input" style="font-size:11px;padding:8px;" placeholder="Emp ID">
-                                <button class="jarvis-btn btn-sm" onclick="addAdminId()" style="padding:8px 12px;">ADD</button>
+                            <div style="display:flex;gap:5px;margin-bottom:5px;">
+                                <input type="text" id="newUserEmpId" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;" placeholder="Emp ID">
+                                <select id="newUserAccessLevel" class="jarvis-select" style="width:auto;padding:6px;font-size:11px;" onchange="toggleSecretCode('new')">
+                                    <option value="admin">Admin</option>
+                                    <option value="crewcontroller">Crew Controller</option>
+                                </select>
+                                <button class="jarvis-btn btn-sm" onclick="addNewUserAccess()" style="padding:8px 12px;">ADD</button>
                             </div>
+                            <div id="newSecretCodeGroup" style="display:none;margin-bottom:5px;">
+                                <input type="password" id="newSecretCode" class="jarvis-input" style="font-size:11px;padding:8px;" placeholder="Secret Code for Admin">
+                            </div>
+                            <button class="jarvis-btn btn-sm btn-red" onclick="resetAdminIds()" style="font-size:10px;padding:6px 10px;">🔄 RESET ADMINS</button>
                         </div>
                         <div class="glass-card" style="padding:15px;">
                             <h4 style="color:var(--green);margin-bottom:10px;font-size:13px;">Allowed Crew Controllers</h4>
                             <div id="ccIdsList" style="font-size:12px;margin-bottom:10px;max-height:150px;overflow-y:auto;"></div>
-                            <div style="display:flex;gap:5px;">
-                                <input type="text" id="newCcId" class="jarvis-input" style="font-size:11px;padding:8px;" placeholder="Emp ID">
-                                <button class="jarvis-btn btn-sm btn-green" onclick="addCcId()" style="padding:8px 12px;">ADD</button>
+                            <div style="display:flex;gap:5px;margin-bottom:5px;">
+                                <input type="text" id="removeUserEmpId" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;" placeholder="Emp ID to Remove">
+                                <select id="removeUserAccessLevel" class="jarvis-select" style="width:auto;padding:6px;font-size:11px;" onchange="toggleSecretCode('remove')">
+                                    <option value="admin">Admin</option>
+                                    <option value="crewcontroller">Crew Controller</option>
+                                </select>
+                                <button class="jarvis-btn btn-sm btn-red" onclick="removeUserAccess()" style="padding:8px 12px;">REMOVE</button>
                             </div>
+                            <div id="removeSecretCodeGroup" style="display:none;margin-bottom:5px;">
+                                <input type="password" id="removeSecretCode" class="jarvis-input" style="font-size:11px;padding:8px;" placeholder="Secret Code for Admin">
+                            </div>
+                            <button class="jarvis-btn btn-sm" onclick="resetCcIds()" style="font-size:10px;padding:6px 10px;background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);">🔄 RESET CCs</button>
                         </div>
                     </div>
                     <div class="glass-card" style="padding:15px;">
                         <h4 style="color:var(--orange);margin-bottom:10px;font-size:13px;">Registered Users</h4>
                         <div id="registeredUsersList" style="max-height:200px;overflow-y:auto;"></div>
+                    </div>
+                    <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <h4 style="color:var(--green);font-size:13px;margin:0;">Message Activity Log</h4>
+                            <button id="clearMsgLogBtn" class="jarvis-btn btn-sm" onclick="clearMessageLog()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR LOG</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table" style="font-size:11px;">
+                                <thead><tr><th>Timestamp</th><th>Emp ID</th><th>Name</th><th>Action</th><th>Message</th></tr></thead>
+                                <tbody id="messageLogBody"><tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

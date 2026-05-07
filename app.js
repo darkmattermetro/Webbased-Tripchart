@@ -6,6 +6,7 @@ const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
+let adminClicks = 0;
 
 // KM MAP (Exact from code.txt)
 const KM_MAP = {
@@ -19,6 +20,7 @@ const KM_MAP = {
     "DDSC|DDSC SDG STABLE": 0.5,
     "DDSC|DDSC SDG": 0.5,
     "IPE|PBGW UP": 34.92,
+    "IPE|MUPR UP": 10.4,
     "IPE|KKDA UP": 3.16,
     "KKDA DN|SAKP": 27.26,
     "KKDA DN|MUPR DN": 7.3,
@@ -37,6 +39,7 @@ const KM_MAP = {
     "MKPR|PBGW DN": 8.43,
     "MKPR|SAKP": 6.59,
     "MKPR|MUPR": 13.36,
+    "MUPR UP|KKDA UP": 7.3,
     "MUPR|SVVR DN SDG": 4,
     "MUPR|SVVR DN SDG STABLE": 4,
     "MUPR|MUPR 4TH PF STABLE": 1,
@@ -66,18 +69,19 @@ const KM_MAP = {
     "PBGW DN|DDSC SDG": 12.26,
     "PBGW DN|IPE": 34.92,
     "PBGW DN|KKDA DN": 38.08,
-    "PBGW DN|DDSC":11.86,
+    "PBGW DN|DDSC": 11.86,
     "PBGW UP|KKDA UP": 29.10,
-    "PBGW UP|MUPR":21.79,
-    "PBGW UP|MKPR":8.43,
-    "SAKP 3RD|PBGW DN":1.84,
-    "SVVR DN|KKDA UP":11.91,
-    "SVVR DN PF|KKDA UP":11.91,
-    "SVVR DN PF STABLE|KKDA UP":11.91,
-    "SVVR DN|SVVR DN SDG STABLE":0.4,
-    "SVVR DN|SVVR DN SDG":0.4,
-    "SVVR DN PF|SVVR DN SDG STABLE":0.4,
-    "SVVR DN PF|SVVR DN SDG":0.4,
+    "PBGW UP|MUPR": 21.79,
+    "PBGW UP|MKPR": 8.43,
+    "SAKP 3RD|PBGW DN": 1.84,
+    "SVVR DN|KKDA UP": 11.91,
+    "SVVR DN SDG|MUPR DN": 4.8,
+    "SVVR DN PF|KKDA UP": 11.91,
+    "SVVR DN PF STABLE|KKDA UP": 11.91,
+    "SVVR DN|SVVR DN SDG STABLE": 0.4,
+    "SVVR DN|SVVR DN SDG": 0.4,
+    "SVVR DN PF|SVVR DN SDG STABLE": 0.4,
+    "SVVR DN PF|SVVR DN SDG": 0.4,
     "SVVR DN SDG|MUPR": 4,
     "SVVR DN SDG STABLE|MUPR": 4
 };
@@ -259,7 +263,7 @@ function displayResult(data, dutyNo, dayType) {
             <table class="data-table">
                 <tr><th>Action</th><th>Location</th><th>Time</th></tr>
                 <tr style="background:rgba(34,197,94,0.15);"><td style="color:var(--green);font-weight:700;">SIGN ON</td><td>${firstRow["Sign On Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign On Time"] || '-'}</span></td></tr>
-                <tr style="background:rgba(239,68,68,0.15);"><td style="color:var(--red);font-weight:700;">SIGN OFF</td><td>${data.roster[data.roster.length - 1]["Sign Off Loc"] || '-'}</td><td><span class="time-display">${data.roster[data.roster.length - 1]["Sign Off Time"] || '-'}</span></td></tr>
+                <tr style="background:rgba(255,107,53,0.15);"><td style="color:var(--orange);font-weight:700;">SIGN OFF</td><td>${data.roster[data.roster.length - 1]["Sign Off Loc"] || '-'}</td><td><span class="time-display">${data.roster[data.roster.length - 1]["Sign Off Time"] || '-'}</span></td></tr>
             </table>
             </div>
            </div>`;
@@ -342,6 +346,7 @@ async function fetchDuty(source) {
     const dutyNo = source === 'home' ? document.getElementById('dutyInputHome').value : document.getElementById('dutyInputQuick').value;
     const dayType = document.getElementById('daySelect').value;
     if (!dutyNo) { alert('Please enter a duty number'); return; }
+    trackVisit('duty_search', 'search');
     const result = await getDutyData(dayType, dutyNo);
     if (result.error) { alert(result.error); return; }
     displayResult(result, dutyNo, dayType);
@@ -349,8 +354,22 @@ async function fetchDuty(source) {
 }
 
 function toggleRegisterModal() {
-    const modal = document.getElementById('registerModal');
-    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    const regModal = document.getElementById('registerModal');
+    if (regModal.style.display === 'flex') {
+        regModal.style.display = 'none';
+    } else {
+        regModal.style.display = 'flex';
+        document.getElementById('regName').value = '';
+        document.getElementById('regEmpId').value = '';
+        document.getElementById('regAccessCode').value = '';
+        document.getElementById('regPassword').value = '';
+        document.getElementById('regConfirmPassword').value = '';
+        const err = document.getElementById('registerError');
+        const success = document.getElementById('registerSuccess');
+        if (err) err.style.display = 'none';
+        if (success) success.style.display = 'none';
+        setTimeout(() => document.getElementById('regName').focus(), 100);
+    }
 }
 
 async function handleRegister() {
@@ -522,34 +541,627 @@ function updateAdminUI(accessLevel) {
     }
 }
 
-function switchAdminTab(tab) {
+function switchAdminTab(tabName) {
+    const isAdmin = currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin';
+    const restrictedTabs = ['messages', 'upload', 'users', 'form'];
+    if (!isAdmin && restrictedTabs.indexOf(tabName) !== -1) {
+        alert('Admin access required for this section!');
+        return;
+    }
     document.querySelectorAll('.admin-tab-content').forEach(t => t.style.display = 'none');
-    const tabContent = document.getElementById('adminTab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+    const tabContent = document.getElementById('adminTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     if (tabContent) tabContent.style.display = 'block';
-    if (tab === 'users') loadUserLists();
-    if (tab === 'chart') initSeriesGrid();
+    if (tabName === 'users') loadUserManagementData();
+    if (tabName === 'chart') initSeriesGrid();
+}
+
+// SESSION MANAGEMENT
+function saveSession(user) {
+    currentUser = user;
+    sessionStorage.setItem('dmrcUser', JSON.stringify(user));
+    updateUserHeader();
+}
+
+function checkExistingSession() {
+    const savedUser = sessionStorage.getItem('dmrcUser');
+    if (savedUser) {
+        try {
+            currentUser = JSON.parse(savedUser);
+            updateUserHeader();
+            loadUserMessages();
+        } catch(e) {
+            sessionStorage.removeItem('dmrcUser');
+        }
+    }
+}
+
+function updateUserHeader() {
+    const headerBar = document.getElementById('loggedInUserHeader');
+    if (!headerBar) return;
+    if (currentUser) {
+        document.getElementById('headerUserName').textContent = currentUser.name;
+        document.getElementById('headerUserId').textContent = currentUser.empId;
+        const currentPage = document.querySelector('.page.active');
+        if (currentPage && (currentPage.id === 'pageAdmin')) {
+            headerBar.classList.add('show');
+        } else {
+            headerBar.classList.remove('show');
+        }
+    } else {
+        headerBar.classList.remove('show');
+    }
+}
+
+function togglePasswordVisibility(inputId, icon) {
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        icon.textContent = '👁️';
+    }
+}
+
+// TRIGGER ADMIN (5-click secret access)
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'minimalLoginTrigger' || e.target.closest('#minimalLoginTrigger')) {
+        if (currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin') {
+            showPage('pageAdmin');
+            loadAdminData();
+            return;
+        }
+        adminClicks++;
+        if (adminClicks >= 5) { toggleLoginModal(); adminClicks = 0; }
+        setTimeout(() => { adminClicks = 0; }, 2000);
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        if (currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin') {
+            showPage('pageAdmin');
+            loadAdminData();
+        } else {
+            toggleLoginModal();
+        }
+    }
+});
+
+function adminLogin() {
+    toggleLoginModal();
+}
+
+// UPDATE DATE/TIME
+function updateDateTime() {
+    const now = new Date();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    document.getElementById('currentDate').textContent = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+    document.getElementById('currentDay').textContent = days[now.getDay()];
+    const daySelect = document.getElementById('daySelect');
+    if (daySelect) {
+        if (now.getDay() === 0) daySelect.value = 'Sunday';
+        else if (now.getDay() === 6) daySelect.value = 'Saturday';
+        else daySelect.value = 'Weekday';
+    }
+}
+
+// FORMAT TIME
+function formatTime(h) {
+    if (isNaN(h)) return "00:00";
+    let hrs = Math.floor(h);
+    let mins = Math.round((h - hrs) * 60);
+    if (mins === 60) { hrs++; mins = 0; }
+    return hrs.toString().padStart(2, '0') + ':' + mins.toString().padStart(2, '0');
+}
+
+// GET CUSTOM DUTIES
+function getCustomDuties(inputId) {
+    const val = document.getElementById(inputId)?.value;
+    if (!val || !val.trim()) return [];
+    return val.split(',').map(d => d.trim()).filter(d => d !== '');
+}
+
+// LOAD USER MESSAGES
+async function loadUserMessages() {
+    try {
+        const { data } = await sb.from('app_config').select('config_value').eq('config_key', 'UserMessage').single();
+        if (data && data.config_value) {
+            document.getElementById('userMsgBanner').style.display = 'flex';
+            document.getElementById('userMsgText').textContent = data.config_value;
+        } else {
+            document.getElementById('userMsgBanner').style.display = 'none';
+        }
+    } catch (e) {}
+}
+
+// LOAD POPUP MESSAGE
+async function loadPopupMessage() {
+    try {
+        const { data } = await sb.from('app_config').select('config_value').eq('config_key', 'PopupMessage').single();
+        if (data && data.config_value) {
+            document.getElementById('popupMessageText').textContent = data.config_value;
+            document.getElementById('popupOverlay').classList.add('show');
+        }
+    } catch (e) {}
+}
+
+// ADMIN DATA LOADER
+async function loadAdminData() {
+    const isAdmin = currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin';
+    const isMainAdmin = currentUser && currentUser.empId === '3623';
+    const adminOnlyTabs = document.querySelectorAll('.admin-only-tab');
+    adminOnlyTabs.forEach(tab => { tab.style.display = isAdmin ? 'inline-block' : 'none'; });
+    const usersTab = document.getElementById('tabUsers');
+    if (usersTab) { usersTab.style.display = isAdmin ? 'inline-block' : 'none'; }
+    const empIdSpan = document.getElementById('adminLoggedEmpId');
+    const levelSpan = document.getElementById('adminLoggedLevel');
+    if (empIdSpan) empIdSpan.textContent = currentUser ? currentUser.empId : 'Not logged in';
+    if (levelSpan) levelSpan.textContent = currentUser ? currentUser.accessLevel : '-';
+    if (isAdmin) {
+        loadMessageLog();
+    }
+    loadUserManagementData();
+    if (isAdmin) {
+        switchAdminTab('messages');
+    } else {
+        switchAdminTab('chart');
+    }
+}
+
+// USER MANAGEMENT
+async function loadUserManagementData() {
+    try {
+        const { data: adminData } = await sb.from('allowed_admins').select('emp_id');
+        const { data: ccData } = await sb.from('allowed_ccs').select('emp_id');
+        document.getElementById('adminIdsList').innerHTML = (adminData || []).length > 0
+            ? (adminData || []).map(a => a.emp_id).join('<br>')
+            : 'None';
+        document.getElementById('ccIdsList').innerHTML = (ccData || []).length > 0
+            ? (ccData || []).map(c => c.emp_id).join('<br>')
+            : 'None';
+        const { data: profiles } = await sb.from('profiles').select('*');
+        let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th><th>Created</th></tr>';
+        (profiles || []).forEach(p => {
+            html += '<tr><td style="color:var(--cyan);">' + p.emp_id + '</td>' +
+                '<td>' + p.full_name + '</td>' +
+                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
+                '<td>' + (p.created_at || '-') + '</td></tr>';
+        });
+        html += '</table>';
+        document.getElementById('registeredUsersList').innerHTML = html;
+    } catch (e) {}
+}
+
+function toggleSecretCode(type) {
+    const select = document.getElementById(type === 'new' ? 'newUserAccessLevel' : 'removeUserAccessLevel');
+    const codeGroup = document.getElementById(type === 'new' ? 'newSecretCodeGroup' : 'removeSecretCodeGroup');
+    if (codeGroup) {
+        codeGroup.style.display = (select && select.value === 'admin') ? 'block' : 'none';
+    }
+}
+
+async function addNewUserAccess() {
+    const empId = document.getElementById('newUserEmpId')?.value?.trim()?.toUpperCase();
+    const accessLevel = document.getElementById('newUserAccessLevel')?.value;
+    const secretCode = document.getElementById('newSecretCode')?.value;
+    if (!empId) return alert('Enter Emp ID!');
+    if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
+    try {
+        await sb.from(accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs').insert({ emp_id: empId });
+        alert('Access added for ' + empId);
+        loadUserManagementData();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+async function removeUserAccess() {
+    const empId = document.getElementById('removeUserEmpId')?.value?.trim()?.toUpperCase();
+    const accessLevel = document.getElementById('removeUserAccessLevel')?.value;
+    const secretCode = document.getElementById('removeSecretCode')?.value;
+    if (!empId) return alert('Enter Emp ID!');
+    if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
+    if (empId === '3623') return alert('Cannot remove Main Admin!');
+    try {
+        await sb.from(accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs').delete().eq('emp_id', empId);
+        alert('Access removed for ' + empId);
+        loadUserManagementData();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+async function resetAdminIds() {
+    if (!confirm('Reset Admin IDs to only 3623?')) return;
+    try {
+        await sb.from('allowed_admins').delete().neq('emp_id', '');
+        await sb.from('allowed_admins').insert({ emp_id: '3623' });
+        alert('Admin IDs reset!');
+        loadUserManagementData();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+async function resetCcIds() {
+    if (!confirm('Clear all Crew Controller IDs?')) return;
+    try {
+        await sb.from('allowed_ccs').delete().neq('emp_id', '');
+        alert('CC IDs cleared!');
+        loadUserManagementData();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+// MESSAGE LOG
+async function loadMessageLog() {
+    try {
+        const { data: logs } = await sb.from('message_activity_log').select('*').order('timestamp', { ascending: false });
+        const tbody = document.getElementById('messageLogBody');
+        if (!tbody) return;
+        if (!logs || logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = '';
+        logs.forEach(log => {
+            const tr = document.createElement('tr');
+            tr.style.background = log.action === 'POSTED' ? 'rgba(34,197,94,0.1)' :
+                log.action === 'POPUP' ? 'rgba(168,85,247,0.1)' :
+                log.action === 'CLEARED' ? 'rgba(239,68,68,0.1)' : '';
+            tr.innerHTML = '<td>' + (log.timestamp || '') + '</td>' +
+                '<td style="color:var(--cyan);font-weight:600;">' + (log.emp_id || '') + '</td>' +
+                '<td>' + (log.emp_name || '') + '</td>' +
+                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' +
+                (log.action === 'POSTED' ? 'var(--green)' : log.action === 'POPUP' ? 'var(--purple)' : 'var(--red)') +
+                ';color:#000;">' + log.action + '</span></td>' +
+                '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (log.message || '-') + '</td>';
+            tbody.appendChild(tr);
+        });
+    } catch (e) {}
+}
+
+async function clearMessageLog() {
+    if (!confirm('Clear Message Activity Log? This cannot be undone!')) return;
+    if (!currentUser || currentUser.empId !== '3623') return alert('Only Main Admin (3623) can clear log!');
+    try {
+        await sb.from('message_activity_log').delete().neq('id', 0);
+        alert('Message log cleared!');
+        loadMessageLog();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+async function clearFormActivityLog() {
+    if (!confirm('Clear Form Activity Log? This cannot be undone!')) return;
+    if (!currentUser || currentUser.empId !== '3623') return alert('Only Main Admin (3623) can clear log!');
+    try {
+        await sb.from('form_activity_log').delete().neq('id', 0);
+        alert('Form activity log cleared!');
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+// ENHANCED TETRA KEY REPORT
+let currentTetraData = null;
+
+async function generateTetraReport() {
+    const dayType = document.getElementById('tetraDayType')?.value || 'Weekday';
+    const station = document.getElementById('tetraStation')?.value || 'ALL';
+    const direction = document.getElementById('tetraDirection')?.value || 'ALL';
+    try {
+        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
+        if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
+        const rakeTrips = {};
+        for (let i = 0; i < data.length; i++) {
+            const rake = (data[i]["Rake Num"] || '').toString().trim();
+            if (!rake) continue;
+            if (!rakeTrips[rake]) rakeTrips[rake] = [];
+            rakeTrips[rake].push({
+                duty: data[i]["Duty No"],
+                depTime: data[i]["Start Time"],
+                arrTime: data[i]["End Time"],
+                boardStn: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                alightStn: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
+            });
+        }
+        const tetraData = [];
+        let rakeCount = 0;
+        for (const rake in rakeTrips) {
+            const trips = rakeTrips[rake];
+            trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
+            if (trips.length > 0) {
+                tetraData.push({ rakeId: rake, duty: trips[0].duty, boardStn: trips[0].boardStn, boardTime: trips[0].depTime, alightStn: trips[trips.length-1].alightStn, alightTime: trips[trips.length-1].arrTime, action: 'BOARDING' });
+                rakeCount++;
+                tetraData.push({ rakeId: rake, duty: trips[trips.length-1].duty, boardStn: trips[0].boardStn, boardTime: trips[0].depTime, alightStn: trips[trips.length-1].alightStn, alightTime: trips[trips.length-1].arrTime, action: 'ALIGHTING' });
+            }
+        }
+        let filtered = tetraData;
+        if (station !== 'ALL') {
+            filtered = tetraData.filter(d => d.boardStn === station || d.alightStn === station);
+        }
+        if (direction !== 'ALL') {
+            filtered = filtered.filter(d => d.action === direction);
+        }
+        const incomingCount = filtered.filter(d => d.action === 'ALIGHTING').length;
+        const outgoingCount = filtered.filter(d => d.action === 'BOARDING').length;
+        currentTetraData = { tetraData: filtered, tetraCount: filtered.length, rakeCount: rakeCount };
+        document.getElementById('tetraCount').textContent = filtered.length;
+        document.getElementById('tetraIncoming').textContent = incomingCount;
+        document.getElementById('tetraOutgoing').textContent = outgoingCount;
+        document.getElementById('tetraRakeCount').textContent = rakeCount;
+        let tableHtml = '';
+        filtered.forEach(d => {
+            const actionText = d.action === 'BOARDING' ? 'Outgoing' : 'Incoming';
+            const stationText = d.action === 'BOARDING' ? d.boardStn : d.alightStn;
+            tableHtml += '<tr style="background:rgba(239,68,68,0.15);">' +
+                '<td style="color:var(--red);font-weight:700;">' + d.rakeId + '</td>' +
+                '<td style="color:var(--cyan);font-weight:700;">' + d.duty + '</td>' +
+                '<td>' + d.boardStn + '</td>' +
+                '<td><span class="time-display">' + d.boardTime + '</span></td>' +
+                '<td>' + d.alightStn + '</td>' +
+                '<td><span class="time-display">' + d.alightTime + '</span></td>' +
+                '<td style="color:var(--orange);font-weight:700;">' + stationText + '</td>' +
+                '<td><span style="background:var(--purple);color:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;">' + actionText + '</span></td>' +
+            '</tr>';
+        });
+        document.getElementById('tetraKeyOutput').innerHTML = tableHtml
+            ? '<div class="table-wrap"><table class="data-table"><tr><th>Rake</th><th>Duty</th><th>Board</th><th>Board Time</th><th>Alight</th><th>Alight Time</th><th>Station</th><th>Direction</th></tr>' + tableHtml + '</table></div>'
+            : '<p style="color:rgba(255,255,255,0.4);text-align:center;">No tetra key data found.</p>';
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+function downloadTetraExcel() {
+    if (!currentTetraData || !currentTetraData.tetraData) return alert('Generate Tetra Key Report first!');
+    const dayType = document.getElementById('tetraDayType')?.value || 'Weekday';
+    const station = document.getElementById('tetraStation')?.value || 'ALL';
+    const direction = document.getElementById('tetraDirection')?.value || 'ALL';
+    const wsData = [
+        ['Tetra Key Report - ' + dayType],
+        ['Station Filter: ' + station],
+        ['Direction Filter: ' + (direction === 'ALL' ? 'All' : direction === 'BOARDING' ? 'Boarding (Outgoing)' : 'Deboarding (Incoming)')],
+        ['Generated: ' + new Date().toLocaleString()],
+        [],
+        ['Rake ID', 'Duty Number', 'Boarding Station', 'Boarding Time', 'Alighting Station', 'Alighting Time', 'Station', 'Direction']
+    ];
+    currentTetraData.tetraData.forEach(d => {
+        const action = d.action === 'BOARDING' ? 'Outgoing' : 'Incoming';
+        const stationText = d.action === 'BOARDING' ? d.boardStn : d.alightStn;
+        wsData.push([d.rakeId, d.duty, d.boardStn, d.boardTime, d.alightStn, d.alightTime, stationText, action]);
+    });
+    wsData.push([]);
+    wsData.push(['Summary']);
+    wsData.push(['Total Keys:', currentTetraData.tetraData.length]);
+    wsData.push(['Incoming (Deboarding) ↓:', currentTetraData.tetraData.filter(d => d.action === 'ALIGHTING').length]);
+    wsData.push(['Outgoing (Boarding) ↑:', currentTetraData.tetraData.filter(d => d.action === 'BOARDING').length]);
+    wsData.push(['Total Rakes Involved:', currentTetraData.rakeCount]);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tetra Key Report');
+    XLSX.writeFile(wb, dayType + '_Tetra_Key_Report.xlsx');
+}
+
+// ENHANCED GRAPH
+let currentChartData = null;
+
+async function generateGraph() {
+    const dayType = document.getElementById('graphDay').value;
+    const series = Array.from(document.querySelectorAll('input[name="series"]:checked')).map(cb => cb.value);
+    const customDuties = getCustomDuties('customDutiesGraph');
+    if (series.length === 0 && customDuties.length === 0) return alert('Select series or enter duty numbers!');
+    const result = await getGraphData(dayType, series, customDuties);
+    if (result.error) { alert(result.error); return; }
+    currentChartData = result;
+    document.getElementById('graphWrapper').style.display = 'block';
+    const seriesStr = series.length > 0 ? 'Series: ' + series.join(', ') : '';
+    const customStr = customDuties.length > 0 ? 'Custom: ' + customDuties.join(', ') : '';
+    document.getElementById('chartTitle').textContent = dayType + ' - ' + (seriesStr + (customStr ? (seriesStr ? ' | ' : '') + customStr : ''));
+    document.getElementById('avgDisplay').textContent = 'AVG: ' + result.avgTime;
+    const chartWidth = Math.max(1200, result.details.length * 80 + 100);
+    document.getElementById('chartParent').style.width = chartWidth + 'px';
+    const getBarColor = (d) => {
+        const on = parseInt((d.signOnTime || '').split(':')[0]);
+        const off = parseInt((d.signOffTime || '').split(':')[0]);
+        if (on < 7 && off >= 22) return '#ef4444';
+        if (on < 7) return '#ff9500';
+        if (off >= 22) return '#a855f7';
+        return '#00d4ff';
+    };
+    const ctx = document.getElementById('myChart').getContext('2d');
+    if (myChart) myChart.destroy();
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: result.details.map(d => d.duty),
+            datasets: [{
+                data: result.details.map(d => d.running),
+                backgroundColor: result.details.map(d => getBarColor(d)),
+                borderColor: result.details.map(d => getBarColor(d)),
+                borderWidth: 2,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            barPercentage: 0.7,
+            categoryPercentage: 0.8,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: Math.max(...result.details.map(d => d.running)) * 1.25,
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    ticks: { color: '#fff', callback: v => formatTime(v), font: { size: 12, weight: 'bold' } },
+                    title: { display: true, text: 'Running Hours', color: 'rgba(255,255,255,0.7)', font: { size: 14, weight: 'bold' } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#fff', font: { weight: 'bold', size: 12 } }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(20,20,40,0.98)',
+                    borderColor: '#00d4ff',
+                    borderWidth: 2,
+                    titleColor: '#00d4ff',
+                    bodyColor: '#fff',
+                    titleFont: { weight: 'bold', size: 14 },
+                    bodyFont: { size: 13 },
+                    padding: 12,
+                    displayColors: false,
+                    callbacks: {
+                        title: function(context) { return 'Duty: ' + context[0].label; },
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const d = result.details[idx];
+                            return [ 'Driving Hrs: ' + d.runningStr, 'Sign On: ' + d.signOnTime + ' @ ' + d.signOnLoc, 'Sign Off: ' + d.signOffTime + ' @ ' + d.signOffLoc ];
+                        }
+                    }
+                }
+            }
+        },
+        plugins: [{
+            id: 'aboveLabels',
+            afterDatasetsDraw: function(chart) {
+                const ctx = chart.ctx;
+                const meta = chart.getDatasetMeta(0);
+                meta.data.forEach(function(bar, index) {
+                    const d = result.details[index];
+                    const barHeight = bar.height;
+                    const barX = bar.x;
+                    const barY = bar.y;
+                    ctx.save();
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+                    ctx.shadowBlur = 5;
+                    ctx.shadowOffsetX = 1;
+                    ctx.shadowOffsetY = 1;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(d.runningStr, barX, barY - barHeight - 10);
+                    ctx.restore();
+                });
+            }
+        }]
+    });
+}
+
+function downloadChartPDF() {
+    if (!currentChartData) return alert('Generate Chart first!');
+    const title = document.getElementById('chartTitle').innerText;
+    const avgText = document.getElementById('avgDisplay').innerText;
+    const data = currentChartData.details;
+    const chartWidth = Math.max(2000, data.length * 90 + 200);
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'background:#1a1a2e;padding:40px;width:' + chartWidth + 'px;min-height:850px;display:flex;flex-direction:column;align-items:center;position:fixed;left:-9999px;top:0;z-index:-1;';
+    wrapper.innerHTML = `
+        <div style="width:100%;text-align:center;margin-bottom:20px;">
+            <h2 style="color:#00d4ff;font-family:Arial,sans-serif;margin:0;font-size:28px;font-weight:bold;">${title}</h2>
+        </div>
+        <div style="width:100%;text-align:center;margin-bottom:25px;display:flex;justify-content:center;gap:40px;">
+            <span style="color:#22c55e;font-family:Arial;font-size:16px;font-weight:bold;">${avgText}</span>
+            <span style="color:#fff;font-family:Arial;font-size:16px;">Total Duties: <b style="color:#00d4ff;">${data.length}</b></span>
+        </div>
+        <div style="width:100%;height:600px;background:rgba(0,0,0,0.3);border-radius:15px;padding:25px;border:1px solid rgba(0,212,255,0.3);">
+            <canvas id="pdfChartCanvas"></canvas>
+        </div>
+        <div style="width:100%;display:flex;justify-content:space-between;margin-top:20px;">
+            <div style="color:rgba(255,255,255,0.5);font-size:12px;font-family:Arial;">
+                DMRC Line 7 • KKDA & PBGW Crew Control • Generated: ${new Date().toLocaleDateString()}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(wrapper);
+    setTimeout(() => {
+        const getBarColor = (d) => {
+            const on = parseInt((d.signOnTime || '').split(':')[0]);
+            const off = parseInt((d.signOffTime || '').split(':')[0]);
+            if (on < 7 && off >= 22) return '#ef4444';
+            if (on < 7) return '#ff9500';
+            if (off >= 22) return '#a855f7';
+            return '#00d4ff';
+        };
+        const pdfCtx = document.getElementById('pdfChartCanvas').getContext('2d');
+        new Chart(pdfCtx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.duty),
+                datasets: [{ data: data.map(d => d.running), backgroundColor: data.map(d => getBarColor(d)), borderColor: data.map(d => getBarColor(d)), borderWidth: 2, borderRadius: 8 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, barPercentage: 0.7, categoryPercentage: 0.8,
+            scales: {
+                y: { beginAtZero: true, max: Math.max(...data.map(d => d.running)) * 1.25, grid: { color: 'rgba(255,255,255,0.12)' }, ticks: { color: '#fff', font: { size: 13, weight: 'bold' }, callback: v => formatTime(v) }, title: { display: true, text: 'Running Hours', color: 'rgba(255,255,255,0.8)', font: { size: 15, weight: 'bold' } } },
+                x: { grid: { display: false }, ticks: { color: '#fff', font: { size: 13, weight: 'bold' } } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+    setTimeout(() => {
+            html2canvas(wrapper, { scale: 1.5, backgroundColor: '#1a1a2e', useCORS: true, logging: false, width: chartWidth, height: 900 }).then(canvasImg => {
+                document.body.removeChild(wrapper);
+                const imgData = canvasImg.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = title.replace(/[^a-zA-Z0-9]/g, '_') + '.png';
+                link.href = imgData;
+                link.click();
+            }).catch(err => { document.body.removeChild(wrapper); alert('Error generating PNG: ' + err); });
+        }, 500);
+    }, 100);
+}
+
+function downloadChartExcel() {
+    if (!currentChartData) return alert('Generate Chart first!');
+    const title = document.getElementById('chartTitle').innerText;
+    const data = currentChartData.details;
+    const wsData = [['Duty', 'Running Time', 'Sign On Loc', 'Sign On Time', 'Sign Off Loc', 'Sign Off Time']];
+    data.forEach(d => { wsData.push([d.duty, d.runningStr, d.signOnLoc, d.signOnTime, d.signOffLoc, d.signOffTime]); });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Chart Data');
+    XLSX.writeFile(wb, 'chart_data.xlsx');
+}
+
+// KM EXCEL
+async function downloadKmExcel() {
+    const dayType = document.getElementById('graphDay')?.value || 'Weekday';
+    try {
+        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
+        if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
+        let totalKm = 0, tripCount = 0;
+        const trips = [];
+        for (let i = 0; i < data.length; i++) {
+            const r = data[i];
+            if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
+                const km = KM_MAP[from + '|' + to] || 0;
+                totalKm += km;
+                tripCount++;
+                trips.push({ duty: r["Duty No"], signOn: r["Sign On Time"], signOnLoc: r["Sign On Loc"], signOff: r["Sign Off Time"], signOffLoc: r["Sign Off Loc"], km: km });
+            }
+        }
+        const wsData = [['Duty', 'Sign On', 'Sign On Loc', 'Sign Off', 'Sign Off Loc', 'KM']];
+        trips.forEach(d => wsData.push([d.duty, d.signOn, d.signOnLoc, d.signOff, d.signOffLoc, parseFloat(d.km).toFixed(2)]));
+        wsData.push([]);
+        wsData.push(['Total Duties:', tripCount]);
+        wsData.push(['Total KM:', totalKm.toFixed(2)]);
+        wsData.push(['Average KM:', (totalKm / tripCount).toFixed(2)]);
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, 'KM Analysis');
+        XLSX.writeFile(wb, dayType + '_KM_Analysis.xlsx');
+    } catch (e) { alert('Error: ' + e.toString()); }
 }
 
 // INIT
 window.addEventListener('DOMContentLoaded', async () => {
-    const now = new Date();
-    document.getElementById('currentDate').textContent = now.toLocaleDateString('en-GB');
-    document.getElementById('currentDay').textContent = now.toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
-    
-    try {
-        const { data: popup } = await sb.from('app_config').select('config_value').eq('config_key', 'PopupMessage').single();
-        if (popup && popup.config_value) {
-            document.getElementById('popupMessageText').textContent = popup.config_value;
-            document.getElementById('popupOverlay').classList.add('show');
-        }
-        
-        const { data: userMsg } = await sb.from('app_config').select('config_value').eq('config_key', 'UserMessage').single();
-        if (userMsg && userMsg.config_value) {
-            document.getElementById('userMsgText').textContent = userMsg.config_value;
-            document.getElementById('userMsgBanner').style.display = 'flex';
-        }
-    } catch (e) {}
+    checkExistingSession();
+    updateDateTime();
+    updateUserHeader();
+    await loadPopupMessage();
+    await loadUserMessages();
+    const page = document.querySelector('.page.active');
+    if (page && page.id) trackVisit(page.id, 'pageview');
 });
+
+function trackVisit(page, type) {
+    logVisit(page, type, currentUser ? currentUser.empId : null);
+}
 
 // CHART FUNCTIONS
 let myChart = null;
@@ -699,14 +1311,49 @@ async function loadVisitorStats() {
     document.getElementById('visitWeek').textContent = stats.thisWeek;
 }
 
-function downloadVisitorLog() { alert('Export functionality - to be implemented with XLSX library'); }
+function hashPassword(password) {
+    let hash = 0;
+    for (let i = 0; i < password.length; i++) {
+        const char = password.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return hash.toString();
+}
+
+function clearSession() {
+    currentUser = null;
+    sessionStorage.removeItem('dmrcUser');
+    document.getElementById('loggedInUserHeader').classList.remove('show');
+}
+
+function handleLogout() {
+    clearSession();
+    showPage('pageHome');
+}
+
+async function downloadVisitorLog() {
+    try {
+        const { data, error } = await sb.from('visitor_logs').select('*').order('timestamp', { ascending: false });
+        if (error || !data || data.length === 0) { alert('No visitor data to export'); return; }
+        const wsData = [['VISITOR LOG REPORT'], ['Generated: ' + new Date().toLocaleString()], []];
+        wsData.push(['Date/Time', 'Page', 'Type', 'Emp ID', 'User Agent']);
+        data.forEach(v => {
+            wsData.push([v.timestamp || '', v.page || '', v.type || '', v.emp_id || 'Organic', v.user_agent || '']);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Visitor Log');
+        XLSX.writeFile(wb, 'VisitorLog_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+function openUserForm() { alert('User form - to be implemented with Form Builder data'); }
 
 async function clearVisitorLog() {
     if (!confirm('Clear all visitor logs?')) return;
     try { await sb.from('visitor_logs').delete().neq('id', 0); alert('Visitor log cleared!'); loadVisitorStats(); } catch (e) { alert('Error: ' + e.toString()); }
 }
-
-function openUserForm() { alert('User form - to be implemented with Form Builder data'); }
 
 async function generateKmReport() {
     const dayType = document.getElementById('graphDay')?.value || 'Weekday';
@@ -847,17 +1494,26 @@ function addCcId() { alert('Add CC ID - needs Supabase integration'); }
 function initSeriesGrid() {
     const grid = document.getElementById('seriesGrid');
     if (!grid) return;
-    const series = ['1','2','3','4','5','6','7','8','9','10','11-20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38','39','40'];
+    const series = ['11-20', '201-220', '301-320', '401-420', '501-520'];
     grid.innerHTML = series.map(s => '<label><input type="checkbox" name="series" value="' + s + '"> ' + s + '</label>').join('');
 }
 
 function toggleLoginModal() {
     const m = document.getElementById('loginModal');
-    m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+    if (m.style.display === 'flex') {
+        m.style.display = 'none';
+    } else {
+        m.style.display = 'flex';
+        document.getElementById('loginEmpId').value = '';
+        document.getElementById('loginPassword').value = '';
+        const err = document.getElementById('loginError');
+        if (err) err.style.display = 'none';
+        setTimeout(() => document.getElementById('loginEmpId').focus(), 100);
+    }
 }
 
 async function handleLogin() {
-    const eid = document.getElementById('loginEmpId').value;
+    const eid = document.getElementById('loginEmpId').value.trim().toUpperCase();
     const pwd = document.getElementById('loginPassword').value;
     const err = document.getElementById('loginError');
     let hash = 0;
@@ -866,7 +1522,7 @@ async function handleLogin() {
         hash = hash & hash;
     }
     try {
-        const { data, error } = await sb.from('profiles').select('*').eq('emp_id', eid.toUpperCase());
+        const { data, error } = await sb.from('profiles').select('*').eq('emp_id', eid);
         if (error) {
             console.error('Login error:', error);
             err.textContent = 'Database error: ' + error.message;
@@ -880,21 +1536,10 @@ async function handleLogin() {
         }
         const userData = data[0];
         if (userData.password_hash === hash.toString()) {
-            currentUser = { empId: userData.emp_id, name: userData.full_name, accessLevel: userData.access_level };
-            document.getElementById('loggedInUserHeader').classList.add('show');
-            document.getElementById('headerUserName').textContent = userData.full_name;
-            document.getElementById('headerUserId').textContent = userData.emp_id;
+            saveSession({ empId: userData.emp_id, name: userData.full_name, accessLevel: userData.access_level });
             toggleLoginModal();
-            // Navigate to admin page
             showPage('pageAdmin');
-            // Show admin tabs if admin
-            if (userData.access_level === 'admin') {
-                document.querySelectorAll('.admin-only-tab').forEach(tab => tab.style.display = 'inline-block');
-                document.getElementById('tabUsers').style.display = 'inline-block';
-            }
-            // Update admin info
-            document.getElementById('adminLoggedEmpId').textContent = userData.emp_id;
-            document.getElementById('adminLoggedLevel').textContent = userData.access_level;
+            loadAdminData();
         } else {
             err.textContent = 'Invalid credentials!';
             err.style.display = 'block';
@@ -904,9 +1549,3 @@ async function handleLogin() {
         err.style.display = 'block';
     }
 }
-
-window.addEventListener('DOMContentLoaded', () => {
-    const now = new Date();
-    document.getElementById('currentDate').textContent = now.toLocaleDateString('en-GB');
-    document.getElementById('currentDay').textContent = now.toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
-});

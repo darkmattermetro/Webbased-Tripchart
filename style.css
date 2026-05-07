@@ -317,17 +317,7 @@ body {
 .summary-box .value.orange { color: var(--orange); }
 .summary-box .value.green { color: var(--green); }
 
-.admin-trigger { position: fixed; bottom: 2px; right: 2px; width: 5px; height: 5px; background: transparent; cursor: pointer; z-index: 9999; opacity: 0; }
-
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 15px; }
-
-.series-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0; max-height: 150px; overflow-y: auto; padding: 5px; }
-.series-grid label { background: rgba(0, 212, 255, 0.1); padding: 8px 4px; border-radius: 8px; text-align: center; cursor: pointer; border: 1px solid rgba(0, 212, 255, 0.3); font-size: 11px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-.series-grid label:hover { background: rgba(0, 212, 255, 0.25); border-color: var(--cyan); }
-.series-grid label input { margin-right: 4px; accent-color: var(--cyan); }
-
-.series-grid.orange label { background: rgba(255, 107, 53, 0.1); border-color: rgba(255, 107, 53, 0.3); }
-.series-grid.orange label:hover { background: rgba(255, 107, 53, 0.25); border-color: var(--orange); }
+.summary-box .value.red { color: var(--red); }
 
 @media (max-width: 768px) {
     .main-wrapper { padding: 15px 10px 60px; }
