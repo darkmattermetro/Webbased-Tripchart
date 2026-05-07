@@ -458,7 +458,8 @@ async function processUploads() {
 
 function parseCSV(text) {
     const lines = text.replace(/\r/g, '').split('\n');
-    return lines.map(line => {
+    // Skip the first line (header row)
+    return lines.slice(1).map(line => {
         const row = [];
         let inQuotes = false;
         let current = '';
@@ -474,7 +475,7 @@ function parseCSV(text) {
         }
         row.push(current.trim());
         return row;
-    }).filter(row => row.some(cell => cell !== ''));
+    }).filter(row => row.some(cell => cell !== '') && row[8] !== '');
 }
 
 async function clearData(type) {
