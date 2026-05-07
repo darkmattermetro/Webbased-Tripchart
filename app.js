@@ -136,15 +136,15 @@ async function getDutyData(type, dutyNo) {
         const roster = [];
         
         for (let j = 0; j < data.length; j++) {
-            const rawCell = data[j].duty_no;
+            const rawCell = data[j]["Duty No"];
             const cellValue = (rawCell || '').toString().trim().toLowerCase().replace('.0', '');
             
             if (cellValue === searchDuty && cellValue !== '') {
                 found = true;
                 roster.push(data[j]);
             } else if (found && (rawCell === '' || rawCell === undefined || rawCell === null)) {
-                if (data[j].rake_id || data[j].dep_loc) roster.push(data[j]);
-                else if (data[j].duty_no === '' && Object.values(data[j]).filter(v => v).length < 3) break;
+                if (data[j]["Rake Num"] || data[j]["Start Stn"]) roster.push(data[j]);
+                else if (data[j]["Duty No"] === '' && Object.values(data[j]).filter(v => v).length < 3) break;
             } else if (found && cellValue !== '' && cellValue !== searchDuty) {
                 break;
             }
@@ -158,9 +158,9 @@ async function getDutyData(type, dutyNo) {
         for (let i = 0; i < roster.length; i++) {
             const r = roster[i];
             let kmValue = 0;
-            if (r.rake_id && r.rake_id.toString().trim() !== '') {
-                const from = (r.dep_loc || '').toString().trim().toUpperCase();
-                const to = (r.arr_loc || '').toString().trim().toUpperCase();
+            if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
                 kmValue = KM_MAP[from + '|' + to] || 0;
                 totalKm += kmValue;
             }
@@ -177,15 +177,15 @@ function analyzeRakeRelievers(tripData) {
     try {
         const rakeTrips = {};
         for (let i = 0; i < tripData.length; i++) {
-            const rake = (tripData[i].rake_id || '').toString().trim();
+            const rake = (tripData[i]["Rake Num"] || '').toString().trim();
             if (!rake) continue;
             if (!rakeTrips[rake]) rakeTrips[rake] = [];
             rakeTrips[rake].push({
-                duty: tripData[i].duty_no,
-                depTime: tripData[i].dep_time,
-                arrTime: tripData[i].arr_time,
-                arrLoc: (tripData[i].arr_loc || '').toString().trim().toUpperCase(),
-                depLoc: (tripData[i].dep_loc || '').toString().trim().toUpperCase(),
+                duty: tripData[i]["Duty No"],
+                depTime: tripData[i]["Start Time"],
+                arrTime: tripData[i]["End Time"],
+                arrLoc: (tripData[i]["End Stn"] || '').toString().trim().toUpperCase(),
+                depLoc: (tripData[i]["Start Stn"] || '').toString().trim().toUpperCase(),
                 rake: rake
             });
         }
@@ -253,47 +253,47 @@ function displayResult(data, dutyNo, dayType) {
     html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:20px;">' +
         '<div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:10px;border:1px solid rgba(0,212,255,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN ON</div>' +
-            '<div style="color:var(--cyan);font-weight:bold;">' + (firstRow.sign_on_loc || '-') + '</div>' +
-            '<div style="color:var(--orange);font-family:Syncopate;">' + (firstRow.sign_on_time || '-') + '</div>' +
+            '<div style="color:var(--cyan);font-weight:bold;">' + (firstRow["Sign On Loc"] || '-') + '</div>' +
+            '<div style="color:var(--orange);font-family:Syncopate;">' + (firstRow["Sign On Time"] || '-') + '</div>' +
         '</div>' +
         '<div style="background:rgba(239,68,68,0.15);padding:12px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN OFF</div>' +
-            '<div style="color:var(--red);font-weight:bold;">' + (lastRow.sign_off_loc || '-') + '</div>' +
-            '<div style="color:var(--orange);font-family:Syncopate;">' + (lastRow.sign_off_time || '-') + '</div>' +
+            '<div style="color:var(--red);font-weight:bold;">' + (lastRow["Sign Off Loc"] || '-') + '</div>' +
+            '<div style="color:var(--orange);font-family:Syncopate;">' + (lastRow["Sign Off Time"] || '-') + '</div>' +
         '</div>' +
         '<div style="background:rgba(34,197,94,0.15);padding:12px;border-radius:10px;border:1px solid rgba(34,197,94,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">RUNNING TIME</div>' +
-            '<div style="color:var(--green);font-weight:bold;font-family:Syncopate;">' + (firstRow.running_time || '-') + '</div>' +
+            '<div style="color:var(--green);font-weight:bold;font-family:Syncopate;">' + (firstRow["Driving Hrs"] || '-') + '</div>' +
         '</div>' +
         '<div style="background:rgba(168,85,247,0.15);padding:12px;border-radius:10px;border:1px solid rgba(168,85,247,0.3);">' +
             '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">DUTY REMARKS</div>' +
-            '<div style="color:var(--purple);font-weight:bold;">' + (firstRow.duty_remarks || '-') + '</div>' +
+            '<div style="color:var(--purple);font-weight:bold;">' + (firstRow["Duty Hrs"] || '-') + '</div>' +
         '</div>' +
     '</div>';
     
     html += '<div class="table-wrap"><table class="data-table"><tr><th>Duty</th><th>Rake</th><th>From</th><th>Dep Time</th><th>To</th><th>Arr Time</th><th>KM</th></tr>';
-    data.roster.forEach(r => {
-        const hasRake = r.rake_id && r.rake_id.toString().trim() !== '';
-        const isGap = hasRake && data.rakeGaps && data.rakeGaps[r.rake_id + '|' + r.arr_time];
-        const rowStyle = isGap ? 'background:rgba(239,68,68,0.2);' : '';
-        html += '<tr style="' + rowStyle + '">' +
-            '<td>' + (r.duty_no || '') + '</td>' +
-            '<td>' + (r.rake_id || '') + '</td>' +
-            '<td>' + (r.dep_loc || '') + '</td>' +
-            '<td>' + (r.dep_time || '') + '</td>' +
-            '<td>' + (r.arr_loc || '') + '</td>' +
-            '<td>' + (r.arr_time || '') + '</td>' +
-            '<td><span class="km-tag">' + (r.calculated_km || 0) + ' km</span></td>' +
-        '</tr>';
-    });
+     data.roster.forEach(r => {
+         const hasRake = r["Rake Num"] && r["Rake Num"].toString().trim() !== '';
+         const isGap = hasRake && data.rakeGaps && data.rakeGaps[r["Rake Num"] + '|' + r["End Time"]];
+         const rowStyle = isGap ? 'background:rgba(239,68,68,0.2);' : '';
+         html += '<tr style="' + rowStyle + '">' +
+             '<td>' + (r["Duty No"] || '') + '</td>' +
+             '<td>' + (r["Rake Num"] || '') + '</td>' +
+             '<td>' + (r["Start Stn"] || '') + '</td>' +
+             '<td>' + (r["Start Time"] || '') + '</td>' +
+             '<td>' + (r["End Stn"] || '') + '</td>' +
+             '<td>' + (r["End Time"] || '') + '</td>' +
+             '<td><span class="km-tag">' + (r.calculated_km || 0) + ' km</span></td>' +
+         '</tr>';
+     });
     html += '</table></div>';
     
     // Break/Reliever Schedule - show ALL gaps for duty's rakes (original behavior)
-    const dutyRakes = [...new Set(data.roster.map(r => r.rake_id).filter(x => x))];
-    const gapKeys = data.rakeGaps ? Object.keys(data.rakeGaps).filter(gap => {
-        const rakeId = gap.split('|')[0];
-        return dutyRakes.includes(rakeId);
-    }) : [];
+     const dutyRakes = [...new Set(data.roster.map(r => r["Rake Num"]).filter(x => x))];
+     const gapKeys = data.rakeGaps ? Object.keys(data.rakeGaps).filter(gap => {
+         const rakeId = gap.split('|')[0];
+         return dutyRakes.includes(rakeId);
+     }) : [];
     
     if (gapKeys.length > 0) {
         html += '<div style="margin-top:15px;padding:15px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;">' +
@@ -429,22 +429,25 @@ async function processUploads() {
             const text = await file.text();
             const rows = parseCSV(text);
             if (rows.length > 0) {
-                const tripRows = rows.map(row => ({
-                    day_type: type,
-                    duty_no: row[0] || '',
-                    sign_on_time: row[1] || '',
-                    sign_on_loc: row[2] || '',
-                    sign_off_loc: row[3] || '',
-                    sign_off_time: row[4] || '',
-                    running_time: row[5] || '',
-                    duty_remarks: row[6] || '',
-                    rake_id: row[8] || '',
-                    dep_loc: row[9] || '',
-                    dep_time: row[10] || '',
-                    arr_loc: row[11] || '',
-                    arr_time: row[12] || '',
-                    additional_remarks: row[13] || ''
-                }));
+                  const tripRows = rows.map(row => ({
+                      day_type: type,
+                      "Duty No": row[0] || '',
+                      "Sign On Time": row[1] || '',
+                      "Sign On Loc": row[2] || '',
+                      "Sign Off Loc": row[3] || '',
+                      "Sign Off Time": row[4] || '',
+                      "Driving Hrs": row[5] || '',
+                      "Duty Hrs": row[6] || '',
+                      "Same Jurisdiction": row[7] || '',
+                      "Rake Num": row[8] || '',
+                      "Start Stn": row[9] || '',
+                      "Start Time": row[10] || '',
+                      "End Stn": row[11] || '',
+                      "End Time": row[12] || '',
+                      "Service Duration": row[13] || '',
+                      "Break": row[14] || '',
+                      "StepBack Rake": row[15] || ''
+                  }));
                 await sb.from('trip_data').delete().eq('day_type', type);
                 await sb.from('trip_data').insert(tripRows);
                 alert(type + ' data uploaded!');
@@ -536,7 +539,7 @@ async function getGraphData(type, seriesArray, customDuties) {
         const seenDuties = {};
         
         for (let i = 0; i < data.length; i++) {
-            const d = (data[i].duty_no || '').toString().trim();
+            const d = (data[i]["Duty No"] || '').toString().trim();
             const isSeriesMatched = seriesArray.some(s => {
                 if (s === '11-20') {
                     const num = parseInt(d);
@@ -550,7 +553,7 @@ async function getGraphData(type, seriesArray, customDuties) {
             
             if ((isSeriesMatched || isCustomMatched) && d !== '') {
                 if (seenDuties[d]) continue;
-                const timeStr = (data[i].running_time || '').toString().trim();
+                const timeStr = (data[i]["Driving Hrs"] || '').toString().trim();
                 if (timeStr === '' || timeStr.indexOf(':') === -1) continue;
                 const p = timeStr.split(':');
                 const mins = (parseInt(p[0]) || 0) * 60 + (parseInt(p[1]) || 0);
@@ -559,11 +562,11 @@ async function getGraphData(type, seriesArray, customDuties) {
                     duty: d, 
                     running: mins / 60, 
                     runningStr: timeStr, 
-                    dutyStr: (data[i].duty_remarks || '').toString(), 
-                    signOnLoc: (data[i].sign_on_loc || '').toString(), 
-                    signOnTime: (data[i].sign_on_time || '').toString(), 
-                    signOffLoc: (data[i].sign_off_loc || '').toString(), 
-                    signOffTime: (data[i].sign_off_time || '').toString() 
+                    dutyStr: (data[i]["Duty Hrs"] || '').toString(), 
+                    signOnLoc: (data[i]["Sign On Loc"] || '').toString(), 
+                    signOnTime: (data[i]["Sign On Time"] || '').toString(), 
+                    signOffLoc: (data[i]["Sign Off Loc"] || '').toString(), 
+                    signOffTime: (data[i]["Sign Off Time"] || '').toString() 
                 });
                 totalMinutes += mins;
             }
@@ -690,14 +693,14 @@ async function generateKmReport() {
         const rakeKm = {};
         for (let i = 0; i < data.length; i++) {
             const r = data[i];
-            if (r.rake_id && r.rake_id.toString().trim() !== '') {
-                const from = (r.dep_loc || '').toString().trim().toUpperCase();
-                const to = (r.arr_loc || '').toString().trim().toUpperCase();
+            if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
                 const km = KM_MAP[from + '|' + to] || 0;
                 totalKm += km;
                 tripCount++;
-                if (!rakeKm[r.rake_id]) rakeKm[r.rake_id] = 0;
-                rakeKm[r.rake_id] += km;
+                if (!rakeKm[r["Rake Num"]]) rakeKm[r["Rake Num"]] = 0;
+                rakeKm[r["Rake Num"]] += km;
             }
         }
         
@@ -726,15 +729,15 @@ async function generateTetraKey() {
         
         const rakeTrips = {};
         for (let i = 0; i < data.length; i++) {
-            const rake = (data[i].rake_id || '').toString().trim();
+            const rake = (data[i]["Rake Num"] || '').toString().trim();
             if (!rake) continue;
             if (!rakeTrips[rake]) rakeTrips[rake] = [];
             rakeTrips[rake].push({
-                duty: data[i].duty_no,
-                depTime: data[i].dep_time,
-                arrTime: data[i].arr_time,
-                boardStn: (data[i].dep_loc || '').toString().trim().toUpperCase(),
-                alightStn: (data[i].arr_loc || '').toString().trim().toUpperCase()
+                duty: data[i]["Duty No"],
+                depTime: data[i]["Start Time"],
+                arrTime: data[i]["End Time"],
+                boardStn: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                alightStn: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
             });
         }
         
