@@ -237,81 +237,105 @@ function analyzeRakeRelievers(tripData) {
 function displayResult(data, dutyNo, dayType) {
     const container = document.getElementById('resultContent');
     const firstRow = data.roster[0] || {};
-    const lastRow = data.roster[data.roster.length - 1] || {};
     
-    let html = '<div class="result-card"><h3 style="color:var(--cyan);margin-bottom:15px;">Duty ' + dutyNo + ' - ' + dayType + '</h3>';
+    let h = `<div class="result-card cinematic-enter">
+                <div style="text-align:center; padding-bottom:20px; border-bottom:1px solid rgba(0,212,255,0.2); margin-bottom:20px;">
+                    <div style="font-family:'Syncopate'; font-size:clamp(32px,8vw,56px); font-weight:700; background:linear-gradient(90deg,var(--cyan),var(--orange)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">DUTY ${dutyNo}</div>
+                    <div style="font-size:14px; letter-spacing:4px; color:rgba(255,255,255,0.7); text-transform:uppercase; margin-top:8px;">${dayType} Roster</div>
+                </div>
+                
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(168,85,247,0.1)); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:15px;">
+                    <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">WEF</div><div style="font-family:'Syncopate';font-size:13px;color:var(--cyan);">${data.wef || 'N/A'}</div></div>
+                    <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Remarks</div><div style="font-family:'Syncopate';font-size:13px;color:var(--orange);">${data.remarks || 'None'}</div></div>
+                    <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Type</div><div style="font-family:'Syncopate';font-size:13px;color:var(--purple);">${dayType}</div></div>
+                </div>
+             </div>`;
     
-    // WEF and Remarks (from original)
-    if (data.wef || data.remarks) {
-        html += '<div style="background:rgba(0,212,255,0.1);padding:10px 15px;border-radius:8px;margin-bottom:15px;border:1px solid rgba(0,212,255,0.2);display:flex;gap:20px;flex-wrap:wrap;">';
-        if (data.wef) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">WEF</div><div style="color:var(--cyan);font-weight:bold;">' + data.wef + '</div></div>';
-        if (data.remarks) html += '<div><div style="font-size:10px;color:rgba(255,255,255,0.6);">REMARKS</div><div style="color:var(--orange);">' + data.remarks + '</div></div>';
-        html += '</div>';
-    }
+    h += `<div class="result-card cinematic-enter" style="animation-delay:0.1s;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;padding:10px 15px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(168,85,247,0.15));border-radius:10px;border-left:4px solid var(--cyan);">
+                <span style="font-size:18px;">🚇</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Sign On / Off</span>
+            </div>
+            <div class="table-wrap">
+            <table class="data-table">
+                <tr><th>Action</th><th>Location</th><th>Time</th></tr>
+                <tr style="background:rgba(34,197,94,0.15);"><td style="color:var(--green);font-weight:700;">SIGN ON</td><td>${firstRow["Sign On Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign On Time"] || '-'}</span></td></tr>
+                <tr style="background:rgba(239,68,68,0.15);"><td style="color:var(--red);font-weight:700;">SIGN OFF</td><td>${data.roster[data.roster.length - 1]["Sign Off Loc"] || '-'}</td><td><span class="time-display">${data.roster[data.roster.length - 1]["Sign Off Time"] || '-'}</span></td></tr>
+            </table>
+            </div>
+           </div>`;
     
-    // Sign on/off info + Driving Hours (from original code.txt)
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:20px;">' +
-        '<div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:10px;border:1px solid rgba(0,212,255,0.3);">' +
-            '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN ON</div>' +
-            '<div style="color:var(--cyan);font-weight:bold;">' + (firstRow["Sign On Loc"] || '-') + '</div>' +
-            '<div style="color:var(--orange);font-family:Syncopate;">' + (firstRow["Sign On Time"] || '-') + '</div>' +
-        '</div>' +
-        '<div style="background:rgba(239,68,68,0.15);padding:12px;border-radius:10px;border:1px solid rgba(239,68,68,0.3);">' +
-            '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">SIGN OFF</div>' +
-            '<div style="color:var(--red);font-weight:bold;">' + (lastRow["Sign Off Loc"] || '-') + '</div>' +
-            '<div style="color:var(--orange);font-family:Syncopate;">' + (lastRow["Sign Off Time"] || '-') + '</div>' +
-        '</div>' +
-        '<div style="background:rgba(34,197,94,0.15);padding:12px;border-radius:10px;border:1px solid rgba(34,197,94,0.3);">' +
-            '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">RUNNING TIME</div>' +
-            '<div style="color:var(--green);font-weight:bold;font-family:Syncopate;">' + (firstRow["Driving Hrs"] || '-') + '</div>' +
-        '</div>' +
-        '<div style="background:rgba(168,85,247,0.15);padding:12px;border-radius:10px;border:1px solid rgba(168,85,247,0.3);">' +
-            '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:4px;">DUTY REMARKS</div>' +
-            '<div style="color:var(--purple);font-weight:bold;">' + (firstRow["Duty Hrs"] || '-') + '</div>' +
-        '</div>' +
-    '</div>';
+    h += `<div class="result-card cinematic-enter" style="animation-delay:0.2s;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;padding:10px 15px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(168,85,247,0.15));border-radius:10px;border-left:4px solid var(--cyan);">
+                <span style="font-size:18px;">🚄</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Trip Details</span>
+            </div>
+            <div class="table-wrap">
+            <table class="data-table">
+                <tr><th>Reliever</th><th>Rake</th><th>From</th><th>Dep</th><th>To</th><th>Arr</th><th>KM</th><th>Reliever</th></tr>`;
     
-    html += '<div class="table-wrap"><table class="data-table"><tr><th>Duty</th><th>Rake</th><th>From</th><th>Dep Time</th><th>To</th><th>Arr Time</th><th>KM</th></tr>';
-     data.roster.forEach(r => {
-         const hasRake = r["Rake Num"] && r["Rake Num"].toString().trim() !== '';
-         const isGap = hasRake && data.rakeGaps && data.rakeGaps[r["Rake Num"] + '|' + r["End Time"]];
-         const rowStyle = isGap ? 'background:rgba(239,68,68,0.2);' : '';
-         html += '<tr style="' + rowStyle + '">' +
-             '<td>' + (r["Duty No"] || '') + '</td>' +
-             '<td>' + (r["Rake Num"] || '') + '</td>' +
-             '<td>' + (r["Start Stn"] || '') + '</td>' +
-             '<td>' + (r["Start Time"] || '') + '</td>' +
-             '<td>' + (r["End Stn"] || '') + '</td>' +
-             '<td>' + (r["End Time"] || '') + '</td>' +
-             '<td><span class="km-tag">' + (r.calculated_km || 0) + ' km</span></td>' +
-         '</tr>';
-     });
-    html += '</table></div>';
+    data.roster.forEach(r => {
+        if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+            let km = r.calculated_km || 0;
+            let rakeId = r["Rake Num"].toString().trim();
+            let depTime = (r["Start Time"] || "").toString().trim();
+            let arrTime = (r["End Time"] || "").toString().trim();
+            
+            let gapBefore = "";
+            let gapAfter = "";
+            
+            if (data.rakeGaps) {
+                let gapKeyDep = rakeId + '|' + depTime;
+                if (data.rakeGaps[gapKeyDep]) {
+                    gapBefore = '<span style="background:#ff0040;color:#fff;padding:3px 8px;border-radius:4px;font-weight:700;margin-right:5px;animation:flashTetra 1s infinite;" title="Take Tetra Key Set">🔑 TETRA KEY</span>';
+                }
+                let gapKeyArr = rakeId + '|' + arrTime;
+                if (data.rakeGaps[gapKeyArr]) {
+                    gapAfter = '<span style="background:#ff0040;color:#fff;padding:3px 8px;border-radius:4px;font-weight:700;margin-left:5px;animation:flashTetra 1s infinite;" title="Take Tetra Key Set">🔑 TETRA KEY</span>';
+                }
+            }
+            
+            h += `<tr>
+                <td>${gapBefore}</td>
+                <td style="color:var(--cyan);font-weight:700;">${r["Rake Num"]}</td>
+                <td>${r["Start Stn"]}</td>
+                <td>${r["Start Time"]}</td>
+                <td>${r["End Stn"]}</td>
+                <td>${r["End Time"]}</td>
+                <td><span class="km-tag">${km} km</span></td>
+                <td>${gapAfter}</td>
+            </tr>`;
+        }
+    });
+    h += `</table></div></div>`;
     
-    // Break/Reliever Schedule - show ALL gaps for duty's rakes (original behavior)
-     const dutyRakes = [...new Set(data.roster.map(r => r["Rake Num"]).filter(x => x))];
-     const gapKeys = data.rakeGaps ? Object.keys(data.rakeGaps).filter(gap => {
-         const rakeId = gap.split('|')[0];
-         return dutyRakes.includes(rakeId);
-     }) : [];
+    h += `<div class="result-card cinematic-enter" style="animation-delay:0.3s;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;padding:10px 15px;background:linear-gradient(135deg,rgba(255,107,53,0.2),rgba(200,85,0,0.1));border-radius:10px;border-left:4px solid var(--orange);">
+                <span style="font-size:18px;">☕</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Break Schedule</span>
+            </div>
+            <div class="table-wrap">
+            <table class="data-table">
+                <tr><th>Relief Point</th><th>Start</th><th>Duration</th></tr>`;
     
-    if (gapKeys.length > 0) {
-        html += '<div style="margin-top:15px;padding:15px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;">' +
-            '<h4 style="color:var(--red);margin-bottom:10px;">⚠️ BREAK SCHEDULE - Reliever Changes Needed</h4>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-        gapKeys.forEach(gap => {
-            const parts = gap.split('|');
-            html += '<span style="background:rgba(239,68,68,0.2);padding:6px 12px;border-radius:6px;font-size:12px;border:1px solid rgba(239,68,68,0.4);">' +
-                'Rake ' + parts[0] + ' @ ' + parts[1] + '</span>';
-        });
-        html += '</div></div>';
-    }
+    let hb = false;
+    data.roster.forEach(r => {
+        let breakVal = parseFloat(r["Break"] || 0);
+        if (breakVal > 0) {
+            hb = true;
+            h += `<tr><td>${r["End Stn"]}</td><td>${r["End Time"]}</td><td style="color:var(--orange);font-weight:700;">${breakVal}m</td></tr>`;
+        }
+    });
+    if (!hb) h += `<tr><td colspan="3" style="color:rgba(255,255,255,0.4);font-style:italic;">No scheduled breaks</td></tr>`;
+    h += `</table></div></div>`;
     
-    html += '<div class="summary-grid">' +
-        '<div class="summary-box"><div class="label">TOTAL KM</div><div class="value orange">' + data.totalKm + ' km</div></div>' +
-        '<div class="summary-box"><div class="label">TRIPS</div><div class="value cyan">' + data.roster.length + '</div></div>' +
-    '</div></div>';
-    container.innerHTML = html;
+    h += `<div class="result-card cinematic-enter" style="animation-delay:0.4s;">
+            <div class="summary-grid" style="margin:0;">
+                <div class="summary-box"><div class="label">Driving</div><div class="value cyan">${firstRow["Driving Hrs"] || '-'}</div></div>
+                <div class="summary-box"><div class="label">Total Hrs</div><div class="value orange">${firstRow["Duty Hrs"] || '-'}</div></div>
+                <div class="summary-box"><div class="label">Total KM</div><div class="value green">${data.totalKm} km</div></div>
+            </div>
+           </div>`;
+    
+    container.innerHTML = h;
+    document.getElementById('dutyInputQuick').value = "";
 }
 
 async function fetchDuty(source) {
