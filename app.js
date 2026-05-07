@@ -1034,7 +1034,7 @@ async function generateGraph() {
     document.getElementById('chartTitle').textContent = dayType + ' - ' + (seriesStr + (customStr ? (seriesStr ? ' | ' : '') + customStr : ''));
     document.getElementById('avgDisplay').textContent = 'AVG: ' + result.avgTime;
     const chartWidth = Math.max(1200, result.details.length * 80 + 100);
-    document.getElementById('chartParent').style.width = chartWidth + 'px';
+    document.getElementById('chartInner').style.width = chartWidth + 'px';
     const getBarColor = (d) => {
         const on = parseInt((d.signOnTime || '').split(':')[0]);
         const off = parseInt((d.signOffTime || '').split(':')[0]);
