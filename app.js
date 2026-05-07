@@ -731,7 +731,29 @@ async function loadUserManagementData() {
         });
         html += '</table>';
         document.getElementById('registeredUsersList').innerHTML = html;
+        toggleSecretCode('new');
+        toggleSecretCode('remove');
     } catch (e) {}
+}
+
+async function changePassword() {
+    const empId = document.getElementById('changePwdEmpId')?.value?.trim()?.toUpperCase();
+    const newPwd = document.getElementById('changePwdNew')?.value;
+    if (!empId || !newPwd) return alert('Enter Emp ID and New Password!');
+    if (newPwd.length < 6) return alert('Password must be at least 6 characters!');
+    try {
+        const { data } = await sb.from('profiles').select('emp_id').eq('emp_id', empId);
+        if (!data || data.length === 0) return alert('Emp ID not found!');
+        let hash = 0;
+        for (let i = 0; i < newPwd.length; i++) {
+            hash = ((hash << 5) - hash) + newPwd.charCodeAt(i);
+            hash = hash & hash;
+        }
+        await sb.from('profiles').update({ password_hash: hash.toString() }).eq('emp_id', empId);
+        alert('Password changed for ' + empId);
+        document.getElementById('changePwdEmpId').value = '';
+        document.getElementById('changePwdNew').value = '';
+    } catch (e) { alert('Error: ' + e.toString()); }
 }
 
 function toggleSecretCode(type) {
@@ -835,16 +857,17 @@ async function clearFormActivityLog() {
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
-// ENHANCED TETRA KEY REPORT
+// ENHANCED TETRA KEY REPORT WITH RAKE RELIEVER ANALYSIS
 let currentTetraData = null;
 
 async function generateTetraReport() {
     const dayType = document.getElementById('tetraDayType')?.value || 'Weekday';
-    const station = document.getElementById('tetraStation')?.value || 'ALL';
+    const stationFilter = document.getElementById('tetraStation')?.value || 'ALL';
     const direction = document.getElementById('tetraDirection')?.value || 'ALL';
     try {
         const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
         if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
+
         const rakeTrips = {};
         for (let i = 0; i < data.length; i++) {
             const rake = (data[i]["Rake Num"] || '').toString().trim();
@@ -854,39 +877,99 @@ async function generateTetraReport() {
                 duty: data[i]["Duty No"],
                 depTime: data[i]["Start Time"],
                 arrTime: data[i]["End Time"],
-                boardStn: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
-                alightStn: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
+                depLoc: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                arrLoc: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
             });
         }
+
         const tetraData = [];
-        let rakeCount = 0;
+        const rakeList = [];
+
         for (const rake in rakeTrips) {
-            const trips = rakeTrips[rake];
+            let trips = rakeTrips[rake];
             trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
-            if (trips.length > 0) {
-                tetraData.push({ rakeId: rake, duty: trips[0].duty, boardStn: trips[0].boardStn, boardTime: trips[0].depTime, alightStn: trips[trips.length-1].alightStn, alightTime: trips[trips.length-1].arrTime, action: 'BOARDING' });
-                rakeCount++;
-                tetraData.push({ rakeId: rake, duty: trips[trips.length-1].duty, boardStn: trips[0].boardStn, boardTime: trips[0].depTime, alightStn: trips[trips.length-1].alightStn, alightTime: trips[trips.length-1].arrTime, action: 'ALIGHTING' });
+
+            // Deduplicate identical trips
+            const deduped = [];
+            const seen = {};
+            for (const t of trips) {
+                const key = t.depTime + '|' + t.arrTime + '|' + t.depLoc + '|' + t.arrLoc;
+                if (!seen[key]) { seen[key] = true; deduped.push(t); }
+            }
+            trips = deduped;
+
+            if (trips.length === 0) continue;
+            rakeList.push(rake);
+
+            // Boarding on first trip
+            if (!mathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
+                tetraData.push({
+                    rakeId: rake, duty: trips[0].duty,
+                    boardStn: trips[0].depLoc, boardTime: trips[0].depTime,
+                    alightStn: trips[0].arrLoc, alightTime: trips[0].arrTime,
+                    station: trips[0].depLoc, action: 'BOARDING'
+                });
+            }
+
+            // Gap analysis between consecutive trips (rake reliever)
+            for (let j = 0; j < trips.length - 1; j++) {
+                const currentEnd = timeToMins(trips[j].arrTime);
+                const nextStart = timeToMins(trips[j + 1].depTime);
+                const sameDuty = trips[j].duty === trips[j + 1].duty;
+                const mkprException = (trips[j].arrLoc === 'MKPR' && trips[j + 1].depLoc === 'MKPR' && sameDuty);
+
+                if (!mathTolerant(currentEnd, nextStart) && !mkprException) {
+                    const stations = [trips[j].arrLoc, trips[j + 1].depLoc].filter(s => s === 'KKDA' || s === 'PBGW');
+                    if (stationFilter === 'ALL' || stations.indexOf(stationFilter) !== -1 || !stationFilter) {
+                        tetraData.push({
+                            rakeId: rake, duty: trips[j].duty,
+                            boardStn: trips[j].depLoc, boardTime: trips[j].depTime,
+                            alightStn: trips[j].arrLoc, alightTime: trips[j].arrTime,
+                            station: trips[j].arrLoc, action: 'ALIGHTING'
+                        });
+                        tetraData.push({
+                            rakeId: rake, duty: trips[j + 1].duty,
+                            boardStn: trips[j + 1].depLoc, boardTime: trips[j + 1].depTime,
+                            alightStn: trips[j + 1].arrLoc, alightTime: trips[j + 1].arrTime,
+                            station: trips[j + 1].depLoc, action: 'BOARDING'
+                        });
+                    }
+                }
+            }
+
+            // Alighting on last trip
+            const last = trips[trips.length - 1];
+            if (!mathTolerant(timeToMins(last.depTime), timeToMins(last.arrTime))) {
+                tetraData.push({
+                    rakeId: rake, duty: last.duty,
+                    boardStn: last.depLoc, boardTime: last.depTime,
+                    alightStn: last.arrLoc, alightTime: last.arrTime,
+                    station: last.arrLoc, action: 'ALIGHTING'
+                });
             }
         }
+
         let filtered = tetraData;
-        if (station !== 'ALL') {
-            filtered = tetraData.filter(d => d.boardStn === station || d.alightStn === station);
+        if (stationFilter !== 'ALL') {
+            filtered = tetraData.filter(d => d.station === stationFilter);
         }
         if (direction !== 'ALL') {
             filtered = filtered.filter(d => d.action === direction);
         }
+
         const incomingCount = filtered.filter(d => d.action === 'ALIGHTING').length;
         const outgoingCount = filtered.filter(d => d.action === 'BOARDING').length;
-        currentTetraData = { tetraData: filtered, tetraCount: filtered.length, rakeCount: rakeCount };
+        currentTetraData = { tetraData: filtered, tetraCount: filtered.length, rakeCount: rakeList.length };
+
         document.getElementById('tetraCount').textContent = filtered.length;
         document.getElementById('tetraIncoming').textContent = incomingCount;
         document.getElementById('tetraOutgoing').textContent = outgoingCount;
-        document.getElementById('tetraRakeCount').textContent = rakeCount;
+        document.getElementById('tetraRakeCount').textContent = rakeList.length;
+
         let tableHtml = '';
         filtered.forEach(d => {
             const actionText = d.action === 'BOARDING' ? 'Outgoing' : 'Incoming';
-            const stationText = d.action === 'BOARDING' ? d.boardStn : d.alightStn;
+            const stnLabel = d.action === 'BOARDING' ? d.boardStn : d.alightStn;
             tableHtml += '<tr style="background:rgba(239,68,68,0.15);">' +
                 '<td style="color:var(--red);font-weight:700;">' + d.rakeId + '</td>' +
                 '<td style="color:var(--cyan);font-weight:700;">' + d.duty + '</td>' +
@@ -894,13 +977,13 @@ async function generateTetraReport() {
                 '<td><span class="time-display">' + d.boardTime + '</span></td>' +
                 '<td>' + d.alightStn + '</td>' +
                 '<td><span class="time-display">' + d.alightTime + '</span></td>' +
-                '<td style="color:var(--orange);font-weight:700;">' + stationText + '</td>' +
+                '<td style="color:var(--orange);font-weight:700;">' + stnLabel + '</td>' +
                 '<td><span style="background:var(--purple);color:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;">' + actionText + '</span></td>' +
             '</tr>';
         });
         document.getElementById('tetraKeyOutput').innerHTML = tableHtml
             ? '<div class="table-wrap"><table class="data-table"><tr><th>Rake</th><th>Duty</th><th>Board</th><th>Board Time</th><th>Alight</th><th>Alight Time</th><th>Station</th><th>Direction</th></tr>' + tableHtml + '</table></div>'
-            : '<p style="color:rgba(255,255,255,0.4);text-align:center;">No tetra key data found.</p>';
+            : '<p style="color:rgba(255,255,255,0.4);text-align:center;">No tetra key data found for selected filters.</p>';
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
@@ -1119,28 +1202,54 @@ function downloadChartExcel() {
 // KM EXCEL
 async function downloadKmExcel() {
     const dayType = document.getElementById('kmDay')?.value || 'Weekday';
+    const series = Array.from(document.querySelectorAll('input[name="kmSeries"]:checked')).map(cb => cb.value);
+    const customDuties = getCustomDuties('customDutiesKm');
+    if (series.length === 0 && customDuties.length === 0) return alert('Select series or enter duty numbers!');
     try {
         const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
         if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
-        let totalKm = 0, tripCount = 0;
-        const trips = [];
+
+        const dutyTotals = {};
         for (let i = 0; i < data.length; i++) {
+            const d = (data[i]["Duty No"] || '').toString().trim();
+            if (!d) continue;
+            const isSeriesMatched = series.some(s => {
+                if (s === '11-20') { const num = parseInt(d); return num >= 11 && num <= 20; }
+                const num = parseInt(s);
+                if (num >= 10) return d === s || d.startsWith(s + '-') || d.startsWith(s + '0');
+                return d.startsWith(s);
+            });
+            const isCustom = customDuties.length > 0 && customDuties.indexOf(d) !== -1;
+            if (!isSeriesMatched && !isCustom) continue;
+            if (!dutyTotals[d]) dutyTotals[d] = { km: 0, signOn: '', signOnLoc: '', signOff: '', signOffLoc: '' };
             const r = data[i];
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                const km = KM_MAP[from + '|' + to] || 0;
-                totalKm += km;
-                tripCount++;
-                trips.push({ duty: r["Duty No"], signOn: r["Sign On Time"], signOnLoc: r["Sign On Loc"], signOff: r["Sign Off Time"], signOffLoc: r["Sign Off Loc"], km: km });
+                dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
+            }
+            if (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn) {
+                dutyTotals[d].signOn = r["Sign On Time"] || '';
+                dutyTotals[d].signOnLoc = r["Sign On Loc"] || '';
+            }
+            if (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff) {
+                dutyTotals[d].signOff = r["Sign Off Time"] || '';
+                dutyTotals[d].signOffLoc = r["Sign Off Loc"] || '';
             }
         }
+
+        const dutyList = Object.keys(dutyTotals).sort();
+        if (dutyList.length === 0) { alert('No duties found for the selected criteria!'); return; }
+        let totalKm = 0;
         const wsData = [['Duty', 'Sign On', 'Sign On Loc', 'Sign Off', 'Sign Off Loc', 'KM']];
-        trips.forEach(d => wsData.push([d.duty, d.signOn, d.signOnLoc, d.signOff, d.signOffLoc, parseFloat(d.km).toFixed(2)]));
+        dutyList.forEach(d => {
+            totalKm += dutyTotals[d].km;
+            wsData.push([d, dutyTotals[d].signOn, dutyTotals[d].signOnLoc, dutyTotals[d].signOff, dutyTotals[d].signOffLoc, dutyTotals[d].km.toFixed(2)]);
+        });
         wsData.push([]);
-        wsData.push(['Total Duties:', tripCount]);
+        wsData.push(['Total Duties:', dutyList.length]);
         wsData.push(['Total KM:', totalKm.toFixed(2)]);
-        wsData.push(['Average KM:', (totalKm / tripCount).toFixed(2)]);
+        wsData.push(['Average KM:', (totalKm / dutyList.length).toFixed(2)]);
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb, ws, 'KM Analysis');
@@ -1308,12 +1417,11 @@ async function generateKmReport() {
     try {
         const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
         if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
-        
-        let totalKm = 0, tripCount = 0;
-        const seenDuties = {};
-        const tripRows = [];
+
+        const dutyTotals = {};
         for (let i = 0; i < data.length; i++) {
             const d = (data[i]["Duty No"] || '').toString().trim();
+            if (!d) continue;
             const isSeriesMatched = series.some(s => {
                 if (s === '11-20') {
                     const num = parseInt(d);
@@ -1323,36 +1431,39 @@ async function generateKmReport() {
                 if (num >= 10) return d === s || d.startsWith(s + '-') || d.startsWith(s + '0');
                 return d.startsWith(s);
             });
-            const isCustomMatched = customDuties.length > 0 && customDuties.indexOf(d) !== -1;
-            if ((isSeriesMatched || isCustomMatched) && d !== '' && !seenDuties[d]) {
-                seenDuties[d] = true;
-                const r = data[i];
-                let dutyKm = 0;
-                if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
-                    const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
-                    const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                    dutyKm = KM_MAP[from + '|' + to] || 0;
-                    totalKm += dutyKm;
-                    tripCount++;
-                }
-                tripRows.push({
-                    duty: d,
-                    signOn: r["Sign On Time"] || '',
-                    signOnLoc: r["Sign On Loc"] || '',
-                    signOff: r["Sign Off Time"] || '',
-                    signOffLoc: r["Sign Off Loc"] || '',
-                    km: dutyKm
-                });
+            const isCustom = customDuties.length > 0 && customDuties.indexOf(d) !== -1;
+            if (!isSeriesMatched && !isCustom) continue;
+            if (!dutyTotals[d]) dutyTotals[d] = { km: 0, signOn: '', signOnLoc: '', signOff: '', signOffLoc: '' };
+            const r = data[i];
+            if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
+                dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
+            }
+            if (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn) {
+                dutyTotals[d].signOn = r["Sign On Time"] || '';
+                dutyTotals[d].signOnLoc = r["Sign On Loc"] || '';
+            }
+            if (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff) {
+                dutyTotals[d].signOff = r["Sign Off Time"] || '';
+                dutyTotals[d].signOffLoc = r["Sign Off Loc"] || '';
             }
         }
-        
-        if (tripRows.length === 0) { alert('No duties found for the selected criteria!'); return; }
-        const avgKm = totalKm / tripCount;
-        document.getElementById('kmDutyCount').textContent = tripCount;
+
+        const dutyList = Object.keys(dutyTotals);
+        if (dutyList.length === 0) { alert('No duties found for the selected criteria!'); return; }
+        let totalKm = 0;
+        const tripRows = [];
+        dutyList.sort().forEach(d => {
+            totalKm += dutyTotals[d].km;
+            tripRows.push({ duty: d, ...dutyTotals[d] });
+        });
+        const avgKm = totalKm / tripRows.length;
+        document.getElementById('kmDutyCount').textContent = tripRows.length;
         document.getElementById('kmTotal').textContent = totalKm.toFixed(2) + ' km';
         document.getElementById('kmAvg').textContent = avgKm.toFixed(2) + ' km';
         document.getElementById('kmWrapper').style.display = 'block';
-        
+
         const tbody = document.getElementById('kmTable');
         tbody.innerHTML = '';
         tripRows.forEach(r => {

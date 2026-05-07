@@ -307,8 +307,10 @@
                             </div>
                         </div>
                         <div id="avgDisplay" style="color:var(--orange);font-family:Syncopate;font-size:12px;margin-bottom:10px;"></div>
-                        <div id="chartParent" style="background:rgba(0,0,0,0.3);padding:15px;border-radius:12px;height:300px;">
-                            <canvas id="myChart"></canvas>
+                        <div id="chartParent" style="background:rgba(0,0,0,0.3);padding:15px;border-radius:12px;height:400px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;">
+                            <div style="min-width:100%;height:100%;">
+                                <canvas id="myChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -453,6 +455,14 @@
                     <div class="glass-card" style="padding:15px;">
                         <h4 style="color:var(--orange);margin-bottom:10px;font-size:13px;">Registered Users</h4>
                         <div id="registeredUsersList" style="max-height:200px;overflow-y:auto;"></div>
+                    </div>
+                    <div class="glass-card" style="padding:15px;margin-top:15px;">
+                        <h4 style="color:var(--purple);margin-bottom:10px;font-size:13px;">Change Password</h4>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <input type="password" id="changePwdEmpId" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;min-width:100px;" placeholder="Emp ID">
+                            <input type="password" id="changePwdNew" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;min-width:120px;" placeholder="New Password">
+                            <button class="jarvis-btn btn-sm" onclick="changePassword()" style="background:linear-gradient(135deg,var(--purple),#7c3aed);">🔑 CHANGE PASSWORD</button>
+                        </div>
                     </div>
                     <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
