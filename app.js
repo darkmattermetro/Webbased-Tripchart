@@ -263,7 +263,7 @@ function displayResult(data, dutyNo, dayType) {
             <table class="data-table">
                 <tr><th>Action</th><th>Location</th><th>Time</th></tr>
                 <tr style="background:rgba(34,197,94,0.15);"><td style="color:var(--green);font-weight:700;">SIGN ON</td><td>${firstRow["Sign On Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign On Time"] || '-'}</span></td></tr>
-                <tr style="background:rgba(255,107,53,0.15);"><td style="color:var(--orange);font-weight:700;">SIGN OFF</td><td>${data.roster[data.roster.length - 1]["Sign Off Loc"] || '-'}</td><td><span class="time-display">${data.roster[data.roster.length - 1]["Sign Off Time"] || '-'}</span></td></tr>
+                <tr style="background:rgba(255,107,53,0.15);"><td style="color:var(--orange);font-weight:700;">SIGN OFF</td><td>${firstRow["Sign Off Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign Off Time"] || '-'}</span></td></tr>
             </table>
             </div>
            </div>`;
