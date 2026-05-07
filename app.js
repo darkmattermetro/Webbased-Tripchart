@@ -1118,7 +1118,7 @@ function downloadChartExcel() {
 
 // KM EXCEL
 async function downloadKmExcel() {
-    const dayType = document.getElementById('graphDay')?.value || 'Weekday';
+    const dayType = document.getElementById('kmDay')?.value || 'Weekday';
     try {
         const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
         if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
@@ -1218,59 +1218,6 @@ async function getGraphData(type, seriesArray, customDuties) {
     } catch (e) { return { error: e.toString() }; }
 }
 
-async function generateGraph() {
-    const dayType = document.getElementById('graphDay').value;
-    const series = Array.from(document.querySelectorAll('input[name="series"]:checked')).map(cb => cb.value);
-    const customDuties = document.getElementById('customDutiesGraph').value.split(',').map(d => d.trim()).filter(d => d);
-    const result = await getGraphData(dayType, series, customDuties);
-    if (result.error) { alert(result.error); return; }
-    
-    document.getElementById('graphWrapper').style.display = 'block';
-    document.getElementById('chartTitle').textContent = dayType + ' - Running Time Analysis';
-    document.getElementById('avgDisplay').textContent = 'AVG: ' + result.avgTime;
-    
-    const ctx = document.getElementById('myChart').getContext('2d');
-    if (myChart) myChart.destroy();
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: result.details.map(d => d.duty),
-            datasets: [{ label: 'Running Time (hrs)', data: result.details.map(d => d.running), backgroundColor: 'rgba(0, 212, 255, 0.6)', borderColor: 'rgba(0, 212, 255, 1)', borderWidth: 1 }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true, ticks: { color: '#fff' }, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { ticks: { color: '#fff' }, grid: { color: 'rgba(255,255,255,0.1)' } } },
-            plugins: { legend: { labels: { color: '#fff' } } }
-        }
-    });
-}
-
-function downloadChartPDF() {
-    const chartParent = document.getElementById('chartParent');
-    html2canvas(chartParent).then(canvas => {
-        const imgData = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = 'chart.png';
-        link.href = imgData;
-        link.click();
-    });
-}
-
-function downloadChartExcel() {
-    const dayType = document.getElementById('graphDay').value;
-    const series = Array.from(document.querySelectorAll('input[name="series"]:checked')).map(cb => cb.value);
-    const customDuties = document.getElementById('customDutiesGraph').value.split(',').map(d => d.trim()).filter(d => d);
-    getGraphData(dayType, series, customDuties).then(result => {
-        if (result.error) return;
-        const wsData = [['Duty', 'Running Time', 'Sign On Loc', 'Sign On Time', 'Sign Off Loc', 'Sign Off Time']];
-        result.details.forEach(d => { wsData.push([d.duty, d.runningStr, d.signOnLoc, d.signOnTime, d.signOffLoc, d.signOffTime]); });
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, ws, 'Chart Data');
-        XLSX.writeFile(wb, 'chart_data.xlsx');
-    });
-}
-
 // VISITOR STATS
 async function logVisit(page, type, empId) {
     try {
@@ -1348,154 +1295,91 @@ async function downloadVisitorLog() {
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
-function openUserForm() { alert('User form - to be implemented with Form Builder data'); }
-
 async function clearVisitorLog() {
     if (!confirm('Clear all visitor logs?')) return;
     try { await sb.from('visitor_logs').delete().neq('id', 0); alert('Visitor log cleared!'); loadVisitorStats(); } catch (e) { alert('Error: ' + e.toString()); }
 }
 
 async function generateKmReport() {
-    const dayType = document.getElementById('graphDay')?.value || 'Weekday';
+    const dayType = document.getElementById('kmDay')?.value || 'Weekday';
+    const series = Array.from(document.querySelectorAll('input[name="kmSeries"]:checked')).map(cb => cb.value);
+    const customDuties = getCustomDuties('customDutiesKm');
+    if (series.length === 0 && customDuties.length === 0) return alert('Select series or enter duty numbers!');
     try {
         const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
         if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
         
         let totalKm = 0, tripCount = 0;
-        const rakeKm = {};
+        const seenDuties = {};
+        const tripRows = [];
         for (let i = 0; i < data.length; i++) {
-            const r = data[i];
-            if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
-                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
-                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                const km = KM_MAP[from + '|' + to] || 0;
-                totalKm += km;
-                tripCount++;
-                if (!rakeKm[r["Rake Num"]]) rakeKm[r["Rake Num"]] = 0;
-                rakeKm[r["Rake Num"]] += km;
+            const d = (data[i]["Duty No"] || '').toString().trim();
+            const isSeriesMatched = series.some(s => {
+                if (s === '11-20') {
+                    const num = parseInt(d);
+                    return num >= 11 && num <= 20;
+                }
+                const num = parseInt(s);
+                if (num >= 10) return d === s || d.startsWith(s + '-') || d.startsWith(s + '0');
+                return d.startsWith(s);
+            });
+            const isCustomMatched = customDuties.length > 0 && customDuties.indexOf(d) !== -1;
+            if ((isSeriesMatched || isCustomMatched) && d !== '' && !seenDuties[d]) {
+                seenDuties[d] = true;
+                const r = data[i];
+                let dutyKm = 0;
+                if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
+                    const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                    const to = (r["End Stn"] || '').toString().trim().toUpperCase();
+                    dutyKm = KM_MAP[from + '|' + to] || 0;
+                    totalKm += dutyKm;
+                    tripCount++;
+                }
+                tripRows.push({
+                    duty: d,
+                    signOn: r["Sign On Time"] || '',
+                    signOnLoc: r["Sign On Loc"] || '',
+                    signOff: r["Sign Off Time"] || '',
+                    signOffLoc: r["Sign Off Loc"] || '',
+                    km: dutyKm
+                });
             }
         }
         
-        let html = '<div class="glass-card" style="padding:15px;margin-bottom:15px;">' +
-            '<h4 style="color:var(--green);margin-bottom:10px;">' + dayType + ' - KM Summary</h4>' +
-            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:15px;">' +
-            '<div style="text-align:center;background:rgba(0,212,255,0.1);padding:10px;border-radius:8px;"><div style="font-size:10px;color:rgba(255,255,255,0.6);">TOTAL KM</div><div style="font-size:20px;color:var(--cyan);font-weight:bold;">' + totalKm.toFixed(2) + '</div></div>' +
-            '<div style="text-align:center;background:rgba(34,197,94,0.1);padding:10px;border-radius:8px;"><div style="font-size:10px;color:rgba(255,255,255,0.6);">TRIPS</div><div style="font-size:20px;color:var(--green);font-weight:bold;">' + tripCount + '</div></div>' +
-            '<div style="text-align:center;background:rgba(168,85,247,0.1);padding:10px;border-radius:8px;"><div style="font-size:10px;color:rgba(255,255,255,0.6);">RAKES</div><div style="font-size:20px;color:var(--purple);font-weight:bold;">' + Object.keys(rakeKm).length + '</div></div>' +
-            '</div>';
+        if (tripRows.length === 0) { alert('No duties found for the selected criteria!'); return; }
+        const avgKm = totalKm / tripCount;
+        document.getElementById('kmDutyCount').textContent = tripCount;
+        document.getElementById('kmTotal').textContent = totalKm.toFixed(2) + ' km';
+        document.getElementById('kmAvg').textContent = avgKm.toFixed(2) + ' km';
+        document.getElementById('kmWrapper').style.display = 'block';
         
-        html += '<div class="table-wrap"><table class="data-table"><tr><th>Rake ID</th><th>Total KM</th></tr>';
-        for (const rake in rakeKm) {
-            html += '<tr><td>' + rake + '</td><td><span class="km-tag">' + rakeKm[rake].toFixed(2) + ' km</span></td></tr>';
-        }
-        html += '</table></div></div>';
-        document.getElementById('kmReportContent').innerHTML = html;
+        const tbody = document.getElementById('kmTable');
+        tbody.innerHTML = '';
+        tripRows.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td style="color:var(--cyan);font-weight:600;">' + r.duty + '</td>' +
+                '<td><span class="time-display">' + r.signOn + '</span></td>' +
+                '<td>' + r.signOnLoc + '</td>' +
+                '<td><span class="time-display">' + r.signOff + '</span></td>' +
+                '<td>' + r.signOffLoc + '</td>' +
+                '<td><span class="km-tag">' + r.km.toFixed(2) + ' km</span></td>';
+            tbody.appendChild(tr);
+        });
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
-async function generateTetraKey() {
-    const dayType = document.getElementById('tetraDayType').value;
-    try {
-        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType).order('id', { ascending: true });
-        if (error || !data || data.length === 0) { alert('No data found for ' + dayType); return; }
-        
-        const rakeTrips = {};
-        for (let i = 0; i < data.length; i++) {
-            const rake = (data[i]["Rake Num"] || '').toString().trim();
-            if (!rake) continue;
-            if (!rakeTrips[rake]) rakeTrips[rake] = [];
-            rakeTrips[rake].push({
-                duty: data[i]["Duty No"],
-                depTime: data[i]["Start Time"],
-                arrTime: data[i]["End Time"],
-                boardStn: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
-                alightStn: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
-            });
-        }
-        
-        let html = '<div class="table-wrap"><table class="data-table"><tr><th>Rake</th><th>Duty</th><th>Board Stn</th><th>Board Time</th><th>Alight Stn</th><th>Alight Time</th><th>Action</th></tr>';
-        for (const rake in rakeTrips) {
-            const trips = rakeTrips[rake];
-            trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
-            trips.forEach((t, idx) => {
-                html += '<tr>' +
-                    '<td>' + rake + '</td>' +
-                    '<td>' + (t.duty || '') + '</td>' +
-                    '<td>' + (idx === 0 ? t.boardStn : '') + '</td>' +
-                    '<td>' + (idx === 0 ? t.depTime : '') + '</td>' +
-                    '<td>' + (idx === trips.length - 1 ? t.alightStn : '') + '</td>' +
-                    '<td>' + (idx === trips.length - 1 ? t.arrTime : '') + '</td>' +
-                    '<td>' + (idx === 0 ? 'BOARD' : idx === trips.length - 1 ? 'ALIGHT' : '') + '</td>' +
-                '</tr>';
-            });
-        }
-        html += '</table></div>';
-        document.getElementById('tetraKeyOutput').innerHTML = html;
-    } catch (e) { alert('Error: ' + e.toString()); }
-}
-
-// Form Builder
-function addFormField() {
-    const container = document.getElementById('formFieldsList');
-    const idx = container.children.length;
-    const fieldHtml = '<div class="glass-card" style="padding:10px;margin-bottom:8px;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);">' +
-        '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
-            '<input type="text" placeholder="Field Name" class="jarvis-input" style="font-size:11px;padding:6px;flex:1;" id="fieldName' + idx + '">' +
-            '<select class="jarvis-select" style="width:auto;padding:6px;font-size:11px;" id="fieldType' + idx + '">' +
-                '<option value="text">Text</option>' +
-                '<option value="number">Number</option>' +
-                '<option value="select">Dropdown</option>' +
-                '<option value="checkbox">Checkbox</option>' +
-            '</select>' +
-            '<label style="font-size:11px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="fieldReq' + idx + '"> Required</label>' +
-        '</div>' +
-        '<input type="text" placeholder="Options (comma-separated for dropdown)" class="jarvis-input" style="font-size:11px;padding:6px;" id="fieldOpts' + idx + '">' +
-    '</div>';
-    container.insertAdjacentHTML('beforeend', fieldHtml);
-}
-
-async function saveFormFields() {
-    const heading = document.getElementById('formHeading').value;
-    const fields = [];
-    const container = document.getElementById('formFieldsList');
-    for (let i = 0; i < container.children.length; i++) {
-        const name = document.getElementById('fieldName' + i)?.value;
-        if (!name) continue;
-        fields.push({
-            name: name,
-            type: document.getElementById('fieldType' + i)?.value || 'text',
-            required: document.getElementById('fieldReq' + i)?.checked || false,
-            options: document.getElementById('fieldOpts' + i)?.value || ''
-        });
-    }
-    alert('Form "' + heading + '" saved with ' + fields.length + ' fields! (Needs Supabase integration)');
-}
-
-// User Management
-async function loadUserLists() {
-    try {
-        const { data: profiles } = await sb.from('profiles').select('*');
-        let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th></tr>';
-        (profiles || []).forEach(p => {
-            html += '<tr><td>' + p.emp_id + '</td><td>' + p.full_name + '</td><td>' + p.access_level + '</td></tr>';
-        });
-        html += '</table>';
-        document.getElementById('registeredUsersList').innerHTML = html;
-        
-        document.getElementById('adminIdsList').innerHTML = '<div style="color:rgba(255,255,255,0.6);font-size:11px;">Main Admin: 3623</div>';
-        document.getElementById('ccIdsList').innerHTML = '<div style="color:rgba(255,255,255,0.6);font-size:11px;">Configure in Supabase</div>';
-    } catch (e) {}
-}
-
-function addAdminId() { alert('Add Admin ID - needs Supabase integration'); }
-function addCcId() { alert('Add CC ID - needs Supabase integration'); }
-
-// Initialize series grid
+// Initialize series grids
 function initSeriesGrid() {
+    const series = ['1','2','3','4','5','6','7','8','9','10','11-20'];
+    const labels = ['100s','200s','300s','400s','500s','600s','700s','800s','900s','10s','11-20'];
     const grid = document.getElementById('seriesGrid');
-    if (!grid) return;
-    const series = ['11-20', '201-220', '301-320', '401-420', '501-520'];
-    grid.innerHTML = series.map(s => '<label><input type="checkbox" name="series" value="' + s + '"> ' + s + '</label>').join('');
+    if (grid) {
+        grid.innerHTML = series.map((s, i) => '<label><input type="checkbox" name="series" value="' + s + '"> ' + labels[i] + '</label>').join('');
+    }
+    const kmGrid = document.getElementById('kmSeriesGrid');
+    if (kmGrid) {
+        kmGrid.innerHTML = series.map((s, i) => '<label><input type="checkbox" name="kmSeries" value="' + s + '"> ' + labels[i] + '</label>').join('');
+    }
 }
 
 function toggleLoginModal() {

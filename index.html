@@ -146,11 +146,6 @@
                 </div>
                 <button class="jarvis-btn btn-primary" onclick="fetchDuty('home')">🔍 ACCESS DUTY DATA</button>
             </div>
-            <div id="userFormLink" class="glass-card" style="display:none;border:2px solid var(--yellow);background:linear-gradient(135deg,rgba(250,204,21,0.15),rgba(250,204,21,0.05));text-align:center;cursor:pointer;" onclick="openUserForm()">
-                <div style="font-size:28px;margin-bottom:8px;">📝</div>
-                <h3 style="color:var(--yellow);margin-bottom:5px;">SUBMIT YOUR DATA</h3>
-                <p style="color:rgba(255,255,255,0.7);font-size:12px;">Click here to fill the form</p>
-            </div>
         </div>
 
         <div id="pageResult" class="page">
@@ -178,7 +173,6 @@
                     <button class="jarvis-btn btn-sm" id="tabChart" onclick="switchAdminTab('chart')" style="background:linear-gradient(135deg,var(--purple),#7c3aed);">📊 Chart</button>
                     <button class="jarvis-btn btn-sm" id="tabKm" onclick="switchAdminTab('km')" style="background:linear-gradient(135deg,var(--green),#15803d);">🛣️ KM Analysis</button>
                     <button class="jarvis-btn btn-sm" id="tabTetra" onclick="switchAdminTab('tetra')" style="background:linear-gradient(135deg,var(--red),#b91c1c);">🔑 Tetra Key</button>
-                    <button class="jarvis-btn btn-sm admin-only-tab" id="tabForm" onclick="switchAdminTab('form')" style="background:linear-gradient(135deg,var(--yellow),#ca8a04);color:#000;">📝 Form Builder</button>
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabUsers" onclick="switchAdminTab('users')" style="background:linear-gradient(135deg,var(--red),#991b1b);display:none;">👥 Users</button>
                 </div>
                 
@@ -321,15 +315,44 @@
                 
                 <!-- Tab: KM Analysis -->
                 <div id="adminTabKm" class="admin-tab-content" style="display:none;">
-                    <div class="section-header green">
+                    <div class="section-header orange">
                         <div class="section-icon">🛣️</div>
                         <div class="section-title">KM Analysis</div>
                     </div>
-                    <div id="kmReportContent" style="min-height:200px;">
-                        <p style="color:rgba(255,255,255,0.6);text-align:center;padding:40px;">Select options and generate report</p>
+                    <div class="input-group">
+                        <label class="input-label">Select Day Type</label>
+                        <select id="kmDay" class="jarvis-select">
+                            <option value="Weekday">Weekday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                            <option value="Special">Special</option>
+                        </select>
                     </div>
-                    <button class="jarvis-btn btn-green" onclick="generateKmReport()">🛣️ GENERATE KM REPORT</button>
-                    <button class="jarvis-btn btn-sm" onclick="downloadKmExcel()" style="margin-top:10px;background:linear-gradient(135deg,var(--green),#15803d);">📥 EXPORT KM EXCEL</button>
+                    <div class="input-group">
+                        <label class="input-label">Select Series</label>
+                        <div class="series-grid orange" id="kmSeriesGrid"></div>
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Add Custom Duty Numbers (comma separated)</label>
+                        <input type="text" id="customDutiesKm" class="jarvis-input" placeholder="E.g. 101, 205, 308">
+                    </div>
+                    <button class="jarvis-btn btn-orange" onclick="generateKmReport()" style="font-size:11px; padding:12px;">🛣️ ANALYZE KM</button>
+                    <div id="kmWrapper" style="display:none; margin-top:20px;">
+                        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
+                            <div style="background:rgba(0,212,255,0.15);padding:15px;border-radius:12px;text-align:center;border:1px solid rgba(0,212,255,0.3);"><h4 style="font-size:9px;color:rgba(255,255,255,0.6);margin-bottom:6px;">TOTAL DUTIES</h4><div id="kmDutyCount" style="font-family:'Syncopate';font-size:20px;color:var(--cyan);">0</div></div>
+                            <div style="background:rgba(255,107,53,0.15);padding:15px;border-radius:12px;text-align:center;border:1px solid rgba(255,107,53,0.3);"><h4 style="font-size:9px;color:rgba(255,255,255,0.6);margin-bottom:6px;">TOTAL KM</h4><div id="kmTotal" style="font-family:'Syncopate';font-size:20px;color:var(--orange);">0 km</div></div>
+                            <div style="background:rgba(168,85,247,0.15);padding:15px;border-radius:12px;text-align:center;border:1px solid rgba(168,85,247,0.3);"><h4 style="font-size:9px;color:rgba(255,255,255,0.6);margin-bottom:6px;">AVG KM</h4><div id="kmAvg" style="font-family:'Syncopate';font-size:20px;color:var(--purple);">0 km</div></div>
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; margin-top:15px;">
+                            <button class="jarvis-btn btn-green btn-sm" onclick="downloadKmExcel()">📊 DOWNLOAD EXCEL</button>
+                        </div>
+                        <div class="table-wrap" style="margin-top:15px;">
+                            <table class="data-table">
+                                <thead><tr><th>Duty</th><th>Sign On</th><th>Sign On Loc</th><th>Sign Off</th><th>Sign Off Loc</th><th>KM</th></tr></thead>
+                                <tbody id="kmTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Tab: Tetra Key -->
@@ -385,26 +408,7 @@
                     <div id="tetraKeyOutput"></div>
                 </div>
                 
-                <!-- Tab: Form Builder -->
-                <div id="adminTabForm" class="admin-tab-content" style="display:none;">
-                    <div class="section-header" style="border-left-color:var(--yellow);background:linear-gradient(135deg,rgba(250,204,21,0.2),rgba(200,150,0,0.1));">
-                        <div class="section-icon" style="background:linear-gradient(135deg,var(--yellow),#ca8a04);">📝</div>
-                        <div class="section-title">Form Builder</div>
-                    </div>
-                    <div id="formBuilderContent">
-                        <div class="input-group">
-                            <label class="input-label">Form Heading</label>
-                            <input type="text" id="formHeading" class="jarvis-input" placeholder="Enter form heading">
-                        </div>
-                        <div id="formFieldsList"></div>
-                        <button class="jarvis-btn" onclick="addFormField()" style="background:rgba(250,204,21,0.3);border:1px solid var(--yellow);color:#000;margin-bottom:10px;">+ ADD FIELD</button>
-                        <button class="jarvis-btn btn-orange" onclick="saveFormFields()">💾 SAVE FORM</button>
-                    </div>
-                    <div id="formResponsesSection" style="margin-top:20px;border-top:1px solid rgba(255,255,255,0.1);padding-top:15px;">
-                        <h4 style="color:var(--yellow);margin-bottom:10px;">Form Responses</h4>
-                        <div id="formResponsesContent"></div>
-                    </div>
-                </div>
+
                 
                 <!-- Tab: Users -->
                 <div id="adminTabUsers" class="admin-tab-content" style="display:none;">
