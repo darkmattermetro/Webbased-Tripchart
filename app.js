@@ -769,33 +769,36 @@ async function loadUserManagementData() {
     try {
         const loggedSpan = document.getElementById('changePwdLoggedEmpId');
         if (loggedSpan && currentUser) loggedSpan.textContent = currentUser.empId + ' (' + currentUser.name + ')';
-        const { data: admins } = await sb.from('profiles').select('*').eq('access_level', 'admin');
-        const { data: ccs } = await sb.from('profiles').select('*').eq('access_level', 'crewcontroller');
-        document.getElementById('adminIdsList').innerHTML = (admins || []).length > 0 ? (admins || []).map(a => a.emp_id + ' — ' + a.full_name).join('<br>') : 'None';
-        document.getElementById('ccIdsList').innerHTML = (ccs || []).length > 0 ? (ccs || []).map(c => c.emp_id + ' — ' + c.full_name).join('<br>') : 'None';
-        const { data: profiles } = await sb.from('profiles').select('*');
+        
         const pendingList = await loadAppConfigList('pending_registrations');
-        let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th><th>Status</th><th>Created</th></tr>';
-        (profiles || []).forEach(p => {
-            const isRegistered = p.password_hash;
-            const hasPwd = isRegistered ? '✅ Registered' : '⏳ Pending';
-            html += '<tr><td style="color:var(--cyan);">' + p.emp_id + '</td>' +
-                '<td>' + (p.full_name || '-') + '</td>' +
-                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
-                '<td style="text-align:center;">' + hasPwd + '</td>' +
-                '<td>' + (p.created_at || '-') + '</td></tr>';
-        });
-        if (pendingList.length > 0) {
-            pendingList.forEach(p => {
-                html += '<tr><td style="color:var(--yellow);">' + p.emp_id + '</td>' +
-                    '<td>-</td>' +
+        
+        // Admin Access List: show pre-authorized admin emp IDs
+        const adminIds = pendingList.filter(p => p.access_level === 'admin').map(p => p.emp_id);
+        document.getElementById('adminAccessList').innerHTML = adminIds.length > 0 ? adminIds.join('<br>') : 'None';
+        
+        // Crew Controller Access List: show pre-authorized CC emp IDs
+        const ccIds = pendingList.filter(p => p.access_level === 'crewcontroller').map(p => p.emp_id);
+        document.getElementById('ccAccessList').innerHTML = ccIds.length > 0 ? ccIds.join('<br>') : 'None';
+        
+        // Registered Users: show profiles with password_hash
+        const { data: profiles } = await sb.from('profiles').select('*');
+        const tbody = document.getElementById('registeredUsersBody');
+        if (!tbody) return;
+        if (!profiles || profiles.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:rgba(255,255,255,0.4);">No registered users</td></tr>';
+        } else {
+            tbody.innerHTML = '';
+            profiles.forEach(p => {
+                if (!p.password_hash) return;
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td style="color:var(--cyan);">' + p.emp_id + '</td>' +
+                    '<td>' + (p.full_name || '-') + '</td>' +
                     '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
-                    '<td style="text-align:center;">🔶 Pre-authorized (not registered)</td>' +
-                    '<td>-</td></tr>';
+                    '<td>' + (p.created_at || '-') + '</td>';
+                tbody.appendChild(tr);
             });
         }
-        html += '</table>';
-        document.getElementById('registeredUsersList').innerHTML = html;
+        
         toggleSecretCode('new');
         toggleSecretCode('remove');
     } catch (e) { console.error('loadUserManagementData:', e); }
