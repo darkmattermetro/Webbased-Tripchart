@@ -277,6 +277,25 @@
                             </tr>
                         </table>
                     </div>
+                    <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.15);">
+                        <h4 style="color:var(--green);margin-bottom:10px;font-family:'Syncopate';font-size:11px;">📏 KM DISTANCE DATA</h4>
+                        <div style="background:rgba(0,0,0,0.3);padding:15px;border-radius:10px;">
+                            <div style="font-size:11px;color:rgba(255,255,255,0.6);margin-bottom:10px;">
+                                Routes loaded: <strong id="kmRouteCount" style="color:var(--cyan);">0</strong>
+                            </div>
+                            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                                <button class="jarvis-btn btn-sm" onclick="downloadKmCsv()" style="background:linear-gradient(135deg,var(--cyan),#0099cc);padding:8px 14px;">📥 DOWNLOAD KM CSV</button>
+                                <input type="file" id="kmCsvFile" accept=".csv" style="font-size:11px;flex:1;min-width:150px;">
+                                <button class="jarvis-btn btn-sm btn-green" onclick="uploadKmCsv()" style="padding:8px 14px;">📤 UPLOAD</button>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <button class="jarvis-btn btn-sm" onclick="resetKmData()" style="padding:6px 12px;background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;">🔄 RESET TO DEFAULTS</button>
+                            </div>
+                            <div style="margin-top:8px;font-size:10px;color:rgba(255,255,255,0.4);">
+                                CSV format: Route,KM  (e.g. DDSC DN|KKDA DN,26.22). Edit in Excel, re-upload to override.
+                            </div>
+                        </div>
+                    </div>
                     <button class="jarvis-btn btn-orange" onclick="processUploads()" style="font-size:11px; padding:12px;">💾 PUBLISH TRIP DATA</button>
                 </div>
                 

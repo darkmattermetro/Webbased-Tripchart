@@ -8,7 +8,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let adminClicks = 0;
 
-// KM MAP (Exact from code.txt)
+// KM MAP (hardcoded defaults)
 const KM_MAP = {
     "DDSC DN|KKDA DN": 26.22,
     "DDSC DN PF|KKDA DN": 26.22,
@@ -85,7 +85,68 @@ const KM_MAP = {
     "SVVR DN SDG|MUPR": 4,
     "SVVR DN SDG STABLE|MUPR": 4
 };
+let kmData = {};
 
+async function loadKmData() {
+    try {
+        const { data } = await sb.from('app_config').select('config_value').eq('config_key', 'km_data').single();
+        if (data && data.config_value) {
+            const uploaded = JSON.parse(data.config_value);
+            kmData = { ...KM_MAP, ...uploaded };
+        } else {
+            kmData = { ...KM_MAP };
+        }
+    } catch (e) {
+        kmData = { ...KM_MAP };
+    }
+    const el = document.getElementById('kmRouteCount');
+    if (el) el.textContent = Object.keys(kmData).length;
+}
+
+function downloadKmCsv() {
+    const rows = Object.entries(kmData).map(([route, km]) => route + ',' + km);
+    const csv = '\uFEFF' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'km_data.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+async function uploadKmCsv() {
+    const fi = document.getElementById('kmCsvFile');
+    const file = fi?.files?.[0];
+    if (!file) return alert('Select a CSV file!');
+    const text = await file.text();
+    const lines = text.split('\n').filter(l => l.trim());
+    const map = {};
+    for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length < 2) continue;
+        const route = parts[0].trim().toUpperCase();
+        const km = parseFloat(parts[1].trim());
+        if (route && !isNaN(km)) map[route] = km;
+    }
+    if (Object.keys(map).length === 0) return alert('No valid data found in CSV!');
+    await sb.from('app_config').upsert(
+        { config_key: 'km_data', config_value: JSON.stringify(map), updated_at: new Date().toISOString() },
+        { onConflict: 'config_key' }
+    );
+    await loadKmData();
+    alert('Uploaded ' + Object.keys(map).length + ' routes!');
+    fi.value = '';
+}
+
+async function resetKmData() {
+    if (!confirm('Reset KM data to hardcoded defaults?')) return;
+    await sb.from('app_config').upsert(
+        { config_key: 'km_data', config_value: '{}', updated_at: new Date().toISOString() },
+        { onConflict: 'config_key' }
+    );
+    await loadKmData();
+    alert('Reset to ' + Object.keys(kmData).length + ' default routes.');
+}
 function showPage(pageId) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const page = document.getElementById(pageId);
@@ -165,7 +226,7 @@ async function getDutyData(type, dutyNo) {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                kmValue = KM_MAP[from + '|' + to] || 0;
+                kmValue = kmData[from + '|' + to] || 0;
                 totalKm += kmValue;
             }
             r.calculated_km = kmValue;
@@ -598,6 +659,7 @@ function switchAdminTab(tabName) {
     const tabContent = document.getElementById('adminTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     if (tabContent) tabContent.style.display = 'block';
     if (tabName === 'messages') loadVisitorStats();
+    if (tabName === 'upload') loadKmData();
     if (tabName === 'users') loadUserManagementData();
     if (tabName === 'chart') initSeriesGrid();
 }
@@ -1371,7 +1433,7 @@ async function downloadKmExcel() {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
+                dutyTotals[d].km += kmData[from + '|' + to] || 0;
             }
             if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
                 dutyTotals[d].signOn = r["Sign On Time"];
@@ -1405,6 +1467,7 @@ async function downloadKmExcel() {
 // INIT
 window.addEventListener('DOMContentLoaded', async () => {
     checkExistingSession();
+    await loadKmData();
     updateDateTime();
     await loadPopupMessage();
     if (!currentUser) await loadUserMessages();
@@ -1572,7 +1635,7 @@ async function generateKmReport() {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
+                dutyTotals[d].km += kmData[from + '|' + to] || 0;
             }
             if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
                 dutyTotals[d].signOn = r["Sign On Time"];
