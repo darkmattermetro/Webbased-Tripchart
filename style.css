@@ -327,8 +327,85 @@ body {
     .header-content { flex-direction: column; gap: 10px; }
     .header-right { text-align: center; }
     .series-grid { grid-template-columns: repeat(4, 1fr); max-height: 200px; }
+    
+    .header-left { gap: 10px; }
+    .logo-area { width: 40px; height: 40px; }
+    .header-text h1 { font-size: clamp(10px, 2.5vw, 14px) !important; letter-spacing: 1px; }
+    .current-date { font-size: 11px; }
+    .header-right { padding: 6px 10px; gap: 8px; }
+    
+    #adminTabChart > div:last-child > div:first-child { flex-direction: column; gap: 6px; align-items: flex-start !important; }
+    #adminTabChart > div:last-child > div:first-child h4 { font-size: 12px; }
+    
+    #adminTabMessages .input-group > div[style*="display:flex"] { flex-direction: column; gap: 6px !important; }
+    #adminTabMessages .input-group > div[style*="display:flex"] .jarvis-btn { width: 100%; }
+    
+    #adminTabUsers > div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+    
+    #adminTabKm > div[id="kmWrapper"] > div:first-child { grid-template-columns: repeat(2, 1fr) !important; }
+    
+    #pageAdmin .glass-card > div[style*="display:flex"] button { font-size: 9px !important; padding: 8px 10px !important; }
+    
+    .section-header { padding: 8px 12px; gap: 8px; }
+    .section-icon { width: 30px; height: 30px; font-size: 14px; }
+    .section-title { font-size: 11px; letter-spacing: 1px; }
+    
+    .data-table { font-size: 10px; }
+    .data-table th { font-size: 8px; padding: 6px 4px; }
+    .data-table td { font-size: 10px; padding: 6px 4px; }
+    
+    .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    
+    #minimalLoginTrigger { bottom: 10px !important; right: 10px !important; padding: 6px 10px !important; font-size: 9px !important; }
 }
 
 @media (max-width: 480px) {
     .series-grid { grid-template-columns: repeat(3, 1fr); }
+    
+    .jarvis-header { padding: 8px 10px; }
+    .logo-area { width: 32px; height: 32px; border-radius: 8px; }
+    .logo-icon { font-size: 12px; }
+    .header-text h1 { font-size: 8px !important; letter-spacing: 0.5px; }
+    .header-text .subtitle { display: none; }
+    .current-date { font-size: 9px; }
+    .current-day { font-size: 8px; }
+    .header-right { padding: 4px 8px; gap: 4px; }
+    
+    .logged-in-user { padding: 4px 8px; gap: 4px; }
+    .logged-in-user .user-icon { font-size: 12px; }
+    .logged-in-user .user-name { font-size: 9px; }
+    .logged-in-user .user-id { font-size: 7px; }
+    
+    div[style*="bottom:25px;left:25px"] { display: none !important; }
+    
+    .data-table { font-size: 8px; }
+    .data-table th, .data-table td { padding: 3px 2px; }
+    .data-table th { font-size: 7px; }
+    
+    #chartParent { height: 250px !important; padding: 10px !important; }
+    
+    #adminTabKm > div[id="kmWrapper"] > div:first-child { grid-template-columns: 1fr !important; }
+    
+    #pageAdmin .glass-card > div[style*="display:flex"] button { font-size: 7px !important; padding: 6px 8px !important; letter-spacing: 0.5px; }
+    
+    .section-header { padding: 6px 10px; gap: 6px; border-radius: 8px; }
+    .section-icon { width: 24px; height: 24px; font-size: 11px; border-radius: 6px; }
+    .section-title { font-size: 9px; letter-spacing: 0.5px; }
+    
+    .summary-grid { grid-template-columns: 1fr 1fr !important; }
+    .summary-box { padding: 12px; }
+    .summary-box .value { font-size: 16px !important; }
+    
+    .popup-modal { padding: 20px; }
+    .popup-icon { font-size: 36px; }
+    .popup-title { font-size: 16px; }
+    .popup-message { font-size: 13px; }
+    
+    .status-bar { font-size: 8px; padding: 5px; letter-spacing: 1px; }
+    
+    .km-tag { font-size: 9px; padding: 3px 8px; }
+    .time-display { font-size: 11px; }
+    
+    .input-label { font-size: 9px; letter-spacing: 1px; }
+    .jarvis-input, .jarvis-select { padding: 10px 12px; font-size: 13px; }
 }
