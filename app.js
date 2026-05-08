@@ -984,6 +984,7 @@ async function generateTetraReport() {
         document.getElementById('tetraIncoming').textContent = incomingCount;
         document.getElementById('tetraOutgoing').textContent = outgoingCount;
         document.getElementById('tetraRakeCount').textContent = rakeList.length;
+        document.getElementById('tetraWrapper').style.display = 'block';
 
         let tableHtml = '';
         filtered.forEach(d => {
