@@ -1022,13 +1022,17 @@ async function generateTetraReport() {
         filtered.forEach(d => {
             const actionText = d.action === 'BOARDING' ? 'Outgoing' : 'Incoming';
             const stnLabel = d.action === 'BOARDING' ? d.boardStn : d.alightStn;
+            const showBoardStn = d.action === 'BOARDING' ? d.boardStn : '-';
+            const showBoardTime = d.action === 'BOARDING' ? d.boardTime : '-';
+            const showAlightStn = d.action === 'ALIGHTING' ? d.alightStn : '-';
+            const showAlightTime = d.action === 'ALIGHTING' ? d.alightTime : '-';
             tableHtml += '<tr style="background:rgba(239,68,68,0.15);">' +
                 '<td style="color:var(--red);font-weight:700;">' + d.rakeId + '</td>' +
                 '<td style="color:var(--cyan);font-weight:700;">' + d.duty + '</td>' +
-                '<td>' + d.boardStn + '</td>' +
-                '<td><span class="time-display">' + d.boardTime + '</span></td>' +
-                '<td>' + d.alightStn + '</td>' +
-                '<td><span class="time-display">' + d.alightTime + '</span></td>' +
+                '<td>' + showBoardStn + '</td>' +
+                '<td><span class="time-display">' + showBoardTime + '</span></td>' +
+                '<td>' + showAlightStn + '</td>' +
+                '<td><span class="time-display">' + showAlightTime + '</span></td>' +
                 '<td style="color:var(--orange);font-weight:700;">' + stnLabel + '</td>' +
                 '<td><span style="background:var(--purple);color:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;">' + actionText + '</span></td>' +
             '</tr>';
