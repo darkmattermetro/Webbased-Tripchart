@@ -597,6 +597,7 @@ function switchAdminTab(tabName) {
     document.querySelectorAll('.admin-tab-content').forEach(t => t.style.display = 'none');
     const tabContent = document.getElementById('adminTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     if (tabContent) tabContent.style.display = 'block';
+    if (tabName === 'messages') loadVisitorStats();
     if (tabName === 'users') loadUserManagementData();
     if (tabName === 'chart') initSeriesGrid();
 }
@@ -747,6 +748,7 @@ async function loadAdminData() {
     if (levelSpan) levelSpan.textContent = currentUser ? currentUser.accessLevel : '-';
     if (isAdmin) {
         loadMessageLog();
+        loadVisitorStats();
     }
     loadUserManagementData();
     if (isAdmin) {

@@ -224,6 +224,18 @@
                             </div>
                         </div>
                     </div>
+                    <div style="margin-top:25px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <h4 style="color:var(--green);font-size:13px;margin:0;">📋 Message Activity Log</h4>
+                            <button id="clearMsgLogBtn" class="jarvis-btn btn-sm" onclick="clearMessageLog()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR LOG</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table" style="font-size:11px;">
+                                <thead><tr><th>Timestamp</th><th>Emp ID</th><th>Name</th><th>Action</th><th>Message</th></tr></thead>
+                                <tbody id="messageLogBody"><tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Tab: Data Upload -->
@@ -490,18 +502,6 @@
                             </div>
                         </div>
                         
-                        <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                                <h4 style="color:var(--green);font-size:13px;margin:0;">Message Activity Log</h4>
-                                <button id="clearMsgLogBtn" class="jarvis-btn btn-sm" onclick="clearMessageLog()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR LOG</button>
-                            </div>
-                            <div class="table-wrap">
-                                <table class="data-table" style="font-size:11px;">
-                                    <thead><tr><th>Timestamp</th><th>Emp ID</th><th>Name</th><th>Action</th><th>Message</th></tr></thead>
-                                    <tbody id="messageLogBody"><tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
