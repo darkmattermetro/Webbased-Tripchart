@@ -8,6 +8,18 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let adminClicks = 0;
 
+// Supabase Auth session listener
+sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+        currentUser = null;
+        updateUserHeader();
+        const adminPage = document.getElementById('pageAdmin');
+        if (adminPage && adminPage.classList.contains('active')) {
+            showPage('pageHome');
+        }
+    }
+});
+
 // KM MAP (Exact from code.txt)
 const KM_MAP = {
     "DDSC DN|KKDA DN": 26.22,
@@ -375,7 +387,6 @@ function toggleRegisterModal() {
 async function handleRegister() {
     const name = document.getElementById('regName').value;
     const empId = document.getElementById('regEmpId').value;
-    const accessLevel = document.getElementById('regAccessLevel').value;
     const accessCode = document.getElementById('regAccessCode').value;
     const password = document.getElementById('regPassword').value;
     const confirmPassword = document.getElementById('regConfirmPassword').value;
@@ -394,28 +405,90 @@ async function handleRegister() {
     }
     
     const normalizedId = empId.toString().trim().toUpperCase();
-    const passwordHash = hashPassword(password);
     
     try {
-        const { data: existing } = await sb.from('profiles').select('emp_id').eq('emp_id', normalizedId);
-        if (existing) {
-            errorDiv.textContent = 'Emp ID already registered!';
+        const { data: existing } = await sb.from('profiles').select('*').eq('emp_id', normalizedId);
+        if (existing && existing.length > 0 && existing[0].auth_id) {
+            errorDiv.textContent = 'Emp ID already registered! Please login.';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        const pendingList = await loadAppConfigList('pending_registrations');
+        let pending = pendingList.find(p => p.emp_id === normalizedId);
+        let accessLevel = pending ? pending.access_level : null;
+        if (!accessLevel && existing && existing.length > 0) {
+            accessLevel = existing[0].access_level;
+        }
+        if (!accessLevel) {
+            errorDiv.textContent = 'Not authorized! Contact admin to add your Emp ID first.';
             errorDiv.style.display = 'block';
             return;
         }
         
-        await sb.from('profiles').insert({
-            emp_id: normalizedId,
-            full_name: name,
-            password_hash: passwordHash,
-            access_level: accessLevel,
-            created_at: new Date()
+        const email = normalizedId.toLowerCase() + '@dmrc.local';
+        const { data: authData, error: authError } = await sb.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: {
+                    emp_id: normalizedId,
+                    full_name: name,
+                    access_level: accessLevel
+                }
+            }
         });
         
-        successDiv.textContent = 'Registration successful! Please login.';
+        if (authError) {
+            errorDiv.textContent = 'Registration Error: ' + authError.message;
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        const authId = authData?.user?.id;
+        if (!authId) {
+            errorDiv.textContent = 'Registration failed. Try again.';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        const profilePayload = {
+            emp_id: normalizedId,
+            full_name: name,
+            access_level: accessLevel,
+            auth_id: authId,
+            created_at: new Date().toISOString()
+        };
+        
+        if (existing && existing.length > 0) {
+            await sb.from('profiles').update(profilePayload).eq('emp_id', normalizedId);
+        } else {
+            const { error: insErr } = await sb.from('profiles').insert(profilePayload);
+            if (insErr && insErr.message && insErr.message.includes('duplicate key')) {
+                await sb.from('profiles').update(profilePayload).eq('emp_id', normalizedId);
+            }
+        }
+        
+        if (pending) {
+            const updatedPending = pendingList.filter(p => p.emp_id !== normalizedId);
+            await saveAppConfigList('pending_registrations', updatedPending);
+        }
+        
+        currentUser = {
+            empId: normalizedId,
+            name: name,
+            accessLevel: accessLevel,
+            authId: authId
+        };
+        updateUserHeader();
+        
+        successDiv.textContent = 'Registration successful!';
         successDiv.style.display = 'block';
         errorDiv.style.display = 'none';
-        setTimeout(() => toggleRegisterModal(), 2000);
+        setTimeout(() => {
+            toggleRegisterModal();
+            showPage('pageAdmin');
+            loadAdminData();
+        }, 1500);
     } catch (e) {
         errorDiv.textContent = 'Error: ' + e.toString();
         errorDiv.style.display = 'block';
@@ -558,21 +631,11 @@ function switchAdminTab(tabName) {
 // SESSION MANAGEMENT
 function saveSession(user) {
     currentUser = user;
-    sessionStorage.setItem('dmrcUser', JSON.stringify(user));
     updateUserHeader();
 }
 
 function checkExistingSession() {
-    const savedUser = sessionStorage.getItem('dmrcUser');
-    if (savedUser) {
-        try {
-            currentUser = JSON.parse(savedUser);
-            updateUserHeader();
-            loadUserMessages();
-        } catch(e) {
-            sessionStorage.removeItem('dmrcUser');
-        }
-    }
+    // Session restored by Supabase Auth on page load
 }
 
 function updateUserHeader() {
@@ -711,54 +774,60 @@ async function loadAdminData() {
 }
 
 // USER MANAGEMENT
-async function loadUserManagementData() {
-    try {
-        const { data: adminCfg } = await sb.from('app_config').select('config_value').eq('config_key', 'allowed_admins').single();
-        const { data: ccCfg } = await sb.from('app_config').select('config_value').eq('config_key', 'allowed_ccs').single();
-        const adminList = adminCfg ? JSON.parse(adminCfg.config_value || '[]') : [];
-        const ccList = ccCfg ? JSON.parse(ccCfg.config_value || '[]') : [];
-        document.getElementById('adminIdsList').innerHTML = adminList.length > 0 ? adminList.join('<br>') : 'None';
-        document.getElementById('ccIdsList').innerHTML = ccList.length > 0 ? ccList.join('<br>') : 'None';
-        const { data: profiles } = await sb.from('profiles').select('*');
-        let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th><th>Created</th></tr>';
-        (profiles || []).forEach(p => {
-            html += '<tr><td style="color:var(--cyan);">' + p.emp_id + '</td>' +
-                '<td>' + p.full_name + '</td>' +
-                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
-                '<td>' + (p.created_at || '-') + '</td></tr>';
-        });
-        html += '</table>';
-        document.getElementById('registeredUsersList').innerHTML = html;
-        toggleSecretCode('new');
-        toggleSecretCode('remove');
-    } catch (e) {}
-}
-
 async function loadAppConfigList(key) {
     const { data } = await sb.from('app_config').select('config_value').eq('config_key', key).single();
     return data ? JSON.parse(data.config_value || '[]') : [];
 }
-
 async function saveAppConfigList(key, list) {
     await sb.from('app_config').upsert({ config_key: key, config_value: JSON.stringify(list), updated_at: new Date().toISOString() }, { onConflict: 'config_key' });
 }
 
+async function loadUserManagementData() {
+    try {
+        const loggedSpan = document.getElementById('changePwdLoggedEmpId');
+        if (loggedSpan && currentUser) loggedSpan.textContent = currentUser.empId + ' (' + currentUser.name + ')';
+        const { data: admins } = await sb.from('profiles').select('*').eq('access_level', 'admin');
+        const { data: ccs } = await sb.from('profiles').select('*').eq('access_level', 'crewcontroller');
+        document.getElementById('adminIdsList').innerHTML = (admins || []).length > 0 ? (admins || []).map(a => a.emp_id + ' — ' + a.full_name).join('<br>') : 'None';
+        document.getElementById('ccIdsList').innerHTML = (ccs || []).length > 0 ? (ccs || []).map(c => c.emp_id + ' — ' + c.full_name).join('<br>') : 'None';
+        const { data: profiles } = await sb.from('profiles').select('*');
+        const pendingList = await loadAppConfigList('pending_registrations');
+        let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th><th>Status</th><th>Created</th></tr>';
+        (profiles || []).forEach(p => {
+            const isRegistered = p.auth_id || p.password_hash;
+            const hasPwd = isRegistered ? '✅ Registered' : '⏳ Pending';
+            html += '<tr><td style="color:var(--cyan);">' + p.emp_id + '</td>' +
+                '<td>' + (p.full_name || '-') + '</td>' +
+                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
+                '<td style="text-align:center;">' + hasPwd + '</td>' +
+                '<td>' + (p.created_at || '-') + '</td></tr>';
+        });
+        if (pendingList.length > 0) {
+            pendingList.forEach(p => {
+                html += '<tr><td style="color:var(--yellow);">' + p.emp_id + '</td>' +
+                    '<td>-</td>' +
+                    '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' + (p.access_level === 'admin' ? 'var(--red)' : 'var(--green)') + ';color:#000;">' + (p.access_level || 'crewcontroller') + '</span></td>' +
+                    '<td style="text-align:center;">🔶 Pre-authorized (not registered)</td>' +
+                    '<td>-</td></tr>';
+            });
+        }
+        html += '</table>';
+        document.getElementById('registeredUsersList').innerHTML = html;
+        toggleSecretCode('new');
+        toggleSecretCode('remove');
+    } catch (e) { console.error('loadUserManagementData:', e); }
+}
+
 async function changePassword() {
-    const empId = document.getElementById('changePwdEmpId')?.value?.trim()?.toUpperCase();
+    if (!currentUser) return alert('Not logged in!');
+    if (!currentUser.authId) return alert('Old account detected. Ask admin to migrate your account (delete and re-register) to enable password change.');
     const newPwd = document.getElementById('changePwdNew')?.value;
-    if (!empId || !newPwd) return alert('Enter Emp ID and New Password!');
+    if (!newPwd) return alert('Enter New Password!');
     if (newPwd.length < 6) return alert('Password must be at least 6 characters!');
     try {
-        const { data } = await sb.from('profiles').select('emp_id').eq('emp_id', empId);
-        if (!data || data.length === 0) return alert('Emp ID not found!');
-        let hash = 0;
-        for (let i = 0; i < newPwd.length; i++) {
-            hash = ((hash << 5) - hash) + newPwd.charCodeAt(i);
-            hash = hash & hash;
-        }
-        await sb.from('profiles').update({ password_hash: hash.toString() }).eq('emp_id', empId);
-        alert('Password changed for ' + empId);
-        document.getElementById('changePwdEmpId').value = '';
+        const { error } = await sb.auth.updateUser({ password: newPwd });
+        if (error) return alert('Error: ' + error.message);
+        alert('Password changed for ' + currentUser.empId);
         document.getElementById('changePwdNew').value = '';
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -778,13 +847,41 @@ async function addNewUserAccess() {
     if (!empId) return alert('Enter Emp ID!');
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     try {
-        const key = accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs';
-        const list = await loadAppConfigList(key);
-        if (list.indexOf(empId) !== -1) return alert(empId + ' already has access!');
-        list.push(empId);
-        await saveAppConfigList(key, list);
-        alert('Access added for ' + empId);
+        const { data: existing, error: selErr } = await sb.from('profiles').select('*').eq('emp_id', empId);
+        if (selErr) return alert('DB Error: ' + selErr.message);
+        if (existing && existing.length > 0 && (existing[0].auth_id || existing[0].password_hash)) {
+            return alert(empId + ' is already registered! Remove and re-add to change role.');
+        }
+        const pendingList = await loadAppConfigList('pending_registrations');
+        const alreadyPending = pendingList.find(p => p.emp_id === empId);
+        if (alreadyPending) {
+            alreadyPending.access_level = accessLevel;
+            await saveAppConfigList('pending_registrations', pendingList);
+            alert(accessLevel.charAt(0).toUpperCase() + accessLevel.slice(1) + ' access updated for ' + empId + ' (pending)');
+        } else {
+            pendingList.push({ emp_id: empId, access_level: accessLevel });
+            await saveAppConfigList('pending_registrations', pendingList);
+            alert(empId + ' pre-authorized as ' + accessLevel + '. They can now register.');
+        }
         document.getElementById('newUserEmpId').value = '';
+        loadUserManagementData();
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+async function deleteOrphanProfile() {
+    const empId = document.getElementById('orphanDeleteEmpId')?.value?.trim()?.toUpperCase();
+    if (!empId) return alert('Enter Emp ID!');
+    if (!confirm('Delete orphan profile for ' + empId + '?')) return;
+    try {
+        const { error: delErr } = await sb.from('profiles').delete().eq('emp_id', empId);
+        if (delErr) return alert('DB Error: ' + delErr.message);
+        const { data: check } = await sb.from('profiles').select('emp_id').eq('emp_id', empId);
+        if (!check || check.length === 0) {
+            alert('Orphan profile for ' + empId + ' deleted!');
+        } else {
+            alert('Cannot delete ' + empId + ' (RLS blocks DELETE). Delete manually from Supabase dashboard.');
+        }
+        document.getElementById('orphanDeleteEmpId').value = '';
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -797,13 +894,24 @@ async function removeUserAccess() {
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     if (empId === '3623') return alert('Cannot remove Main Admin!');
     try {
-        const key = accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs';
-        let list = await loadAppConfigList(key);
-        const idx = list.indexOf(empId);
-        if (idx === -1) return alert(empId + ' not found!');
-        list.splice(idx, 1);
-        await saveAppConfigList(key, list);
-        alert('Access removed for ' + empId);
+        let removed = false;
+        const { data: existing, error: selErr } = await sb.from('profiles').select('emp_id').eq('emp_id', empId);
+        if (selErr) return alert('DB Error: ' + selErr.message);
+        if (existing && existing.length > 0) {
+            const { error: delErr } = await sb.from('profiles').delete().eq('emp_id', empId);
+            if (delErr) return alert('DB Error (delete): ' + delErr.message);
+            const { data: check } = await sb.from('profiles').select('emp_id').eq('emp_id', empId);
+            if (!check || check.length === 0) removed = true;
+        }
+        const pendingList = await loadAppConfigList('pending_registrations');
+        const idx = pendingList.findIndex(p => p.emp_id === empId);
+        if (idx !== -1) {
+            pendingList.splice(idx, 1);
+            await saveAppConfigList('pending_registrations', pendingList);
+            removed = true;
+        }
+        if (!removed) return alert(empId + ' not found!');
+        alert('User ' + empId + ' removed!');
         document.getElementById('removeUserEmpId').value = '';
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
@@ -812,8 +920,12 @@ async function removeUserAccess() {
 async function resetAdminIds() {
     if (!confirm('Reset Admin IDs to only 3623?')) return;
     try {
-        await saveAppConfigList('allowed_admins', ['3623']);
-        alert('Admin IDs reset!');
+        const { error } = await sb.from('profiles').update({ access_level: 'crewcontroller' }).eq('access_level', 'admin').neq('emp_id', '3623');
+        if (error) return alert('DB Error: ' + error.message);
+        const pendingList = await loadAppConfigList('pending_registrations');
+        const filtered = pendingList.filter(p => !(p.access_level === 'admin' && p.emp_id !== '3623'));
+        await saveAppConfigList('pending_registrations', filtered);
+        alert('Admin IDs reset! Only 3623 remains admin.');
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -821,7 +933,11 @@ async function resetAdminIds() {
 async function resetCcIds() {
     if (!confirm('Clear all Crew Controller IDs?')) return;
     try {
-        await saveAppConfigList('allowed_ccs', []);
+        const { error } = await sb.from('profiles').update({ access_level: 'user' }).eq('access_level', 'crewcontroller');
+        if (error) return alert('DB Error: ' + error.message);
+        const pendingList = await loadAppConfigList('pending_registrations');
+        const filtered = pendingList.filter(p => p.access_level !== 'crewcontroller');
+        await saveAppConfigList('pending_registrations', filtered);
         alert('CC IDs cleared!');
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
@@ -1315,11 +1431,21 @@ async function downloadKmExcel() {
 
 // INIT
 window.addEventListener('DOMContentLoaded', async () => {
-    checkExistingSession();
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user?.user_metadata?.emp_id) {
+        const meta = session.user.user_metadata;
+        currentUser = {
+            empId: meta.emp_id,
+            name: meta.full_name,
+            accessLevel: meta.access_level,
+            authId: session.user.id
+        };
+        updateUserHeader();
+        loadUserMessages();
+    }
     updateDateTime();
-    updateUserHeader();
     await loadPopupMessage();
-    await loadUserMessages();
+    if (!currentUser) await loadUserMessages();
     const page = document.querySelector('.page.active');
     if (page && page.id) trackVisit(page.id, 'pageview');
 });
@@ -1423,23 +1549,13 @@ async function loadVisitorStats() {
     document.getElementById('visitWeek').textContent = stats.thisWeek;
 }
 
-function hashPassword(password) {
-    let hash = 0;
-    for (let i = 0; i < password.length; i++) {
-        const char = password.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return hash.toString();
-}
-
 function clearSession() {
     currentUser = null;
-    sessionStorage.removeItem('dmrcUser');
     document.getElementById('loggedInUserHeader').classList.remove('show');
 }
 
-function handleLogout() {
+async function handleLogout() {
+    await sb.auth.signOut();
     clearSession();
     showPage('pageHome');
 }
@@ -1567,34 +1683,41 @@ async function handleLogin() {
     const eid = document.getElementById('loginEmpId').value.trim().toUpperCase();
     const pwd = document.getElementById('loginPassword').value;
     const err = document.getElementById('loginError');
-    let hash = 0;
-    for (let i = 0; i < pwd.length; i++) {
-        hash = ((hash << 5) - hash) + pwd.charCodeAt(i);
-        hash = hash & hash;
-    }
     try {
-        const { data, error } = await sb.from('profiles').select('*').eq('emp_id', eid);
-        if (error) {
-            console.error('Login error:', error);
-            err.textContent = 'Database error: ' + error.message;
-            err.style.display = 'block';
-            return;
-        }
-        if (!data || data.length === 0) {
-            err.textContent = 'Invalid credentials!';
-            err.style.display = 'block';
-            return;
-        }
-        const userData = data[0];
-        if (userData.password_hash === hash.toString()) {
-            saveSession({ empId: userData.emp_id, name: userData.full_name, accessLevel: userData.access_level });
+        const { data: authData, error: authError } = await sb.auth.signInWithPassword({
+            email: eid.toLowerCase() + '@dmrc.local',
+            password: pwd
+        });
+        if (!authError && authData?.user) {
+            const meta = authData.user.user_metadata;
+            currentUser = {
+                empId: meta.emp_id,
+                name: meta.full_name,
+                accessLevel: meta.access_level,
+                authId: authData.user.id
+            };
+            updateUserHeader();
             toggleLoginModal();
             showPage('pageAdmin');
             loadAdminData();
-        } else {
-            err.textContent = 'Invalid credentials!';
-            err.style.display = 'block';
+            return;
         }
+        let hash = 0;
+        for (let i = 0; i < pwd.length; i++) {
+            hash = ((hash << 5) - hash) + pwd.charCodeAt(i);
+            hash = hash & hash;
+        }
+        const { data: oldUser, error: oldErr } = await sb.from('profiles').select('*').eq('emp_id', eid);
+        if (!oldErr && oldUser && oldUser.length > 0 && oldUser[0].password_hash === hash.toString()) {
+            currentUser = { empId: oldUser[0].emp_id, name: oldUser[0].full_name, accessLevel: oldUser[0].access_level };
+            updateUserHeader();
+            toggleLoginModal();
+            showPage('pageAdmin');
+            loadAdminData();
+            return;
+        }
+        err.textContent = 'Invalid credentials!';
+        err.style.display = 'block';
     } catch(e) {
         err.textContent = 'Error: ' + e.toString();
         err.style.display = 'block';

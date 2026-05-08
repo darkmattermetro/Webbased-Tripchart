@@ -103,12 +103,6 @@
                     <input type="text" id="regEmpId" class="jarvis-input" placeholder="Emp ID" style="text-transform:uppercase;">
                 </div>
                 <div class="input-group">
-                    <select id="regAccessLevel" class="jarvis-select">
-                        <option value="crewcontroller">Crew Controller </option>
-                        <option value="admin">Admin </option>
-                    </select>
-                </div>
-                <div class="input-group">
                     <input type="password" id="regAccessCode" class="jarvis-input" placeholder="Access Code">
                 </div>
                 <div class="input-group">
@@ -447,12 +441,18 @@
                     </div>
                     <div class="glass-card" style="padding:15px;">
                         <h4 style="color:var(--orange);margin-bottom:10px;font-size:13px;">Registered Users</h4>
+                        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+                            <input type="text" id="orphanDeleteEmpId" class="jarvis-input" style="font-size:11px;padding:6px;flex:1;min-width:100px;" placeholder="Delete orphan Emp ID">
+                            <button class="jarvis-btn btn-sm btn-red" onclick="deleteOrphanProfile()" style="font-size:10px;padding:6px 10px;">🗑️ DELETE ORPHAN</button>
+                        </div>
                         <div id="registeredUsersList" style="max-height:200px;overflow-y:auto;"></div>
                     </div>
                     <div class="glass-card" style="padding:15px;margin-top:15px;">
                         <h4 style="color:var(--purple);margin-bottom:10px;font-size:13px;">Change Password</h4>
+                        <div style="margin-bottom:8px;font-size:12px;color:rgba(255,255,255,0.6);">
+                            Logged in as: <strong id="changePwdLoggedEmpId" style="color:var(--cyan);"></strong>
+                        </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <input type="password" id="changePwdEmpId" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;min-width:100px;" placeholder="Emp ID">
                             <input type="password" id="changePwdNew" class="jarvis-input" style="font-size:11px;padding:8px;flex:1;min-width:120px;" placeholder="New Password">
                             <button class="jarvis-btn btn-sm" onclick="changePassword()" style="background:linear-gradient(135deg,var(--purple),#7c3aed);">🔑 CHANGE PASSWORD</button>
                         </div>
