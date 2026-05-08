@@ -901,6 +901,8 @@ async function generateTetraReport() {
 
         const tetraData = [];
         const rakeList = [];
+        const seenDuties = {};
+        const added = {};
 
         for (const rake in rakeTrips) {
             let trips = rakeTrips[rake];
@@ -920,12 +922,17 @@ async function generateTetraReport() {
 
             // Boarding on first trip
             if (!mathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
-                tetraData.push({
-                    rakeId: rake, duty: trips[0].duty,
-                    boardStn: trips[0].depLoc, boardTime: trips[0].depTime,
-                    alightStn: trips[0].arrLoc, alightTime: trips[0].arrTime,
-                    station: trips[0].depLoc, action: 'BOARDING'
-                });
+                const uniq = rake + '|' + trips[0].depTime + '|BOARDING';
+                if (!added[uniq]) {
+                    added[uniq] = true;
+                    if (!seenDuties[trips[0].duty]) seenDuties[trips[0].duty] = true;
+                    tetraData.push({
+                        rakeId: rake, duty: trips[0].duty,
+                        boardStn: trips[0].depLoc, boardTime: trips[0].depTime,
+                        alightStn: trips[0].arrLoc, alightTime: trips[0].arrTime,
+                        station: trips[0].depLoc, action: 'BOARDING'
+                    });
+                }
             }
 
             // Gap analysis between consecutive trips (rake reliever)
@@ -936,38 +943,61 @@ async function generateTetraReport() {
                 const mkprException = (trips[j].arrLoc === 'MKPR' && trips[j + 1].depLoc === 'MKPR' && sameDuty);
 
                 if (!mathTolerant(currentEnd, nextStart) && !mkprException) {
-                    tetraData.push({
-                        rakeId: rake, duty: trips[j].duty,
-                        boardStn: trips[j].depLoc, boardTime: trips[j].depTime,
-                        alightStn: trips[j].arrLoc, alightTime: trips[j].arrTime,
-                        station: trips[j].arrLoc, action: 'ALIGHTING'
-                    });
-                    tetraData.push({
-                        rakeId: rake, duty: trips[j + 1].duty,
-                        boardStn: trips[j + 1].depLoc, boardTime: trips[j + 1].depTime,
-                        alightStn: trips[j + 1].arrLoc, alightTime: trips[j + 1].arrTime,
-                        station: trips[j + 1].depLoc, action: 'BOARDING'
-                    });
+                    let uniq = rake + '|' + trips[j].arrTime + '|ALIGHTING';
+                    if (!added[uniq]) {
+                        added[uniq] = true;
+                        if (!seenDuties[trips[j].duty]) seenDuties[trips[j].duty] = true;
+                        tetraData.push({
+                            rakeId: rake, duty: trips[j].duty,
+                            boardStn: trips[j].depLoc, boardTime: trips[j].depTime,
+                            alightStn: trips[j].arrLoc, alightTime: trips[j].arrTime,
+                            station: trips[j].arrLoc, action: 'ALIGHTING'
+                        });
+                    }
+                    uniq = rake + '|' + trips[j + 1].depTime + '|BOARDING';
+                    if (!added[uniq]) {
+                        added[uniq] = true;
+                        if (!seenDuties[trips[j + 1].duty]) seenDuties[trips[j + 1].duty] = true;
+                        tetraData.push({
+                            rakeId: rake, duty: trips[j + 1].duty,
+                            boardStn: trips[j + 1].depLoc, boardTime: trips[j + 1].depTime,
+                            alightStn: trips[j + 1].arrLoc, alightTime: trips[j + 1].arrTime,
+                            station: trips[j + 1].depLoc, action: 'BOARDING'
+                        });
+                    }
                 }
             }
 
             // Alighting on last trip
             const last = trips[trips.length - 1];
             if (!mathTolerant(timeToMins(last.depTime), timeToMins(last.arrTime))) {
-                tetraData.push({
-                    rakeId: rake, duty: last.duty,
-                    boardStn: last.depLoc, boardTime: last.depTime,
-                    alightStn: last.arrLoc, alightTime: last.arrTime,
-                    station: last.arrLoc, action: 'ALIGHTING'
-                });
+                const uniq = rake + '|' + last.arrTime + '|ALIGHTING';
+                if (!added[uniq]) {
+                    added[uniq] = true;
+                    if (!seenDuties[last.duty]) seenDuties[last.duty] = true;
+                    tetraData.push({
+                        rakeId: rake, duty: last.duty,
+                        boardStn: last.depLoc, boardTime: last.depTime,
+                        alightStn: last.arrLoc, alightTime: last.arrTime,
+                        station: last.arrLoc, action: 'ALIGHTING'
+                    });
+                }
             }
         }
 
+        // Sort by time, then rake
+        tetraData.sort((a, b) => {
+            const tA = timeToMins(a.action === 'BOARDING' ? a.boardTime : a.alightTime);
+            const tB = timeToMins(b.action === 'BOARDING' ? b.boardTime : b.alightTime);
+            if (tA !== tB) return tA - tB;
+            return a.rakeId.localeCompare(b.rakeId);
+        });
+
         let filtered = tetraData;
         if (stationFilter === 'KKDA+PBGW') {
-            filtered = tetraData.filter(d => d.station === 'KKDA' || d.station === 'PBGW');
+            filtered = tetraData.filter(d => d.station.indexOf('KKDA') !== -1 || d.station.indexOf('PBGW') !== -1);
         } else if (stationFilter !== 'ALL') {
-            filtered = tetraData.filter(d => d.station === stationFilter);
+            filtered = tetraData.filter(d => d.station.indexOf(stationFilter) !== -1);
         }
         if (direction !== 'ALL') {
             filtered = filtered.filter(d => d.action === direction);
@@ -975,7 +1005,12 @@ async function generateTetraReport() {
 
         const incomingCount = filtered.filter(d => d.action === 'ALIGHTING').length;
         const outgoingCount = filtered.filter(d => d.action === 'BOARDING').length;
-        currentTetraData = { tetraData: filtered, tetraCount: filtered.length, rakeCount: rakeList.length };
+        currentTetraData = {
+            tetraData: filtered,
+            tetraCount: filtered.length,
+            rakeCount: rakeList.length,
+            dutyCount: Object.keys(seenDuties).length
+        };
 
         document.getElementById('tetraCount').textContent = filtered.length;
         document.getElementById('tetraIncoming').textContent = incomingCount;
