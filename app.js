@@ -713,14 +713,12 @@ async function loadAdminData() {
 // USER MANAGEMENT
 async function loadUserManagementData() {
     try {
-        const { data: adminData } = await sb.from('allowed_admins').select('emp_id');
-        const { data: ccData } = await sb.from('allowed_ccs').select('emp_id');
-        document.getElementById('adminIdsList').innerHTML = (adminData || []).length > 0
-            ? (adminData || []).map(a => a.emp_id).join('<br>')
-            : 'None';
-        document.getElementById('ccIdsList').innerHTML = (ccData || []).length > 0
-            ? (ccData || []).map(c => c.emp_id).join('<br>')
-            : 'None';
+        const { data: adminCfg } = await sb.from('app_config').select('config_value').eq('config_key', 'allowed_admins').single();
+        const { data: ccCfg } = await sb.from('app_config').select('config_value').eq('config_key', 'allowed_ccs').single();
+        const adminList = adminCfg ? JSON.parse(adminCfg.config_value || '[]') : [];
+        const ccList = ccCfg ? JSON.parse(ccCfg.config_value || '[]') : [];
+        document.getElementById('adminIdsList').innerHTML = adminList.length > 0 ? adminList.join('<br>') : 'None';
+        document.getElementById('ccIdsList').innerHTML = ccList.length > 0 ? ccList.join('<br>') : 'None';
         const { data: profiles } = await sb.from('profiles').select('*');
         let html = '<table class="data-table"><tr><th>Emp ID</th><th>Name</th><th>Level</th><th>Created</th></tr>';
         (profiles || []).forEach(p => {
@@ -734,6 +732,15 @@ async function loadUserManagementData() {
         toggleSecretCode('new');
         toggleSecretCode('remove');
     } catch (e) {}
+}
+
+async function loadAppConfigList(key) {
+    const { data } = await sb.from('app_config').select('config_value').eq('config_key', key).single();
+    return data ? JSON.parse(data.config_value || '[]') : [];
+}
+
+async function saveAppConfigList(key, list) {
+    await sb.from('app_config').upsert({ config_key: key, config_value: JSON.stringify(list), updated_at: new Date().toISOString() }, { onConflict: 'config_key' });
 }
 
 async function changePassword() {
@@ -771,8 +778,13 @@ async function addNewUserAccess() {
     if (!empId) return alert('Enter Emp ID!');
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     try {
-        await sb.from(accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs').insert({ emp_id: empId });
+        const key = accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs';
+        const list = await loadAppConfigList(key);
+        if (list.indexOf(empId) !== -1) return alert(empId + ' already has access!');
+        list.push(empId);
+        await saveAppConfigList(key, list);
         alert('Access added for ' + empId);
+        document.getElementById('newUserEmpId').value = '';
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -785,8 +797,14 @@ async function removeUserAccess() {
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     if (empId === '3623') return alert('Cannot remove Main Admin!');
     try {
-        await sb.from(accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs').delete().eq('emp_id', empId);
+        const key = accessLevel === 'admin' ? 'allowed_admins' : 'allowed_ccs';
+        let list = await loadAppConfigList(key);
+        const idx = list.indexOf(empId);
+        if (idx === -1) return alert(empId + ' not found!');
+        list.splice(idx, 1);
+        await saveAppConfigList(key, list);
         alert('Access removed for ' + empId);
+        document.getElementById('removeUserEmpId').value = '';
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -794,8 +812,7 @@ async function removeUserAccess() {
 async function resetAdminIds() {
     if (!confirm('Reset Admin IDs to only 3623?')) return;
     try {
-        await sb.from('allowed_admins').delete().neq('emp_id', '');
-        await sb.from('allowed_admins').insert({ emp_id: '3623' });
+        await saveAppConfigList('allowed_admins', ['3623']);
         alert('Admin IDs reset!');
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
@@ -804,7 +821,7 @@ async function resetAdminIds() {
 async function resetCcIds() {
     if (!confirm('Clear all Crew Controller IDs?')) return;
     try {
-        await sb.from('allowed_ccs').delete().neq('emp_id', '');
+        await saveAppConfigList('allowed_ccs', []);
         alert('CC IDs cleared!');
         loadUserManagementData();
     } catch (e) { alert('Error: ' + e.toString()); }
@@ -950,7 +967,9 @@ async function generateTetraReport() {
         }
 
         let filtered = tetraData;
-        if (stationFilter !== 'ALL') {
+        if (stationFilter === 'KKDA+PBGW') {
+            filtered = tetraData.filter(d => d.station === 'KKDA' || d.station === 'PBGW');
+        } else if (stationFilter !== 'ALL') {
             filtered = tetraData.filter(d => d.station === stationFilter);
         }
         if (direction !== 'ALL') {
@@ -1228,12 +1247,12 @@ async function downloadKmExcel() {
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
                 dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
             }
-            if (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn) {
-                dutyTotals[d].signOn = r["Sign On Time"] || '';
+            if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
+                dutyTotals[d].signOn = r["Sign On Time"];
                 dutyTotals[d].signOnLoc = r["Sign On Loc"] || '';
             }
-            if (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff) {
-                dutyTotals[d].signOff = r["Sign Off Time"] || '';
+            if (r["Sign Off Time"] && (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff)) {
+                dutyTotals[d].signOff = r["Sign Off Time"];
                 dutyTotals[d].signOffLoc = r["Sign Off Loc"] || '';
             }
         }
@@ -1440,12 +1459,12 @@ async function generateKmReport() {
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
                 dutyTotals[d].km += KM_MAP[from + '|' + to] || 0;
             }
-            if (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn) {
-                dutyTotals[d].signOn = r["Sign On Time"] || '';
+            if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
+                dutyTotals[d].signOn = r["Sign On Time"];
                 dutyTotals[d].signOnLoc = r["Sign On Loc"] || '';
             }
-            if (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff) {
-                dutyTotals[d].signOff = r["Sign Off Time"] || '';
+            if (r["Sign Off Time"] && (!dutyTotals[d].signOff || r["Sign Off Time"] > dutyTotals[d].signOff)) {
+                dutyTotals[d].signOff = r["Sign Off Time"];
                 dutyTotals[d].signOffLoc = r["Sign Off Loc"] || '';
             }
         }
@@ -1454,7 +1473,7 @@ async function generateKmReport() {
         if (dutyList.length === 0) { alert('No duties found for the selected criteria!'); return; }
         let totalKm = 0;
         const tripRows = [];
-        dutyList.sort().forEach(d => {
+        dutyList.sort((a, b) => dutyTotals[b].km - dutyTotals[a].km).forEach(d => {
             totalKm += dutyTotals[d].km;
             tripRows.push({ duty: d, ...dutyTotals[d] });
         });
