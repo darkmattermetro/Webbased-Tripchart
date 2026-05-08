@@ -936,21 +936,18 @@ async function generateTetraReport() {
                 const mkprException = (trips[j].arrLoc === 'MKPR' && trips[j + 1].depLoc === 'MKPR' && sameDuty);
 
                 if (!mathTolerant(currentEnd, nextStart) && !mkprException) {
-                    const stations = [trips[j].arrLoc, trips[j + 1].depLoc].filter(s => s === 'KKDA' || s === 'PBGW');
-                    if (stationFilter === 'ALL' || stations.indexOf(stationFilter) !== -1 || !stationFilter) {
-                        tetraData.push({
-                            rakeId: rake, duty: trips[j].duty,
-                            boardStn: trips[j].depLoc, boardTime: trips[j].depTime,
-                            alightStn: trips[j].arrLoc, alightTime: trips[j].arrTime,
-                            station: trips[j].arrLoc, action: 'ALIGHTING'
-                        });
-                        tetraData.push({
-                            rakeId: rake, duty: trips[j + 1].duty,
-                            boardStn: trips[j + 1].depLoc, boardTime: trips[j + 1].depTime,
-                            alightStn: trips[j + 1].arrLoc, alightTime: trips[j + 1].arrTime,
-                            station: trips[j + 1].depLoc, action: 'BOARDING'
-                        });
-                    }
+                    tetraData.push({
+                        rakeId: rake, duty: trips[j].duty,
+                        boardStn: trips[j].depLoc, boardTime: trips[j].depTime,
+                        alightStn: trips[j].arrLoc, alightTime: trips[j].arrTime,
+                        station: trips[j].arrLoc, action: 'ALIGHTING'
+                    });
+                    tetraData.push({
+                        rakeId: rake, duty: trips[j + 1].duty,
+                        boardStn: trips[j + 1].depLoc, boardTime: trips[j + 1].depTime,
+                        alightStn: trips[j + 1].arrLoc, alightTime: trips[j + 1].arrTime,
+                        station: trips[j + 1].depLoc, action: 'BOARDING'
+                    });
                 }
             }
 
