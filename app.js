@@ -425,7 +425,7 @@ async function handleRegister() {
             return;
         }
         
-        const email = normalizedId.toLowerCase() + '@example.com';
+        const email = normalizedId.toLowerCase() + '@gmail.com';
         const { data: authData, error: authError } = await sb.auth.signUp({
             email: email,
             password: password,
@@ -1685,7 +1685,7 @@ async function handleLogin() {
     const err = document.getElementById('loginError');
     try {
         const { data: authData, error: authError } = await sb.auth.signInWithPassword({
-            email: eid.toLowerCase() + '@example.com',
+            email: eid.toLowerCase() + '@gmail.com',
             password: pwd
         });
         if (!authError && authData?.user) {
