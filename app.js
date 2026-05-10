@@ -31,6 +31,7 @@ const KM_MAP = {
     "KKDA DN|DDSC DN": 40.96,
     "KKDA DN|DDSC SDG STABLE": 41.46,
     "KKDA DN|DDSC SDG": 41.46,
+    "KKDA DN|MVPO DN": 7.95,
     "MUPR DN|MUPR 4TH SDG": 1.4,
     "KKDA UP|PBGW UP": 38.08,
     "KKDA UP|IPE": 3.16,
@@ -59,6 +60,9 @@ const KM_MAP = {
     "MUPR 4TH SDG STABLE|SVVR UP": 4,
     "MUPR DN|PBGW DN": 21.79,
     "MVPO DN|KKDA DN": 7.95,
+    "MVPO DN|NZM": 6.31,
+    "MVPO DN PF|NZM": 6.31,
+    "MVPO DN PF STABLE|NZM": 6.31,
     "NZM|MVPO DN": 6.31,
     "NZM|MVPO DN PF STABLE": 6.31,
     "NZM|MVPO DN PF": 6.31,
@@ -92,7 +96,11 @@ async function loadKmData() {
         const { data } = await sb.from('app_config').select('config_value').eq('config_key', 'km_data').single();
         if (data && data.config_value) {
             const uploaded = JSON.parse(data.config_value);
-            kmData = { ...KM_MAP, ...uploaded };
+            const merged = { ...KM_MAP };
+            for (const [key, val] of Object.entries(uploaded)) {
+                if (val) merged[key] = val;
+            }
+            kmData = merged;
         } else {
             kmData = { ...KM_MAP };
         }
@@ -365,7 +373,7 @@ function displayResult(data, dutyNo, dayType) {
                 <td data-label="Dep">${r["Start Time"]}</td>
                 <td data-label="To">${r["End Stn"]}</td>
                 <td data-label="Arr">${r["End Time"]}</td>
-                <td data-label="KM"><span class="km-tag">${km} km</span></td>
+                <td data-label="KM"><span class="km-tag">${km} km${km === 0 ? '<br><span style="font-size:7px;color:var(--red);font-weight:400;">' + (r["Start Stn"]||'').toString().trim().toUpperCase() + '|' + (r["End Stn"]||'').toString().trim().toUpperCase() + '</span>' : ''}</span></td>
                 <td data-label="Tetra" data-fullwidth="true">${gapAfter}</td>
             </tr>`;
         }
@@ -1681,6 +1689,60 @@ async function generateKmReport() {
                 '<td data-label="KM"><span class="km-tag">' + r.km.toFixed(2) + ' km</span></td>';
             tbody.appendChild(tr);
         });
+    } catch (e) { alert('Error: ' + e.toString()); }
+}
+
+// MISSING KM AUDIT
+async function findMissingKm() {
+    try {
+        const types = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+        const missing = {};
+        let totalTrips = 0;
+        const allAffectedDuties = new Set();
+
+        for (const type of types) {
+            const { data } = await sb.from('trip_data').select('*').eq('day_type', type);
+            if (!data) continue;
+            for (const r of data) {
+                const rake = (r["Rake Num"] || '').toString().trim();
+                if (!rake) continue;
+                const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
+                const to = (r["End Stn"] || '').toString().trim().toUpperCase();
+                const key = from + '|' + to;
+                const km = kmData[key];
+                if (!km || km === 0) {
+                    const route = from + ' → ' + to;
+                    if (!missing[route]) missing[route] = { count: 0, duties: new Set(), types: new Set() };
+                    missing[route].count++;
+                    missing[route].duties.add(r["Duty No"]);
+                    missing[route].types.add(type);
+                    totalTrips++;
+                    allAffectedDuties.add(r["Duty No"]);
+                }
+            }
+        }
+
+        document.getElementById('missingKmWrapper').style.display = 'block';
+        document.getElementById('missingRouteCount').textContent = Object.keys(missing).length;
+        document.getElementById('missingTripCount').textContent = totalTrips;
+        document.getElementById('missingDutyCount').textContent = allAffectedDuties.size;
+
+        const tbody = document.getElementById('missingKmBody');
+        tbody.innerHTML = '';
+        if (Object.keys(missing).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--green);padding:20px;">✅ All routes have KM data assigned!</td></tr>';
+            return;
+        }
+
+        const sorted = Object.entries(missing).sort((a, b) => b[1].count - a[1].count);
+        for (const [route, info] of sorted) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td data-label="Route" style="color:var(--red);font-weight:700;">' + route + '</td>' +
+                '<td data-label="Affected Trips" style="color:var(--orange);font-weight:700;">' + info.count + '</td>' +
+                '<td data-label="Affected Duties" style="color:var(--cyan);">' + [...info.duties].sort((a,b)=>a-b).join(', ') + '</td>' +
+                '<td data-label="Day Types">' + [...info.types].join(', ') + '</td>';
+            tbody.appendChild(tr);
+        }
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
