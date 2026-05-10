@@ -161,12 +161,12 @@
                     </div>
                 </div>
                 
-                <div class="tab-nav-scroll" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;border-bottom:2px solid rgba(0,212,255,0.3);padding-bottom:10px;">
+                <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;border-bottom:2px solid rgba(0,212,255,0.3);padding-bottom:10px;">
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabMessages" onclick="switchAdminTab('messages')" style="background:linear-gradient(135deg,var(--orange),#cc5500);">📢 Messages</button>
-                    <button class="jarvis-btn btn-sm admin-only-tab" id="tabUpload" onclick="switchAdminTab('upload')" style="background:linear-gradient(135deg,var(--cyan),#0099cc);">📤 Upload</button>
+                    <button class="jarvis-btn btn-sm admin-only-tab" id="tabUpload" onclick="switchAdminTab('upload')" style="background:linear-gradient(135deg,var(--cyan),#0099cc);">📤 Data Upload</button>
                     <button class="jarvis-btn btn-sm" id="tabChart" onclick="switchAdminTab('chart')" style="background:linear-gradient(135deg,var(--purple),#7c3aed);">📊 Chart</button>
-                    <button class="jarvis-btn btn-sm" id="tabKm" onclick="switchAdminTab('km')" style="background:linear-gradient(135deg,var(--green),#15803d);">🛣️ KM</button>
-                    <button class="jarvis-btn btn-sm" id="tabTetra" onclick="switchAdminTab('tetra')" style="background:linear-gradient(135deg,var(--red),#b91c1c);">🔑 Tetra</button>
+                    <button class="jarvis-btn btn-sm" id="tabKm" onclick="switchAdminTab('km')" style="background:linear-gradient(135deg,var(--green),#15803d);">🛣️ KM Analysis</button>
+                    <button class="jarvis-btn btn-sm" id="tabTetra" onclick="switchAdminTab('tetra')" style="background:linear-gradient(135deg,var(--red),#b91c1c);">🔑 Tetra Key</button>
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabUsers" onclick="switchAdminTab('users')" style="background:linear-gradient(135deg,var(--red),#991b1b);display:none;">👥 Users</button>
                 </div>
                 
@@ -201,7 +201,7 @@
                                 <button class="jarvis-btn btn-sm" onclick="clearVisitorLog()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR</button>
                             </div>
                         </div>
-                        <div class="visitor-stats-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
                             <div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(0,212,255,0.3);">
                                 <div style="font-size:9px;color:rgba(255,255,255,0.6);">TOTAL</div>
                                 <div id="visitTotal" style="font-size:18px;color:var(--cyan);font-weight:bold;">-</div>
@@ -230,7 +230,7 @@
                             <button id="clearMsgLogBtn" class="jarvis-btn btn-sm" onclick="clearMessageLog()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR LOG</button>
                         </div>
                         <div class="table-wrap">
-                            <table class="data-table responsive-card-table" style="font-size:11px;">
+                            <table class="data-table" style="font-size:11px;">
                                 <thead><tr><th>Timestamp</th><th>Emp ID</th><th>Name</th><th>Action</th><th>Message</th></tr></thead>
                                 <tbody id="messageLogBody"><tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr></tbody>
                             </table>
@@ -374,10 +374,44 @@
                             <button class="jarvis-btn btn-green btn-sm" onclick="downloadKmExcel()">📊 DOWNLOAD EXCEL</button>
                         </div>
                         <div class="table-wrap" style="margin-top:15px;">
-                            <table class="data-table responsive-card-table">
+                            <table class="data-table">
                                 <thead><tr><th>Duty</th><th>Sign On</th><th>Sign On Loc</th><th>Sign Off</th><th>Sign Off Loc</th><th>KM</th></tr></thead>
                                 <tbody id="kmTable"></tbody>
                             </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Missing KM Audit -->
+                    <div style="margin-top:25px;padding-top:20px;border-top:2px solid rgba(255,107,53,0.3);">
+                        <div class="section-header orange">
+                            <div class="section-icon">🔍</div>
+                            <div class="section-title">Missing KM Audit</div>
+                        </div>
+                        <p style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:12px;">
+                            Scan all day types for trips with 0 KM to identify missing route data.
+                        </p>
+                        <button class="jarvis-btn btn-orange" onclick="findMissingKm()" style="font-size:11px;padding:12px;">🔍 FIND MISSING KM</button>
+                        <div id="missingKmWrapper" style="display:none;margin-top:15px;">
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:15px;">
+                                <div style="background:rgba(239,68,68,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(239,68,68,0.3);">
+                                    <div style="font-size:9px;color:rgba(255,255,255,0.6);">MISSING ROUTES</div>
+                                    <div id="missingRouteCount" style="font-size:20px;color:var(--red);font-weight:bold;">0</div>
+                                </div>
+                                <div style="background:rgba(255,107,53,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(255,107,53,0.3);">
+                                    <div style="font-size:9px;color:rgba(255,255,255,0.6);">TOTAL AFFECTED TRIPS</div>
+                                    <div id="missingTripCount" style="font-size:20px;color:var(--orange);font-weight:bold;">0</div>
+                                </div>
+                                <div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(0,212,255,0.3);">
+                                    <div style="font-size:9px;color:rgba(255,255,255,0.6);">AFFECTED DUTIES</div>
+                                    <div id="missingDutyCount" style="font-size:20px;color:var(--cyan);font-weight:bold;">0</div>
+                                </div>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead><tr><th>Route (Start → End)</th><th>Affected Trips</th><th>Affected Duties</th><th>Day Types</th></tr></thead>
+                                    <tbody id="missingKmBody"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -388,7 +422,7 @@
                         <div class="section-icon" style="background:linear-gradient(135deg,var(--red),#b91c1b);">🔑</div>
                         <div class="section-title">Tetra Key Report</div>
                     </div>
-                    <div class="tetra-filter-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:15px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:15px;">
                         <div class="input-group" style="margin-bottom:0;">
                             <label class="input-label">Day Type</label>
                             <select id="tetraDayType" class="jarvis-select">
