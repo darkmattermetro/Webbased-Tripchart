@@ -68,9 +68,9 @@ const KM_MAP = {
     "PBGW DN|DDSC SDG STABLE": 12.26,
     "PBGW DN|DDSC SDG": 12.26,
     "PBGW DN|IPE": 34.92,
-    "PBGW DN|KKDA DN": 38.08,
+    "PBGW DN|KKDA DN": 29.10,
     "PBGW DN|DDSC": 11.86,
-    "PBGW UP|KKDA UP": 29.10,
+    "PBGW UP|KKDA UP": 38.08,
     "PBGW UP|MUPR": 21.79,
     "PBGW UP|MKPR": 8.43,
     "SAKP 3RD|PBGW DN": 1.84,
@@ -309,7 +309,7 @@ function displayResult(data, dutyNo, dayType) {
                     <div style="font-size:14px; letter-spacing:4px; color:rgba(255,255,255,0.7); text-transform:uppercase; margin-top:8px;">${dayType} Roster</div>
                 </div>
                 
-                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(168,85,247,0.1)); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:15px;">
+                <div class="wef-remarks-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; background:linear-gradient(135deg,rgba(0,212,255,0.1),rgba(168,85,247,0.1)); border:1px solid rgba(0,212,255,0.2); border-radius:12px; padding:15px;">
                     <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">WEF</div><div style="font-family:'Syncopate';font-size:13px;color:var(--cyan);">${data.wef || 'N/A'}</div></div>
                     <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Remarks</div><div style="font-family:'Syncopate';font-size:13px;color:var(--orange);">${data.remarks || 'None'}</div></div>
                     <div style="text-align:center;"><div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Type</div><div style="font-family:'Syncopate';font-size:13px;color:var(--purple);">${dayType}</div></div>
@@ -321,10 +321,10 @@ function displayResult(data, dutyNo, dayType) {
                 <span style="font-size:18px;">🚇</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Sign On / Off</span>
             </div>
             <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table responsive-card-table">
                 <tr><th>Action</th><th>Location</th><th>Time</th></tr>
-                <tr style="background:rgba(34,197,94,0.15);"><td style="color:var(--green);font-weight:700;">SIGN ON</td><td>${firstRow["Sign On Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign On Time"] || '-'}</span></td></tr>
-                <tr style="background:rgba(255,107,53,0.15);"><td style="color:var(--orange);font-weight:700;">SIGN OFF</td><td>${firstRow["Sign Off Loc"] || '-'}</td><td><span class="time-display">${firstRow["Sign Off Time"] || '-'}</span></td></tr>
+                <tr style="background:rgba(34,197,94,0.15);"><td data-label="Action" style="color:var(--green);font-weight:700;">SIGN ON</td><td data-label="Location">${firstRow["Sign On Loc"] || '-'}</td><td data-label="Time"><span class="time-display">${firstRow["Sign On Time"] || '-'}</span></td></tr>
+                <tr style="background:rgba(255,107,53,0.15);"><td data-label="Action" style="color:var(--orange);font-weight:700;">SIGN OFF</td><td data-label="Location">${firstRow["Sign Off Loc"] || '-'}</td><td data-label="Time"><span class="time-display">${firstRow["Sign Off Time"] || '-'}</span></td></tr>
             </table>
             </div>
            </div>`;
@@ -334,9 +334,9 @@ function displayResult(data, dutyNo, dayType) {
                 <span style="font-size:18px;">🚄</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Trip Details</span>
             </div>
             <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table responsive-card-table trip-card-mobile">
                 <tr><th>Reliever</th><th>Rake</th><th>From</th><th>Dep</th><th>To</th><th>Arr</th><th>KM</th><th>Reliever</th></tr>`;
-    
+     
     data.roster.forEach(r => {
         if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
             let km = r.calculated_km || 0;
@@ -359,14 +359,14 @@ function displayResult(data, dutyNo, dayType) {
             }
             
             h += `<tr>
-                <td>${gapBefore}</td>
-                <td style="color:var(--cyan);font-weight:700;">${r["Rake Num"]}</td>
-                <td>${r["Start Stn"]}</td>
-                <td>${r["Start Time"]}</td>
-                <td>${r["End Stn"]}</td>
-                <td>${r["End Time"]}</td>
-                <td><span class="km-tag">${km} km</span></td>
-                <td>${gapAfter}</td>
+                <td data-label="Tetra" data-fullwidth="true">${gapBefore}</td>
+                <td data-label="Rake" style="color:var(--cyan);font-weight:700;">${r["Rake Num"]}</td>
+                <td data-label="From">${r["Start Stn"]}</td>
+                <td data-label="Dep">${r["Start Time"]}</td>
+                <td data-label="To">${r["End Stn"]}</td>
+                <td data-label="Arr">${r["End Time"]}</td>
+                <td data-label="KM"><span class="km-tag">${km} km</span></td>
+                <td data-label="Tetra" data-fullwidth="true">${gapAfter}</td>
             </tr>`;
         }
     });
@@ -377,7 +377,7 @@ function displayResult(data, dutyNo, dayType) {
                 <span style="font-size:18px;">☕</span><span style="font-family:'Syncopate';font-size:13px;text-transform:uppercase;letter-spacing:2px;">Break Schedule</span>
             </div>
             <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table responsive-card-table">
                 <tr><th>Relief Point</th><th>Start</th><th>Duration</th></tr>`;
     
     let hb = false;
@@ -385,7 +385,7 @@ function displayResult(data, dutyNo, dayType) {
         let breakVal = parseFloat(r["Break"] || 0);
         if (breakVal > 0) {
             hb = true;
-            h += `<tr><td>${r["End Stn"]}</td><td>${r["End Time"]}</td><td style="color:var(--orange);font-weight:700;">${breakVal}m</td></tr>`;
+            h += `<tr><td data-label="Relief Point">${r["End Stn"]}</td><td data-label="Start">${r["End Time"]}</td><td data-label="Duration" style="color:var(--orange);font-weight:700;">${breakVal}m</td></tr>`;
         }
     });
     if (!hb) h += `<tr><td colspan="3" style="color:rgba(255,255,255,0.4);font-style:italic;">No scheduled breaks</td></tr>`;
@@ -600,6 +600,10 @@ async function processUploads() {
                   }));
                 await sb.from('trip_data').delete().eq('day_type', type);
                 await sb.from('trip_data').insert(tripRows);
+                const wef = document.getElementById('wef_' + type)?.value?.trim() || '';
+                const remarks = document.getElementById('rem_' + type)?.value?.trim() || '';
+                if (wef) await sb.from('app_config').upsert({ config_key: type + '_wef', config_value: wef, updated_at: new Date().toISOString() }, { onConflict: 'config_key' });
+                if (remarks) await sb.from('app_config').upsert({ config_key: type + '_remarks', config_value: remarks, updated_at: new Date().toISOString() }, { onConflict: 'config_key' });
                 alert(type + ' data uploaded!');
             }
         }
@@ -632,6 +636,10 @@ async function clearData(type) {
     if (!confirm('Clear ' + type + ' data?')) return;
     try {
         await sb.from('trip_data').delete().eq('day_type', type);
+        await sb.from('app_config').delete().eq('config_key', type + '_wef');
+        await sb.from('app_config').delete().eq('config_key', type + '_remarks');
+        document.getElementById('wef_' + type).value = '';
+        document.getElementById('rem_' + type).value = '';
         alert(type + ' data cleared!');
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -994,13 +1002,13 @@ async function loadMessageLog() {
             tr.style.background = log.action === 'POSTED' ? 'rgba(34,197,94,0.1)' :
                 log.action === 'POPUP' ? 'rgba(168,85,247,0.1)' :
                 log.action === 'CLEARED' ? 'rgba(239,68,68,0.1)' : '';
-            tr.innerHTML = '<td>' + (log.timestamp || '') + '</td>' +
-                '<td style="color:var(--cyan);font-weight:600;">' + (log.emp_id || '') + '</td>' +
-                '<td>' + (log.emp_name || '') + '</td>' +
-                '<td><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' +
+            tr.innerHTML = '<td data-label="Timestamp">' + (log.timestamp || '') + '</td>' +
+                '<td data-label="Emp ID" style="color:var(--cyan);font-weight:600;">' + (log.emp_id || '') + '</td>' +
+                '<td data-label="Name">' + (log.emp_name || '') + '</td>' +
+                '<td data-label="Action"><span style="padding:2px 6px;border-radius:4px;font-size:9px;background:' +
                 (log.action === 'POSTED' ? 'var(--green)' : log.action === 'POPUP' ? 'var(--purple)' : 'var(--red)') +
                 ';color:#000;">' + log.action + '</span></td>' +
-                '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (log.message || '-') + '</td>';
+                '<td data-label="Message" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (log.message || '-') + '</td>';
             tbody.appendChild(tr);
         });
     } catch (e) {}
@@ -1178,18 +1186,18 @@ async function generateTetraReport() {
             const showAlightStn = d.action === 'ALIGHTING' ? d.alightStn : '-';
             const showAlightTime = d.action === 'ALIGHTING' ? d.alightTime : '-';
             tableHtml += '<tr style="background:rgba(239,68,68,0.15);">' +
-                '<td style="color:var(--red);font-weight:700;">' + d.rakeId + '</td>' +
-                '<td style="color:var(--cyan);font-weight:700;">' + d.duty + '</td>' +
-                '<td>' + showBoardStn + '</td>' +
-                '<td><span class="time-display">' + showBoardTime + '</span></td>' +
-                '<td>' + showAlightStn + '</td>' +
-                '<td><span class="time-display">' + showAlightTime + '</span></td>' +
-                '<td style="color:var(--orange);font-weight:700;">' + stnLabel + '</td>' +
-                '<td><span style="background:var(--purple);color:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;">' + actionText + '</span></td>' +
+                '<td data-label="Rake" style="color:var(--red);font-weight:700;">' + d.rakeId + '</td>' +
+                '<td data-label="Duty" style="color:var(--cyan);font-weight:700;">' + d.duty + '</td>' +
+                '<td data-label="Board">' + showBoardStn + '</td>' +
+                '<td data-label="Board Time"><span class="time-display">' + showBoardTime + '</span></td>' +
+                '<td data-label="Alight">' + showAlightStn + '</td>' +
+                '<td data-label="Alight Time"><span class="time-display">' + showAlightTime + '</span></td>' +
+                '<td data-label="Station" style="color:var(--orange);font-weight:700;">' + stnLabel + '</td>' +
+                '<td data-label="Direction"><span style="background:var(--purple);color:#fff;padding:4px 10px;border-radius:6px;font-weight:bold;">' + actionText + '</span></td>' +
             '</tr>';
         });
         document.getElementById('tetraKeyOutput').innerHTML = tableHtml
-            ? '<div class="table-wrap"><table class="data-table"><tr><th>Rake</th><th>Duty</th><th>Board</th><th>Board Time</th><th>Alight</th><th>Alight Time</th><th>Station</th><th>Direction</th></tr>' + tableHtml + '</table></div>'
+            ? '<div class="table-wrap"><table class="data-table responsive-card-table"><tr><th>Rake</th><th>Duty</th><th>Board</th><th>Board Time</th><th>Alight</th><th>Alight Time</th><th>Station</th><th>Direction</th></tr>' + tableHtml + '</table></div>'
             : '<p style="color:rgba(255,255,255,0.4);text-align:center;">No tetra key data found for selected filters.</p>';
     } catch (e) { alert('Error: ' + e.toString()); }
 }
@@ -1665,12 +1673,12 @@ async function generateKmReport() {
         tbody.innerHTML = '';
         tripRows.forEach(r => {
             const tr = document.createElement('tr');
-            tr.innerHTML = '<td style="color:var(--cyan);font-weight:600;">' + r.duty + '</td>' +
-                '<td><span class="time-display">' + r.signOn + '</span></td>' +
-                '<td>' + r.signOnLoc + '</td>' +
-                '<td><span class="time-display">' + r.signOff + '</span></td>' +
-                '<td>' + r.signOffLoc + '</td>' +
-                '<td><span class="km-tag">' + r.km.toFixed(2) + ' km</span></td>';
+            tr.innerHTML = '<td data-label="Duty" style="color:var(--cyan);font-weight:600;">' + r.duty + '</td>' +
+                '<td data-label="Sign On"><span class="time-display">' + r.signOn + '</span></td>' +
+                '<td data-label="On Loc">' + r.signOnLoc + '</td>' +
+                '<td data-label="Sign Off"><span class="time-display">' + r.signOff + '</span></td>' +
+                '<td data-label="Off Loc">' + r.signOffLoc + '</td>' +
+                '<td data-label="KM"><span class="km-tag">' + r.km.toFixed(2) + ' km</span></td>';
             tbody.appendChild(tr);
         });
     } catch (e) { alert('Error: ' + e.toString()); }

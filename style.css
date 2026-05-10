@@ -357,6 +357,75 @@ body {
     .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     
     #minimalLoginTrigger { bottom: 10px !important; right: 10px !important; padding: 6px 10px !important; font-size: 9px !important; }
+    
+    /* WEF/Remarks grid */
+    .wef-remarks-grid { grid-template-columns: 1fr !important; text-align: center; }
+    .wef-remarks-grid div { padding: 4px 0; }
+    
+    /* Mobile responsive card tables */
+    .responsive-card-table thead { display: none; }
+    .responsive-card-table tr {
+        display: block;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid rgba(0,212,255,0.15);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .responsive-card-table td {
+        display: block;
+        padding: 4px 0 !important;
+        border: none !important;
+        text-align: left !important;
+        font-size: 12px;
+    }
+    .responsive-card-table td::before {
+        content: attr(data-label);
+        display: inline-block;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: rgba(255,255,255,0.5);
+        margin-right: 6px;
+        min-width: 70px;
+    }
+    .responsive-card-table td[data-fullwidth="true"] {
+        text-align: center !important;
+        padding: 6px 0 !important;
+    }
+    .responsive-card-table td[data-fullwidth="true"]::before {
+        display: none;
+    }
+    
+    /* Admin tab nav scrollable */
+    .tab-nav-scroll {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 6px !important;
+        padding-bottom: 8px !important;
+    }
+    .tab-nav-scroll::-webkit-scrollbar { display: none; }
+    .tab-nav-scroll .jarvis-btn {
+        flex-shrink: 0;
+        font-size: 9px !important;
+        padding: 8px 12px !important;
+    }
+    
+    /* Visitors stats grid */
+    .visitor-stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    /* Tetra filter grid */
+    .tetra-filter-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    /* Touch targets */
+    .jarvis-btn, .jarvis-input, .jarvis-select { min-height: 44px; }
+    .btn-sm { min-height: 36px; }
 }
 
 @media (max-width: 480px) {
@@ -408,4 +477,11 @@ body {
     
     .input-label { font-size: 9px; letter-spacing: 1px; }
     .jarvis-input, .jarvis-select { padding: 10px 12px; font-size: 13px; }
+    
+    /* Smaller responsive cards on very small screens */
+    .responsive-card-table tr { padding: 10px; }
+    .responsive-card-table td { font-size: 11px; padding: 3px 0 !important; }
+    .responsive-card-table td::before { font-size: 8px; min-width: 55px; }
+    
+    .visitor-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
 }
