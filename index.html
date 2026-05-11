@@ -620,8 +620,15 @@
                     </div>
                 </div>
                 
-                <!-- Alert Bars -->
-                <div id="tetraDashAlerts" style="display:none;margin-bottom:15px;"></div>
+                <!-- Alert Bars (collapsible) -->
+                <div id="tetraDashAlertSection" style="display:none;margin-bottom:15px;">
+                    <div onclick="toggleTetraAlerts()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(239,68,68,0.25),rgba(200,0,0,0.12));border-radius:8px;border-left:4px solid var(--red);margin-bottom:6px;">
+                        <span style="font-size:14px;">⚠️</span>
+                        <span id="tetraDashAlertToggleText" style="font-family:'Syncopate';font-size:9px;text-transform:uppercase;letter-spacing:1px;flex:1;">Shortage Alerts</span>
+                        <span id="tetraDashAlertArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▼</span>
+                    </div>
+                    <div id="tetraDashAlerts" style="display:block;"></div>
+                </div>
                 
                 <!-- Hourly Table -->
                 <div style="margin-bottom:20px;">
@@ -633,6 +640,34 @@
                         <table class="data-table" style="font-size:11px;">
                             <thead><tr><th>Hour</th><th>Incoming ↓</th><th>Outgoing ↑</th><th>Net</th><th>Status</th><th>Cross-CC Info</th></tr></thead>
                             <tbody id="tetraDashHourlyBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Sign On/Off at IPE/MKPR (collapsible) -->
+                <div id="tetraDashSignOnSection" style="display:none;margin-bottom:12px;">
+                    <div onclick="toggleTetraSignOn()" style="cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:0;padding:6px 10px;background:linear-gradient(135deg,rgba(255,160,0,0.2),rgba(200,100,0,0.1));border-radius:6px;border-left:3px solid var(--orange);">
+                        <span style="font-size:12px;">🏁</span>
+                        <span id="tetraDashSignOnTitle" style="font-family:'Syncopate';font-size:10px;text-transform:uppercase;letter-spacing:1px;flex:1;">Sign On</span>
+                        <span id="tetraDashSignOnArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▼</span>
+                    </div>
+                    <div id="tetraDashSignOnBodyWrap" class="table-wrap" style="max-height:180px;overflow-y:auto;display:none;">
+                        <table class="data-table" style="font-size:10px;">
+                            <thead><tr><th>Duty</th><th>Time</th></tr></thead>
+                            <tbody id="tetraDashSignOnBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="tetraDashSignOffSection" style="display:none;margin-bottom:15px;">
+                    <div onclick="toggleTetraSignOff()" style="cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:0;padding:6px 10px;background:linear-gradient(135deg,rgba(255,160,0,0.2),rgba(200,100,0,0.1));border-radius:6px;border-left:3px solid var(--orange);">
+                        <span style="font-size:12px;">🏁</span>
+                        <span id="tetraDashSignOffTitle" style="font-family:'Syncopate';font-size:10px;text-transform:uppercase;letter-spacing:1px;flex:1;">Sign Off</span>
+                        <span id="tetraDashSignOffArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▼</span>
+                    </div>
+                    <div id="tetraDashSignOffBodyWrap" class="table-wrap" style="max-height:180px;overflow-y:auto;display:none;">
+                        <table class="data-table" style="font-size:10px;">
+                            <thead><tr><th>Duty</th><th>Time</th></tr></thead>
+                            <tbody id="tetraDashSignOffBody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -714,6 +749,10 @@
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <div style="text-align:center;padding:16px 10px 10px;font-size:9px;color:rgba(255,255,255,0.25);font-family:'Syncopate',sans-serif;letter-spacing:1px;text-transform:uppercase;border-top:1px solid rgba(255,255,255,0.06);margin-top:20px;">
+            &copy; 2026 All Rights Reserved
         </div>
     </div>
     

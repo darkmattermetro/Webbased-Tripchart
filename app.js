@@ -1873,10 +1873,56 @@ async function generateTetraDashboard() {
         if (!data || data.length === 0) {
             document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No data found for ' + dayType + '</td></tr>';
             document.getElementById('tetraDashAlerts').style.display = 'none';
+            document.getElementById('tetraDashUpcomingBadge').style.display = 'none';
+            document.getElementById('tetraDashSignOnSection').style.display = 'none';
+            document.getElementById('tetraDashSignOffSection').style.display = 'none';
             return;
         }
 
-        // Build rake trips
+        // ===== SIGN ON/OFF AT IPE/MKPR =====
+        const dutyTrips = {};
+        for (let i = 0; i < data.length; i++) {
+            const duty = (data[i]["Duty No"] || '').toString().trim();
+            if (!duty) continue;
+            if (!dutyTrips[duty]) dutyTrips[duty] = [];
+            dutyTrips[duty].push({
+                depTime: data[i]["Start Time"],
+                arrTime: data[i]["End Time"],
+                depLoc: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                arrLoc: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
+            });
+        }
+        const signOnStation = station === 'KKDA' ? 'IPE' : 'MKPR';
+        const signOffStation = station === 'KKDA' ? 'IPE' : 'MKPR';
+        const signOnList = [];
+        const signOffList = [];
+        for (const duty in dutyTrips) {
+            const trips = dutyTrips[duty].sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
+            const first = trips[0];
+            const last = trips[trips.length - 1];
+            if (first.depLoc === signOnStation) signOnList.push({ duty, time: first.depTime });
+            if (last.arrLoc === signOffStation) signOffList.push({ duty, time: last.arrTime });
+        }
+        signOnList.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+        signOffList.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+
+        // Render sign on
+        document.getElementById('tetraDashSignOnTitle').textContent = 'Sign On at ' + signOnStation + ' — ' + signOnList.length + ' duties';
+        const signOnBody = document.getElementById('tetraDashSignOnBody');
+        signOnBody.innerHTML = signOnList.length > 0
+            ? signOnList.map(s => '<tr><td style="color:var(--cyan);font-weight:600;">' + s.duty + '</td><td><span class="time-display">' + s.time + '</span></td></tr>').join('')
+            : '<tr><td colspan="2" style="text-align:center;color:rgba(255,255,255,0.3);padding:8px;">No sign on at ' + signOnStation + '</td></tr>';
+        document.getElementById('tetraDashSignOnSection').style.display = 'block';
+
+        // Render sign off
+        document.getElementById('tetraDashSignOffTitle').textContent = 'Sign Off at ' + signOffStation + ' — ' + signOffList.length + ' duties';
+        const signOffBody = document.getElementById('tetraDashSignOffBody');
+        signOffBody.innerHTML = signOffList.length > 0
+            ? signOffList.map(s => '<tr><td style="color:var(--cyan);font-weight:600;">' + s.duty + '</td><td><span class="time-display">' + s.time + '</span></td></tr>').join('')
+            : '<tr><td colspan="2" style="text-align:center;color:rgba(255,255,255,0.3);padding:8px;">No sign off at ' + signOffStation + '</td></tr>';
+        document.getElementById('tetraDashSignOffSection').style.display = 'block';
+
+        // ===== TETRA GAP ANALYSIS =====
         const rakeTrips = {};
         for (let i = 0; i < data.length; i++) {
             const rake = (data[i]["Rake Num"] || '').toString().trim();
@@ -1891,7 +1937,6 @@ async function generateTetraDashboard() {
             });
         }
 
-        // Run tetra gap analysis
         const tetraEvents = [];
         const added = {};
         for (const rake in rakeTrips) {
@@ -1983,38 +2028,71 @@ async function generateTetraDashboard() {
         netEl.textContent = netBalance >= 0 ? '+' + netBalance : netBalance;
         netEl.style.color = netBalance >= 0 ? 'var(--green)' : 'var(--red)';
 
-        // Render hourly table (per-hour net)
+        // Running balance across all 24 hours
+        let runningBalance = 0;
+        const hourlyBalance = {};
+        for (let h = 0; h < 24; h++) {
+            runningBalance += hourly[h].in - hourly[h].out;
+            hourlyBalance[h] = runningBalance;
+        }
+
+        // Render hourly table with running balance
         const currentHour = new Date().getHours();
         let hourlyHtml = '';
-        let alerts = [];
+        let shortageAlerts = [];
+        let upcomingReqs = [];
+
         for (let h = 0; h < 24; h++) {
             const hd = hourly[h];
             if (hd.in === 0 && hd.out === 0) continue;
-            const net = hd.in - hd.out;
-            const otherNet = otherHourly[h].in - otherHourly[h].out;
+            const bal = hourlyBalance[h];
             const isCurrent = h === currentHour;
+            const isFuture = h > currentHour;
+            const isShortage = bal < 0;
 
             let statusText, statusColor;
-            if (net >= 0) {
-                statusText = '✅ Surplus +' + net;
+            if (bal > 0) {
+                statusText = '✅ Surplus +' + bal;
                 statusColor = 'var(--green)';
+            } else if (bal === 0) {
+                statusText = '✅ Balanced';
+                statusColor = 'rgba(255,255,255,0.5)';
             } else {
-                statusText = '⛔ Need ' + Math.abs(net);
-                statusColor = 'var(--red)';
-                alerts.push({ hour: h, need: Math.abs(net), otherNet: otherNet });
+                statusText = isFuture ? '⏳ Need ' + Math.abs(bal) : '⛔ Need ' + Math.abs(bal);
+                statusColor = isFuture ? 'var(--orange)' : 'var(--red)';
             }
 
+            // Cross-CC info
+            const otherNet = otherHourly[h].in - otherHourly[h].out;
             let crossCcText = '-';
-            if (otherNet > 0) {
-                crossCcText = otherStation + ' has +' + otherNet + ' spare';
+            if (isShortage && otherNet > 0) {
+                crossCcText = '📞 ' + otherStation + ' has +' + otherNet;
+            } else if (otherNet > 0) {
+                crossCcText = otherStation + ' has +' + otherNet;
             }
 
-            const rowStyle = isCurrent ? 'style="background:rgba(239,68,68,0.25);border-left:3px solid var(--red);"' : '';
-            hourlyHtml += '<tr ' + rowStyle + '>' +
+            // Shortage alerts
+            if (isShortage) {
+                shortageAlerts.push({ hour: h, need: Math.abs(bal), otherNet: otherNet });
+            }
+
+            // Upcoming shortages
+            if (isFuture && isShortage) {
+                upcomingReqs.push({ hour: h, need: Math.abs(bal) });
+            }
+
+            // Row styling
+            let rowBg = '';
+            if (isCurrent) rowBg = 'background:rgba(239,68,68,0.25);border-left:3px solid var(--red);';
+            else if (isFuture && isShortage) rowBg = 'background:rgba(255,160,0,0.1);border-left:3px solid rgba(255,160,0,0.3);';
+            else if (isShortage) rowBg = 'background:rgba(239,68,68,0.1);border-left:3px solid rgba(239,68,68,0.3);';
+            else if (bal > 0) rowBg = 'background:rgba(34,197,94,0.08);border-left:3px solid rgba(34,197,94,0.3);';
+
+            hourlyHtml += '<tr style="' + rowBg + '">' +
                 '<td style="font-weight:700;' + (isCurrent ? 'color:var(--red);' : '') + '">' + (isCurrent ? '▶ ' : '') + ('0' + h).slice(-2) + ':00</td>' +
                 '<td style="color:var(--green);font-weight:600;">' + hd.in + '</td>' +
                 '<td style="color:var(--orange);font-weight:600;">' + hd.out + '</td>' +
-                '<td style="color:' + (net >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:700;">' + (net >= 0 ? '+' : '') + net + '</td>' +
+                '<td style="color:' + (bal > 0 ? 'var(--green)' : bal < 0 ? (isFuture ? 'var(--orange)' : 'var(--red)') : 'rgba(255,255,255,0.5)') + ';font-weight:700;">' + (bal > 0 ? '+' : '') + bal + '</td>' +
                 '<td style="color:' + statusColor + ';font-weight:600;">' + statusText + '</td>' +
                 '<td style="font-size:10px;color:' + (otherNet > 0 ? 'var(--cyan)' : 'rgba(255,255,255,0.4)') + ';">' + crossCcText + '</td>' +
                 '</tr>';
@@ -2025,15 +2103,17 @@ async function generateTetraDashboard() {
         }
         document.getElementById('tetraDashHourlyBody').innerHTML = hourlyHtml;
 
-        // Alerts
+        // Alert bars (collapsible section)
+        const alertSection = document.getElementById('tetraDashAlertSection');
         const alertContainer = document.getElementById('tetraDashAlerts');
-        if (alerts.length > 0) {
+        if (shortageAlerts.length > 0) {
             let alertHtml = '';
-            alerts.forEach(a => {
+            shortageAlerts.forEach(a => {
+                const isPast = a.hour < currentHour;
                 alertHtml += '<div style="background:rgba(239,68,68,0.2);border:2px solid var(--red);border-radius:10px;padding:10px 15px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">' +
-                    '<span style="font-size:20px;">⛔</span>' +
-                    '<div style="flex:1;"><strong style="color:var(--red);font-size:13px;">Hour ' + ('0' + a.hour).slice(-2) + ':00 SHORTAGE</strong>' +
-                    '<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">Need ' + a.need + ' tetra key(s) — outgoing > incoming by ' + a.need + '</div></div>';
+                    '<span style="font-size:20px;">' + (isPast ? '⛔' : '⏳') + '</span>' +
+                    '<div style="flex:1;"><strong style="color:var(--red);font-size:13px;">Hour ' + ('0' + a.hour).slice(-2) + ':00 ' + (isPast ? 'SHORTAGE' : 'UPCOMING SHORTAGE') + '</strong>' +
+                    '<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">Running deficit of ' + a.need + ' tetra key(s)' + (isPast ? '' : ' (future)') + '</div></div>';
                 if (a.otherNet > 0) {
                     alertHtml += '<div style="background:rgba(0,212,255,0.2);border:1px solid var(--cyan);border-radius:6px;padding:6px 10px;text-align:center;font-size:10px;">' +
                         '<span style="color:var(--cyan);font-weight:700;">📞 ' + otherStation + '</span><br><span style="color:#fff;">+' + a.otherNet + ' spare</span></div>';
@@ -2041,9 +2121,11 @@ async function generateTetraDashboard() {
                 alertHtml += '</div>';
             });
             alertContainer.innerHTML = alertHtml;
+            document.getElementById('tetraDashAlertToggleText').textContent = shortageAlerts.length + ' shortage alert(s)';
             alertContainer.style.display = 'block';
+            alertSection.style.display = 'block';
         } else {
-            alertContainer.style.display = 'none';
+            alertSection.style.display = 'none';
         }
 
         // Detail tables
@@ -2083,6 +2165,31 @@ function highlightCurrentHour() {
             }
         }
     });
+}
+
+function toggleTetraAlerts() {
+    const container = document.getElementById('tetraDashAlerts');
+    const arrow = document.getElementById('tetraDashAlertArrow');
+    if (!container || !arrow) return;
+    const isVisible = container.style.display !== 'none';
+    container.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+}
+function toggleTetraSignOn() {
+    const wrap = document.getElementById('tetraDashSignOnBodyWrap');
+    const arrow = document.getElementById('tetraDashSignOnArrow');
+    if (!wrap || !arrow) return;
+    const isVisible = wrap.style.display !== 'none';
+    wrap.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+}
+function toggleTetraSignOff() {
+    const wrap = document.getElementById('tetraDashSignOffBodyWrap');
+    const arrow = document.getElementById('tetraDashSignOffArrow');
+    if (!wrap || !arrow) return;
+    const isVisible = wrap.style.display !== 'none';
+    wrap.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
 }
 
 // === KM ANALYSIS ===

@@ -553,6 +553,32 @@ body {
     }
 }
 
+/* Tetra collapsible sections hover */
+#tetraDashAlertSection > div:first-child:hover,
+#tetraDashSignOnSection > div:first-child:hover,
+#tetraDashSignOffSection > div:first-child:hover {
+    filter: brightness(1.3);
+}
+
+/* Tetra sign-on/off compact tables */
+#tetraDashSignOnSection .data-table td,
+#tetraDashSignOffSection .data-table td {
+    padding: 5px 8px;
+    font-size: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+#tetraDashSignOnSection .data-table th,
+#tetraDashSignOffSection .data-table th {
+    padding: 5px 8px;
+    font-size: 8px;
+    background: rgba(255,160,0,0.08);
+}
+#tetraDashSignOnSection .table-wrap,
+#tetraDashSignOffSection .table-wrap {
+    border: 1px solid rgba(255,160,0,0.1);
+    border-radius: 6px;
+}
+
 /* === KM ANALYSIS === */
 #pageKmAnalysis .km-row:hover {
     background: rgba(34,197,94,0.08) !important;
