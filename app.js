@@ -155,6 +155,11 @@ function showPage(pageId) {
         page.classList.add('cinematic-enter');
         setTimeout(() => page.classList.remove('cinematic-enter'), 800);
     }
+    // Clear Tetra Dashboard auto-refresh if leaving
+    if (pageId !== 'pageTetraDashboard' && tetraDashAutoInterval) {
+        clearInterval(tetraDashAutoInterval);
+        tetraDashAutoInterval = null;
+    }
 }
 
 function timeToMins(timeStr) {
@@ -687,6 +692,8 @@ function checkExistingSession() {
 function updateUserHeader() {
     const headerBar = document.getElementById('loggedInUserHeader');
     if (!headerBar) return;
+    const tetraBtn = document.getElementById('tetraDashboardBtn');
+    const kmBtn = document.getElementById('kmAnalysisBtn');
     if (currentUser) {
         document.getElementById('headerUserName').textContent = currentUser.name;
         document.getElementById('headerUserId').textContent = currentUser.empId;
@@ -696,8 +703,12 @@ function updateUserHeader() {
         } else {
             headerBar.classList.remove('show');
         }
+        if (tetraBtn) tetraBtn.style.display = 'block';
+        if (kmBtn) kmBtn.style.display = 'block';
     } else {
         headerBar.classList.remove('show');
+        if (tetraBtn) tetraBtn.style.display = 'none';
+        if (kmBtn) kmBtn.style.display = 'none';
     }
 }
 
@@ -812,6 +823,14 @@ async function loadAdminData() {
         loadMessageLog();
         loadVisitorStats();
     }
+    // Restrict "Admin" dropdown option to emp 3623 only
+    ['newUserAccessLevel', 'removeUserAccessLevel'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const adminOpt = sel.querySelector('option[value="admin"]');
+        if (adminOpt) adminOpt.style.display = isMainAdmin ? 'block' : 'none';
+        if (!isMainAdmin && sel.value === 'admin') sel.value = 'crewcontroller';
+    });
     loadUserManagementData();
     if (isAdmin) {
         switchAdminTab('messages');
@@ -894,6 +913,7 @@ async function addNewUserAccess() {
     const accessLevel = document.getElementById('newUserAccessLevel')?.value;
     const secretCode = document.getElementById('newSecretCode')?.value;
     if (!empId) return alert('Enter Emp ID!');
+    if (accessLevel === 'admin' && currentUser.empId !== '3623') return alert('Only Main Admin (3623) can grant admin access!');
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     try {
         const { data: existing, error: selErr } = await sb.from('profiles').select('*').eq('emp_id', empId);
@@ -935,6 +955,7 @@ async function removeUserAccess() {
     const accessLevel = document.getElementById('removeUserAccessLevel')?.value;
     const secretCode = document.getElementById('removeSecretCode')?.value;
     if (!empId) return alert('Enter Emp ID!');
+    if (accessLevel === 'admin' && currentUser.empId !== '3623') return alert('Only Main Admin (3623) can remove admin access!');
     if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
     if (empId === '3623') return alert('Cannot remove Main Admin!');
     try {
@@ -1789,4 +1810,425 @@ async function handleLogin() {
         err.textContent = 'Error: ' + e.toString();
         err.style.display = 'block';
     }
+}
+
+// === TETRA KEY DASHBOARD ===
+let tetraDashboardStation = 'KKDA';
+let tetraDashClockInterval = null;
+let tetraDashHighlightInterval = null;
+let tetraDashAutoInterval = null;
+let tetraDashData = { incoming: [], outgoing: [] };
+
+function getCurrentDayType() {
+    const d = new Date();
+    const day = d.getDay();
+    if (day === 0) return 'Sunday';
+    if (day === 6) return 'Saturday';
+    return 'Weekday';
+}
+
+function showTetraDashboard() {
+    showPage('pageTetraDashboard');
+    const daySelect = document.getElementById('tetraDashDay');
+    if (daySelect) daySelect.value = getCurrentDayType();
+    document.getElementById('tetraStationKKDA').className = 'tetra-station-btn active';
+    document.getElementById('tetraStationPBGW').className = 'tetra-station-btn';
+    tetraDashboardStation = 'KKDA';
+    startTetraDashClock();
+    generateTetraDashboard();
+    // Auto-refresh every 60 seconds
+    if (tetraDashAutoInterval) clearInterval(tetraDashAutoInterval);
+    tetraDashAutoInterval = setInterval(generateTetraDashboard, 60000);
+}
+
+function setTetraStation(station) {
+    tetraDashboardStation = station;
+    document.getElementById('tetraStationKKDA').className = 'tetra-station-btn' + (station === 'KKDA' ? ' active' : '');
+    document.getElementById('tetraStationPBGW').className = 'tetra-station-btn' + (station === 'PBGW' ? ' active' : '');
+    generateTetraDashboard();
+}
+
+function startTetraDashClock() {
+    if (tetraDashClockInterval) clearInterval(tetraDashClockInterval);
+    if (tetraDashHighlightInterval) clearInterval(tetraDashHighlightInterval);
+    function updateClock() {
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const el = document.getElementById('tetraLiveClock');
+        if (el) el.textContent = time;
+    }
+    updateClock();
+    tetraDashClockInterval = setInterval(updateClock, 1000);
+    tetraDashHighlightInterval = setInterval(highlightCurrentHour, 60000);
+    setTimeout(highlightCurrentHour, 100);
+}
+
+async function generateTetraDashboard() {
+    const dayType = document.getElementById('tetraDashDay')?.value || getCurrentDayType();
+    const station = tetraDashboardStation;
+    const refreshedEl = document.getElementById('tetraDashRefreshed');
+    if (refreshedEl) refreshedEl.textContent = 'Updated: ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    try {
+        const { data } = await sb.from('trip_data').select('*').eq('day_type', dayType);
+        if (!data || data.length === 0) {
+            document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No data found for ' + dayType + '</td></tr>';
+            document.getElementById('tetraDashAlerts').style.display = 'none';
+            return;
+        }
+
+        // Build rake trips
+        const rakeTrips = {};
+        for (let i = 0; i < data.length; i++) {
+            const rake = (data[i]["Rake Num"] || '').toString().trim();
+            if (!rake) continue;
+            if (!rakeTrips[rake]) rakeTrips[rake] = [];
+            rakeTrips[rake].push({
+                duty: data[i]["Duty No"],
+                depTime: data[i]["Start Time"],
+                arrTime: data[i]["End Time"],
+                depLoc: (data[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                arrLoc: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
+            });
+        }
+
+        // Run tetra gap analysis
+        const tetraEvents = [];
+        const added = {};
+        for (const rake in rakeTrips) {
+            let trips = rakeTrips[rake];
+            trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
+            const deduped = [];
+            const seen = {};
+            for (const t of trips) {
+                const key = t.depTime + '|' + t.arrTime + '|' + t.depLoc + '|' + t.arrLoc;
+                if (!seen[key]) { seen[key] = true; deduped.push(t); }
+            }
+            trips = deduped;
+            if (trips.length === 0) continue;
+
+            if (!mathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
+                const uniq = rake + '|' + trips[0].depTime + '|BOARDING';
+                if (!added[uniq]) {
+                    added[uniq] = true;
+                    tetraEvents.push({ rakeId: rake, duty: trips[0].duty, station: trips[0].depLoc, time: trips[0].depTime, from: trips[0].depLoc, to: trips[0].arrLoc, action: 'BOARDING' });
+                }
+            }
+            for (let j = 0; j < trips.length - 1; j++) {
+                const currentEnd = timeToMins(trips[j].arrTime);
+                const nextStart = timeToMins(trips[j + 1].depTime);
+                const sameDuty = trips[j].duty === trips[j + 1].duty;
+                const mkprException = (trips[j].arrLoc === 'MKPR' && trips[j + 1].depLoc === 'MKPR' && sameDuty);
+                if (!mathTolerant(currentEnd, nextStart) && !mkprException) {
+                    let uniq = rake + '|' + trips[j].arrTime + '|ALIGHTING';
+                    if (!added[uniq]) {
+                        added[uniq] = true;
+                        tetraEvents.push({ rakeId: rake, duty: trips[j].duty, station: trips[j].arrLoc, time: trips[j].arrTime, from: trips[j].depLoc, to: trips[j].arrLoc, action: 'ALIGHTING' });
+                    }
+                    uniq = rake + '|' + trips[j + 1].depTime + '|BOARDING';
+                    if (!added[uniq]) {
+                        added[uniq] = true;
+                        tetraEvents.push({ rakeId: rake, duty: trips[j + 1].duty, station: trips[j + 1].depLoc, time: trips[j + 1].depTime, from: trips[j + 1].depLoc, to: trips[j + 1].arrLoc, action: 'BOARDING' });
+                    }
+                }
+            }
+            const last = trips[trips.length - 1];
+            if (!mathTolerant(timeToMins(last.depTime), timeToMins(last.arrTime))) {
+                const uniq = rake + '|' + last.arrTime + '|ALIGHTING';
+                if (!added[uniq]) {
+                    added[uniq] = true;
+                    tetraEvents.push({ rakeId: rake, duty: last.duty, station: last.arrLoc, time: last.arrTime, from: last.depLoc, to: last.arrLoc, action: 'ALIGHTING' });
+                }
+            }
+        }
+
+        tetraEvents.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+
+        // Filter by station
+        const filtered = tetraEvents.filter(e => e.station.indexOf(station) !== -1);
+        const incoming = filtered.filter(e => e.action === 'ALIGHTING');
+        const outgoing = filtered.filter(e => e.action === 'BOARDING');
+        tetraDashData = { incoming, outgoing };
+
+        const otherStation = station === 'KKDA' ? 'PBGW' : 'KKDA';
+        const otherFiltered = tetraEvents.filter(e => e.station.indexOf(otherStation) !== -1);
+
+        // Hourly counts
+        const hourly = {};
+        for (let h = 0; h < 24; h++) hourly[h] = { in: 0, out: 0, events: [] };
+        filtered.forEach(e => {
+            const hour = parseInt(e.time.split(':')[0]);
+            if (hourly[hour]) {
+                if (e.action === 'ALIGHTING') hourly[hour].in++;
+                else hourly[hour].out++;
+                hourly[hour].events.push(e);
+            }
+        });
+
+        const otherHourly = {};
+        for (let h = 0; h < 24; h++) otherHourly[h] = { in: 0, out: 0 };
+        otherFiltered.forEach(e => {
+            const hour = parseInt(e.time.split(':')[0]);
+            if (otherHourly[hour]) {
+                if (e.action === 'ALIGHTING') otherHourly[hour].in++;
+                else otherHourly[hour].out++;
+            }
+        });
+
+        // Summary cards
+        document.getElementById('tetraDashTotal').textContent = filtered.length;
+        document.getElementById('tetraDashIncoming').textContent = incoming.length;
+        document.getElementById('tetraDashOutgoing').textContent = outgoing.length;
+        const netBalance = incoming.length - outgoing.length;
+        const netEl = document.getElementById('tetraDashNet');
+        netEl.textContent = netBalance >= 0 ? '+' + netBalance : netBalance;
+        netEl.style.color = netBalance >= 0 ? 'var(--green)' : 'var(--red)';
+
+        // Render hourly table (per-hour net)
+        const currentHour = new Date().getHours();
+        let hourlyHtml = '';
+        let alerts = [];
+        for (let h = 0; h < 24; h++) {
+            const hd = hourly[h];
+            if (hd.in === 0 && hd.out === 0) continue;
+            const net = hd.in - hd.out;
+            const otherNet = otherHourly[h].in - otherHourly[h].out;
+            const isCurrent = h === currentHour;
+
+            let statusText, statusColor;
+            if (net >= 0) {
+                statusText = '✅ Surplus +' + net;
+                statusColor = 'var(--green)';
+            } else {
+                statusText = '⛔ Need ' + Math.abs(net);
+                statusColor = 'var(--red)';
+                alerts.push({ hour: h, need: Math.abs(net), otherNet: otherNet });
+            }
+
+            let crossCcText = '-';
+            if (otherNet > 0) {
+                crossCcText = otherStation + ' has +' + otherNet + ' spare';
+            }
+
+            const rowStyle = isCurrent ? 'style="background:rgba(239,68,68,0.25);border-left:3px solid var(--red);"' : '';
+            hourlyHtml += '<tr ' + rowStyle + '>' +
+                '<td style="font-weight:700;' + (isCurrent ? 'color:var(--red);' : '') + '">' + (isCurrent ? '▶ ' : '') + ('0' + h).slice(-2) + ':00</td>' +
+                '<td style="color:var(--green);font-weight:600;">' + hd.in + '</td>' +
+                '<td style="color:var(--orange);font-weight:600;">' + hd.out + '</td>' +
+                '<td style="color:' + (net >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:700;">' + (net >= 0 ? '+' : '') + net + '</td>' +
+                '<td style="color:' + statusColor + ';font-weight:600;">' + statusText + '</td>' +
+                '<td style="font-size:10px;color:' + (otherNet > 0 ? 'var(--cyan)' : 'rgba(255,255,255,0.4)') + ';">' + crossCcText + '</td>' +
+                '</tr>';
+        }
+
+        if (!hourlyHtml) {
+            hourlyHtml = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);padding:15px;">No tetra key events at ' + station + '</td></tr>';
+        }
+        document.getElementById('tetraDashHourlyBody').innerHTML = hourlyHtml;
+
+        // Alerts
+        const alertContainer = document.getElementById('tetraDashAlerts');
+        if (alerts.length > 0) {
+            let alertHtml = '';
+            alerts.forEach(a => {
+                alertHtml += '<div style="background:rgba(239,68,68,0.2);border:2px solid var(--red);border-radius:10px;padding:10px 15px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">' +
+                    '<span style="font-size:20px;">⛔</span>' +
+                    '<div style="flex:1;"><strong style="color:var(--red);font-size:13px;">Hour ' + ('0' + a.hour).slice(-2) + ':00 SHORTAGE</strong>' +
+                    '<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">Need ' + a.need + ' tetra key(s) — outgoing > incoming by ' + a.need + '</div></div>';
+                if (a.otherNet > 0) {
+                    alertHtml += '<div style="background:rgba(0,212,255,0.2);border:1px solid var(--cyan);border-radius:6px;padding:6px 10px;text-align:center;font-size:10px;">' +
+                        '<span style="color:var(--cyan);font-weight:700;">📞 ' + otherStation + '</span><br><span style="color:#fff;">+' + a.otherNet + ' spare</span></div>';
+                }
+                alertHtml += '</div>';
+            });
+            alertContainer.innerHTML = alertHtml;
+            alertContainer.style.display = 'block';
+        } else {
+            alertContainer.style.display = 'none';
+        }
+
+        // Detail tables
+        const inBody = document.getElementById('tetraDashIncomingBody');
+        inBody.innerHTML = incoming.length > 0
+            ? incoming.map(e => '<tr><td><span class="time-display">' + e.time + '</span></td><td style="color:var(--cyan);font-weight:600;">' + e.rakeId + '</td><td>' + e.duty + '</td><td>' + e.from + '</td><td style="color:var(--orange);">' + e.to + '</td></tr>').join('')
+            : '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);padding:12px;">No incoming events</td></tr>';
+
+        const outBody = document.getElementById('tetraDashOutgoingBody');
+        outBody.innerHTML = outgoing.length > 0
+            ? outgoing.map(e => '<tr><td><span class="time-display">' + e.time + '</span></td><td style="color:var(--cyan);font-weight:600;">' + e.rakeId + '</td><td>' + e.duty + '</td><td style="color:var(--orange);">' + e.from + '</td><td>' + e.to + '</td></tr>').join('')
+            : '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);padding:12px;">No outgoing events</td></tr>';
+
+        highlightCurrentHour();
+    } catch (e) {
+        console.error('Tetra Dashboard Error:', e);
+        document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:15px;">Error: ' + e.toString() + '</td></tr>';
+    }
+}
+
+function highlightCurrentHour() {
+    const currentHour = new Date().getHours();
+    const rows = document.querySelectorAll('#tetraDashHourlyBody tr');
+    rows.forEach((row, i) => {
+        const hourTd = row.querySelector('td:first-child');
+        if (!hourTd) return;
+        const hourText = hourTd.textContent.trim();
+        const hourMatch = hourText.match(/(\d{2}):00/);
+        if (hourMatch) {
+            const rowHour = parseInt(hourMatch[1]);
+            if (rowHour === currentHour) {
+                row.style.background = 'rgba(239,68,68,0.25)';
+                row.style.borderLeft = '3px solid var(--red)';
+            } else {
+                row.style.background = '';
+                row.style.borderLeft = '';
+            }
+        }
+    });
+}
+
+// === KM ANALYSIS ===
+async function showKmAnalysis() {
+    showPage('pageKmAnalysis');
+    await loadKmData();
+    const daySelect = document.getElementById('kmAnalysisDay');
+    if (daySelect) {
+        daySelect.value = getCurrentDayType();
+        if (!daySelect.hasAttribute('data-listener')) {
+            daySelect.addEventListener('change', function() { generateKmAnalysis(); });
+            daySelect.setAttribute('data-listener', '1');
+        }
+    }
+    await generateKmAnalysis();
+}
+
+async function generateKmAnalysis() {
+    const dayType = document.getElementById('kmAnalysisDay')?.value || getCurrentDayType();
+    document.getElementById('kmAnalysisBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.3);padding:15px;">⏳ Loading ' + dayType + '...</td></tr>';
+    document.getElementById('kmAnalysisCount').textContent = dayType + ' — loading...';
+    try {
+        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', dayType);
+        if (error) {
+            document.getElementById('kmAnalysisBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);padding:15px;">DB Error: ' + error.message + '</td></tr>';
+            document.getElementById('kmAnalysisCount').textContent = dayType + ' — error';
+            return;
+        }
+        if (!data || data.length === 0) {
+            document.getElementById('kmAnalysisBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No data found for ' + dayType + '</td></tr>';
+            document.getElementById('kmAnalysisCount').textContent = dayType + ' — 0 trips';
+            return;
+        }
+
+        // Ensure kmData is loaded
+        if (Object.keys(kmData).length === 0) {
+            kmData = { ...KM_MAP };
+        }
+
+        // Group by duty, sum KM
+        const dutyMap = {};
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            const duty = (row["Duty No"] || '').toString().trim();
+            if (!duty) continue;
+            if (!dutyMap[duty]) dutyMap[duty] = { trips: [], totalKm: 0 };
+            const from = (row["Start Stn"] || '').toString().trim().toUpperCase();
+            const to = (row["End Stn"] || '').toString().trim().toUpperCase();
+            const key = from + '|' + to;
+            const km = kmData[key] || 0;
+            dutyMap[duty].trips.push({ from, to, km, depTime: row["Start Time"], arrTime: row["End Time"], rake: row["Rake Num"] });
+            dutyMap[duty].totalKm += km;
+        }
+
+        // Sort by total KM descending
+        const sorted = Object.keys(dutyMap).sort((a, b) => dutyMap[b].totalKm - dutyMap[a].totalKm);
+
+        document.getElementById('kmAnalysisCount').textContent = dayType + ' — ' + sorted.length + ' duties, ' + data.length + ' trips';
+
+        // Render table with expandable rows
+        let html = '';
+        sorted.forEach((duty, idx) => {
+            const d = dutyMap[duty];
+            const rank = idx + 1;
+            const tripsCount = d.trips.length;
+            // Compute sign on (first trip by depTime) and sign off (last trip by arrTime)
+            d.trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
+            const signOn = d.trips[0];
+            const signOff = d.trips[d.trips.length - 1];
+            const signOnText = signOn.from + ' @ ' + signOn.depTime;
+            const signOffText = signOff.to + ' @ ' + signOff.arrTime;
+            html += '<tr class="km-row" onclick="toggleKmDetail(\'' + duty + '\')" style="cursor:pointer;">' +
+                '<td style="color:rgba(255,255,255,0.4);font-weight:600;">' + rank + '</td>' +
+                '<td style="color:var(--cyan);font-weight:700;">' + duty + '</td>' +
+                '<td style="font-size:9px;color:var(--orange);">' + signOnText + '</td>' +
+                '<td style="font-size:9px;color:var(--orange);">' + signOffText + '</td>' +
+                '<td style="color:var(--green);font-weight:700;">' + d.totalKm.toFixed(2) + '</td>' +
+                '<td style="color:rgba(255,255,255,0.5);">' + tripsCount + '</td>' +
+                '<td style="font-size:8px;color:rgba(255,255,255,0.3);">▼</td>' +
+                '</tr>' +
+                '<tr id="kmDetail-' + duty + '" class="km-detail-row" style="display:none;">' +
+                '<td colspan="7" style="padding:0;background:rgba(0,0,0,0.2);">' +
+                '<div class="km-detail-inner"><table class="data-table" style="font-size:9px;margin:0;">' +
+                '<tr><th style="padding:4px 8px;">#</th><th style="padding:4px 8px;">Rake</th><th style="padding:4px 8px;">Time</th><th style="padding:4px 8px;">From</th><th style="padding:4px 8px;">To</th><th style="padding:4px 8px;">KM</th></tr>';
+            d.trips.forEach((t, ti) => {
+                html += '<tr><td style="padding:3px 8px;color:rgba(255,255,255,0.4);">' + (ti + 1) + '</td>' +
+                    '<td style="padding:3px 8px;color:var(--cyan);">' + (t.rake || '-') + '</td>' +
+                    '<td style="padding:3px 8px;">' + t.depTime + ' → ' + t.arrTime + '</td>' +
+                    '<td style="padding:3px 8px;color:var(--orange);">' + t.from + '</td>' +
+                    '<td style="padding:3px 8px;">' + t.to + '</td>' +
+                    '<td style="padding:3px 8px;color:var(--green);font-weight:600;">' + t.km.toFixed(2) + '</td></tr>';
+            });
+            html += '</table></div></td></tr>';
+        });
+
+        document.getElementById('kmAnalysisBody').innerHTML = html;
+    } catch (e) {
+        console.error('KM Analysis Error:', e);
+        document.getElementById('kmAnalysisBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);padding:15px;">Error: ' + e.toString() + '</td></tr>';
+    }
+}
+
+function toggleKmDetail(duty) {
+    const row = document.getElementById('kmDetail-' + duty);
+    if (!row) return;
+    const isHidden = row.style.display === 'none';
+    row.style.display = isHidden ? 'table-row' : 'none';
+}
+
+// === TETRA DASHBOARD EXCEL EXPORT ===
+function downloadTetraIncomingExcel() {
+    const events = tetraDashData.incoming;
+    if (!events || events.length === 0) return alert('No incoming events to export!');
+    const dayType = document.getElementById('tetraDashDay')?.value || 'Unknown';
+    const station = tetraDashboardStation;
+    const wsData = [
+        ['Incoming (Alighting) Tetra Key Events'],
+        ['Station: ' + station + ' | Day Type: ' + dayType],
+        ['Generated: ' + new Date().toLocaleString()],
+        [],
+        ['Time', 'Rake', 'Duty', 'From', 'To']
+    ];
+    events.forEach(e => wsData.push([e.time, e.rakeId, e.duty, e.from, e.to]));
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Incoming Tetra');
+    XLSX.writeFile(wb, station + '_' + dayType + '_Incoming_Tetra.xlsx');
+}
+
+function downloadTetraOutgoingExcel() {
+    const events = tetraDashData.outgoing;
+    if (!events || events.length === 0) return alert('No outgoing events to export!');
+    const dayType = document.getElementById('tetraDashDay')?.value || 'Unknown';
+    const station = tetraDashboardStation;
+    const wsData = [
+        ['Outgoing (Boarding) Tetra Key Events'],
+        ['Station: ' + station + ' | Day Type: ' + dayType],
+        ['Generated: ' + new Date().toLocaleString()],
+        [],
+        ['Time', 'Rake', 'Duty', 'From', 'To']
+    ];
+    events.forEach(e => wsData.push([e.time, e.rakeId, e.duty, e.from, e.to]));
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Outgoing Tetra');
+    XLSX.writeFile(wb, station + '_' + dayType + '_Outgoing_Tetra.xlsx');
 }

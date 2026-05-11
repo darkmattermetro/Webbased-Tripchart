@@ -140,8 +140,14 @@
                 </div>
                 <button class="jarvis-btn btn-primary" onclick="fetchDuty('home')">🔍 ACCESS DUTY DATA</button>
             </div>
+            <div id="tetraDashboardBtn" style="display:none;text-align:center;margin-top:12px;">
+                <a href="#" onclick="showTetraDashboard();return false;" class="tetra-home-link">🔑 Tetra Dashboard</a>
+            </div>
+            <div id="kmAnalysisBtn" style="display:none;text-align:center;margin-top:8px;">
+                <a href="#" onclick="showKmAnalysis();return false;" class="tetra-home-link">📊 KM Data</a>
+            </div>
         </div>
-
+        
         <div id="pageResult" class="page">
             <div class="quick-search">
                 <input type="number" id="dutyInputQuick" placeholder="Quick Search..." inputmode="numeric">
@@ -551,6 +557,160 @@
                             </div>
                         </div>
                         
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tetra Dashboard Page -->
+        <div id="pageTetraDashboard" class="page">
+            <div class="glass-card cinematic-enter" style="padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(239,68,68,0.3);">
+                    <h2 style="font-family:'Syncopate';font-size:16px;margin:0;color:var(--red);">🔑 Tetra Key Dashboard</h2>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span class="live-dot"></span>
+                            <div id="tetraLiveClock" style="font-family:'Syncopate';font-size:18px;color:var(--cyan);font-weight:700;">--:--:--</div>
+                        </div>
+                        <div id="tetraDashRefreshed" style="font-size:9px;color:rgba(255,255,255,0.3);font-family:'Syncopate';">--</div>
+                        <button class="jarvis-btn btn-sm" onclick="showPage('pageHome')" style="background:rgba(255,255,255,0.1);font-size:9px;padding:6px 10px;">← BACK</button>
+                    </div>
+                </div>
+                
+                <!-- Filters -->
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:15px;">
+                    <div style="flex:1;min-width:150px;">
+                        <label style="font-size:10px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Day Type</label>
+                        <select id="tetraDashDay" class="jarvis-select" onchange="generateTetraDashboard()" style="padding:8px 12px;font-size:12px;">
+                            <option value="Weekday">Weekday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                            <option value="Special">Special</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:10px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Crew Control</label>
+                        <div style="display:flex;gap:6px;">
+                            <button id="tetraStationKKDA" class="tetra-station-btn active" onclick="setTetraStation('KKDA')">KKDA</button>
+                            <button id="tetraStationPBGW" class="tetra-station-btn" onclick="setTetraStation('PBGW')">PBGW</button>
+                        </div>
+                    </div>
+                    <div style="margin-left:auto;">
+                        <button class="jarvis-btn btn-sm" onclick="generateTetraDashboard()" style="background:linear-gradient(135deg,var(--red),#b91c1c);font-size:10px;padding:8px 14px;">🔄 REFRESH</button>
+                    </div>
+                </div>
+                
+                <!-- Summary Cards -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px;">
+                    <div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(0,212,255,0.3);">
+                        <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;">Total Tetra</div>
+                        <div id="tetraDashTotal" class="summary-val" style="font-size:22px;color:var(--cyan);font-weight:bold;">-</div>
+                    </div>
+                    <div style="background:rgba(34,197,94,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(34,197,94,0.3);">
+                        <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;">Incoming ↓</div>
+                        <div id="tetraDashIncoming" class="summary-val" style="font-size:22px;color:var(--green);font-weight:bold;">-</div>
+                    </div>
+                    <div style="background:rgba(255,107,53,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(255,107,53,0.3);">
+                        <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;">Outgoing ↑</div>
+                        <div id="tetraDashOutgoing" class="summary-val" style="font-size:22px;color:var(--orange);font-weight:bold;">-</div>
+                    </div>
+                    <div style="background:rgba(168,85,247,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(168,85,247,0.3);">
+                        <div style="font-size:9px;color:rgba(255,255,255,0.6);text-transform:uppercase;">Net Balance</div>
+                        <div id="tetraDashNet" class="summary-val" style="font-size:22px;font-weight:bold;">-</div>
+                    </div>
+                </div>
+                
+                <!-- Alert Bars -->
+                <div id="tetraDashAlerts" style="display:none;margin-bottom:15px;"></div>
+                
+                <!-- Hourly Table -->
+                <div style="margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(200,0,0,0.1));border-radius:8px;border-left:4px solid var(--red);">
+                        <span style="font-size:14px;">⏰</span>
+                        <span style="font-family:'Syncopate';font-size:11px;text-transform:uppercase;letter-spacing:1px;">Hourly Tetra Key Analysis</span>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table" style="font-size:11px;">
+                            <thead><tr><th>Hour</th><th>Incoming ↓</th><th>Outgoing ↑</th><th>Net</th><th>Status</th><th>Cross-CC Info</th></tr></thead>
+                            <tbody id="tetraDashHourlyBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Complete Tetra Key Events -->
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(21,128,61,0.1));border-radius:8px;border-left:4px solid var(--green);">
+                        <span style="font-size:14px;">📋</span>
+                        <span style="font-family:'Syncopate';font-size:11px;text-transform:uppercase;letter-spacing:1px;">Complete Tetra Key Events</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+                        <div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                <h4 style="color:var(--green);font-size:11px;font-family:'Syncopate';margin:0;">⬇️ Incoming (Alighting)</h4>
+                                <button class="tetra-excel-btn" onclick="downloadTetraIncomingExcel()" title="Download Incoming as Excel">📥 EXCEL</button>
+                            </div>
+                            <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+                                <table class="data-table" style="font-size:10px;">
+                                    <thead><tr><th>Time</th><th>Rake</th><th>Duty</th><th>From</th><th>To</th></tr></thead>
+                                    <tbody id="tetraDashIncomingBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                                <h4 style="color:var(--orange);font-size:11px;font-family:'Syncopate';margin:0;">⬆️ Outgoing (Boarding)</h4>
+                                <button class="tetra-excel-btn" onclick="downloadTetraOutgoingExcel()" title="Download Outgoing as Excel">📥 EXCEL</button>
+                            </div>
+                            <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+                                <table class="data-table" style="font-size:10px;">
+                                    <thead><tr><th>Time</th><th>Rake</th><th>Duty</th><th>From</th><th>To</th></tr></thead>
+                                    <tbody id="tetraDashOutgoingBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- KM Analysis Page -->
+        <div id="pageKmAnalysis" class="page">
+            <div class="glass-card cinematic-enter" style="padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(34,197,94,0.3);">
+                    <h2 style="font-family:'Syncopate';font-size:16px;margin:0;color:var(--green);">📊 KM Analysis</h2>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <button class="jarvis-btn btn-sm" onclick="showPage('pageHome')" style="background:rgba(255,255,255,0.1);font-size:9px;padding:6px 10px;">← BACK</button>
+                    </div>
+                </div>
+                
+                <!-- Filters -->
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:15px;">
+                    <div style="flex:1;min-width:150px;">
+                        <label style="font-size:10px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:4px;">Day Type</label>
+                        <select id="kmAnalysisDay" class="jarvis-select" style="padding:8px 12px;font-size:12px;">
+                            <option value="Weekday">Weekday</option>
+                            <option value="Saturday">Saturday</option>
+                            <option value="Sunday">Sunday</option>
+                            <option value="Special">Special</option>
+                        </select>
+                    </div>
+                    <div style="margin-left:auto;">
+                        <button class="jarvis-btn btn-sm" onclick="generateKmAnalysis()" style="background:linear-gradient(135deg,var(--green),#15803d);font-size:10px;padding:8px 14px;">🔄 REFRESH</button>
+                    </div>
+                </div>
+                
+                <!-- KM Summary -->
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(21,128,61,0.1));border-radius:8px;border-left:4px solid var(--green);">
+                        <span style="font-size:14px;">📊</span>
+                        <span style="font-family:'Syncopate';font-size:11px;text-transform:uppercase;letter-spacing:1px;">Duty KM Summary — Highest First</span>
+                        <span id="kmAnalysisCount" style="margin-left:auto;font-size:10px;color:rgba(255,255,255,0.4);font-family:'Syncopate';"></span>
+                    </div>
+                    <div class="table-wrap" style="max-height:500px;overflow-y:auto;">
+                        <table class="data-table" style="font-size:11px;">
+                            <thead><tr><th>#</th><th>Duty</th><th>Sign On</th><th>Sign Off</th><th>Total KM</th><th>Trips</th><th></th></tr></thead>
+                            <tbody id="kmAnalysisBody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>

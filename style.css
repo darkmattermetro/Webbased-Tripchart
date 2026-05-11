@@ -409,3 +409,179 @@ body {
     .input-label { font-size: 9px; letter-spacing: 1px; }
     .jarvis-input, .jarvis-select { padding: 10px 12px; font-size: 13px; }
 }
+
+/* === TETRA DASHBOARD === */
+.tetra-home-link {
+    color: var(--red);
+    font-family: 'Syncopate', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-decoration: none;
+    padding: 6px 16px;
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 6px;
+    transition: all 0.3s;
+    display: inline-block;
+}
+.tetra-home-link:hover {
+    border-color: var(--red);
+    background: rgba(239,68,68,0.1);
+    box-shadow: 0 0 12px rgba(239,68,68,0.2);
+}
+
+.tetra-station-btn {
+    padding: 8px 18px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.3);
+    color: rgba(255,255,255,0.6);
+    font-family: 'Syncopate', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.tetra-station-btn:hover {
+    border-color: rgba(255,255,255,0.5);
+    color: #fff;
+}
+.tetra-station-btn.active {
+    background: linear-gradient(135deg, var(--red), #b91c1b);
+    border-color: var(--red);
+    color: #fff;
+    box-shadow: 0 0 15px rgba(239,68,68,0.4);
+}
+.tetra-station-btn:first-child.active {
+    background: linear-gradient(135deg, var(--cyan), #0099cc);
+    border-color: var(--cyan);
+    box-shadow: 0 0 15px rgba(0,212,255,0.4);
+}
+
+#tetraLiveClock {
+    font-variant-numeric: tabular-nums;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    display: inline-block;
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+#pageTetraDashboard .data-table td {
+    font-size: 11px;
+    padding: 8px 6px;
+}
+
+#pageTetraDashboard .data-table th {
+    font-size: 9px;
+    padding: 8px 6px;
+}
+
+#tetraDashAlerts {
+    animation: fadeIn 0.4s ease;
+}
+
+.summary-val {
+    transition: all 0.3s ease;
+}
+.summary-val.anim-pop {
+    animation: pop-number 0.35s ease;
+}
+
+@keyframes pop-number {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+.tetra-excel-btn {
+    background: rgba(34,197,94,0.15);
+    border: 1px solid rgba(34,197,94,0.3);
+    border-radius: 5px;
+    color: var(--green);
+    font-family: 'Syncopate', sans-serif;
+    font-size: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.tetra-excel-btn:hover {
+    background: rgba(34,197,94,0.3);
+    border-color: var(--green);
+    box-shadow: 0 0 8px rgba(34,197,94,0.2);
+}
+
+/* Responsive for tetra dashboard */
+@media (max-width: 768px) {
+    #pageTetraDashboard > div > div:first-child {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 8px;
+    }
+    #pageTetraDashboard > div > div:first-child > div:last-child {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+    #pageTetraDashboard .summary-grid,
+    #pageTetraDashboard > div > div[style*="grid-template-columns:repeat(4"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    #pageTetraDashboard > div > div:last-child > div[style*="grid-template-columns:1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+    #pageTetraDashboard > div > div[style*="display:flex;gap:12px;align-items:center"] {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    #tetraDashAlerts > div {
+        flex-direction: column !important;
+        text-align: center;
+    }
+}
+
+/* === KM ANALYSIS === */
+#pageKmAnalysis .km-row:hover {
+    background: rgba(34,197,94,0.08) !important;
+}
+#pageKmAnalysis .km-detail-row td {
+    padding: 0 !important;
+}
+#pageKmAnalysis .km-detail-inner {
+    padding: 8px 12px;
+}
+#pageKmAnalysis .km-detail-inner table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#pageKmAnalysis .km-detail-inner table th {
+    color: rgba(255,255,255,0.4);
+    font-family: 'Syncopate', sans-serif;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-align: left;
+}
+#pageKmAnalysis .km-detail-inner table td {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+#pageKmAnalysis .data-table td {
+    padding: 10px 8px;
+}
+#pageKmAnalysis .data-table th {
+    padding: 10px 8px;
+}
