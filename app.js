@@ -576,7 +576,7 @@ async function clearPopupMsg() {
 }
 
 async function processUploads() {
-    const types = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+    const types = ['Weekday', 'Saturday', 'Sunday', 'Special', 'Test'];
     for (const type of types) {
         const fileInput = document.getElementById('f_' + type);
         if (fileInput.files.length > 0) {
@@ -714,6 +714,9 @@ function updateUserHeader() {
     // Update login/logout button
     const loginBtn = document.getElementById('minimalLoginText');
     if (loginBtn) loginBtn.textContent = currentUser ? '👤 LOGOUT' : '👤 LOGIN';
+    // Show/hide admin-only elements
+    const isAdmin = currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin';
+    document.querySelectorAll('.admin-only-upload-row, .admin-only-day').forEach(el => el.style.display = isAdmin ? '' : 'none');
 }
 
 function togglePasswordVisibility(inputId, icon) {
@@ -1612,6 +1615,8 @@ function clearSession() {
     document.getElementById('loggedInUserHeader').classList.remove('show');
     const loginBtn = document.getElementById('minimalLoginText');
     if (loginBtn) loginBtn.textContent = '👤 LOGIN';
+    // Hide admin-only elements on logout
+    document.querySelectorAll('.admin-only-upload-row, .admin-only-day').forEach(el => el.style.display = 'none');
 }
 
 function handleLogout() {

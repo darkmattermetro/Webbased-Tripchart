@@ -281,6 +281,13 @@
                                 <td><input type="file" id="f_Special" accept=".csv" style="font-size:9px;"></td>
                                 <td><button onclick="clearData('Special')" style="background:#ef4444;color:#fff;border:none;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:9px;">CLR</button></td>
                             </tr>
+                            <tr class="admin-only-upload-row">
+                                <td style="color:var(--orange);">Test</td>
+                                <td><input type="text" id="wef_Test" style="width:60px;padding:4px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,160,0,0.3);border-radius:4px;color:#fff;font-size:10px;"></td>
+                                <td><input type="text" id="rem_Test" style="width:60px;padding:4px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,160,0,0.3);border-radius:4px;color:#fff;font-size:10px;"></td>
+                                <td><input type="file" id="f_Test" accept=".csv" style="font-size:9px;"></td>
+                                <td><button onclick="clearData('Test')" style="background:#ef4444;color:#fff;border:none;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:9px;">CLR</button></td>
+                            </tr>
                         </table>
                     </div>
                     <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.15);">
@@ -318,6 +325,7 @@
                             <option value="Saturday">Saturday</option>
                             <option value="Sunday">Sunday</option>
                             <option value="Special">Special</option>
+                            <option class="admin-only-day" value="Test">Test</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -359,6 +367,7 @@
                             <option value="Saturday">Saturday</option>
                             <option value="Sunday">Sunday</option>
                             <option value="Special">Special</option>
+                            <option class="admin-only-day" value="Test">Test</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -586,6 +595,7 @@
                             <option value="Saturday">Saturday</option>
                             <option value="Sunday">Sunday</option>
                             <option value="Special">Special</option>
+                            <option class="admin-only-day" value="Test">Test</option>
                         </select>
                     </div>
                     <div>
@@ -727,6 +737,7 @@
                             <option value="Saturday">Saturday</option>
                             <option value="Sunday">Sunday</option>
                             <option value="Special">Special</option>
+                            <option class="admin-only-day" value="Test">Test</option>
                         </select>
                     </div>
                     <div style="margin-left:auto;">
