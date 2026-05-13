@@ -692,8 +692,6 @@ function checkExistingSession() {
 function updateUserHeader() {
     const headerBar = document.getElementById('loggedInUserHeader');
     if (!headerBar) return;
-    const tetraBtn = document.getElementById('tetraDashboardBtn');
-    const kmBtn = document.getElementById('kmAnalysisBtn');
     if (currentUser) {
         document.getElementById('headerUserName').textContent = currentUser.name;
         document.getElementById('headerUserId').textContent = currentUser.empId;
@@ -703,13 +701,12 @@ function updateUserHeader() {
         } else {
             headerBar.classList.remove('show');
         }
-        if (tetraBtn) tetraBtn.style.display = 'block';
-        if (kmBtn) kmBtn.style.display = 'block';
     } else {
         headerBar.classList.remove('show');
-        if (tetraBtn) tetraBtn.style.display = 'none';
-        if (kmBtn) kmBtn.style.display = 'none';
     }
+    // Update login/logout button
+    const loginBtn = document.getElementById('minimalLoginText');
+    if (loginBtn) loginBtn.textContent = currentUser ? '👤 LOGOUT' : '👤 LOGIN';
 }
 
 function togglePasswordVisibility(inputId, icon) {
@@ -723,17 +720,14 @@ function togglePasswordVisibility(inputId, icon) {
     }
 }
 
-// TRIGGER ADMIN (5-click secret access)
+// Login/Logout button
 document.addEventListener('click', function(e) {
     if (e.target.id === 'minimalLoginTrigger' || e.target.closest('#minimalLoginTrigger')) {
-        if (currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin') {
-            showPage('pageAdmin');
-            loadAdminData();
-            return;
+        if (currentUser) {
+            handleLogout();
+        } else {
+            toggleLoginModal();
         }
-        adminClicks++;
-        if (adminClicks >= 5) { toggleLoginModal(); adminClicks = 0; }
-        setTimeout(() => { adminClicks = 0; }, 2000);
     }
 });
 
@@ -1599,6 +1593,8 @@ function clearSession() {
     currentUser = null;
     sessionStorage.removeItem('dmrcUser');
     document.getElementById('loggedInUserHeader').classList.remove('show');
+    const loginBtn = document.getElementById('minimalLoginText');
+    if (loginBtn) loginBtn.textContent = '👤 LOGIN';
 }
 
 function handleLogout() {
