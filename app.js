@@ -605,6 +605,13 @@ async function processUploads() {
                   }));
                 await sb.from('trip_data').delete().eq('day_type', type);
                 await sb.from('trip_data').insert(tripRows);
+                // Save WEF and Remarks
+                const wef = (document.getElementById('wef_' + type)?.value || '').trim();
+                const remarks = (document.getElementById('rem_' + type)?.value || '').trim();
+                const keys = [type + '_wef', type + '_remarks'];
+                await sb.from('app_config').delete().in('config_key', keys);
+                if (wef) await sb.from('app_config').insert({ config_key: type + '_wef', config_value: wef });
+                if (remarks) await sb.from('app_config').insert({ config_key: type + '_remarks', config_value: remarks });
                 alert(type + ' data uploaded!');
             }
         }
@@ -831,6 +838,16 @@ async function loadAdminData() {
     } else {
         switchAdminTab('chart');
     }
+    // Load existing WEF/Remarks into upload form
+    try {
+        const { data: configData } = await sb.from('app_config').select('config_key, config_value');
+        if (configData) {
+            configData.forEach(c => {
+                const el = document.getElementById(c.config_key);
+                if (el) el.value = c.config_value;
+            });
+        }
+    } catch (e) {}
 }
 
 // USER MANAGEMENT
