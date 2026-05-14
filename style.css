@@ -488,10 +488,6 @@ body {
     padding: 8px 6px;
 }
 
-#tetraDashAlerts {
-    animation: fadeIn 0.4s ease;
-}
-
 .summary-val {
     transition: all 0.3s ease;
 }
@@ -547,14 +543,9 @@ body {
         flex-direction: column;
         align-items: stretch !important;
     }
-    #tetraDashAlerts > div {
-        flex-direction: column !important;
-        text-align: center;
-    }
 }
 
 /* Tetra collapsible sections hover */
-#tetraDashAlertSection > div:first-child:hover,
 #tetraDashSignOnSection > div:first-child:hover,
 #tetraDashSignOffSection > div:first-child:hover {
     filter: brightness(1.3);

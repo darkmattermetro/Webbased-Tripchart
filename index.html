@@ -630,25 +630,25 @@
                     </div>
                 </div>
                 
-                <!-- Alert Bars (collapsible) -->
-                <div id="tetraDashAlertSection" style="display:none;margin-bottom:15px;">
-                    <div onclick="toggleTetraAlerts()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(239,68,68,0.25),rgba(200,0,0,0.12));border-radius:8px;border-left:4px solid var(--red);margin-bottom:6px;">
-                        <span style="font-size:14px;">⚠️</span>
-                        <span id="tetraDashAlertToggleText" style="font-family:'Syncopate';font-size:9px;text-transform:uppercase;letter-spacing:1px;flex:1;">Shortage Alerts</span>
-                        <span id="tetraDashAlertArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▼</span>
+                <!-- AI Analysis (collapsible) -->
+                <div id="tetraDashAiSection" style="display:none;margin-bottom:12px;">
+                    <div onclick="toggleTetraAi()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(100,50,200,0.1));border-radius:8px;border-left:4px solid var(--purple);margin-bottom:6px;">
+                        <span style="font-size:14px;">🧠</span>
+                        <span id="tetraDashAiSummary" style="font-family:'Syncopate';font-size:9px;text-transform:uppercase;letter-spacing:1px;flex:1;color:var(--purple);">AI Assessment</span>
+                        <span id="tetraDashAiArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▶</span>
                     </div>
-                    <div id="tetraDashAlerts" style="display:block;"></div>
+                    <div id="tetraDashAiDetail" style="display:none;padding:10px 14px;background:rgba(168,85,247,0.03);border-radius:0 0 8px 8px;border:1px solid rgba(168,85,247,0.1);font-size:11px;line-height:1.6;"></div>
                 </div>
-                
+
                 <!-- Hourly Table -->
                 <div style="margin-bottom:20px;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(200,0,0,0.1));border-radius:8px;border-left:4px solid var(--red);">
                         <span style="font-size:14px;">⏰</span>
-                        <span style="font-family:'Syncopate';font-size:11px;text-transform:uppercase;letter-spacing:1px;">Hourly Tetra Key Analysis</span>
+                        <span style="font-family:'Syncopate';font-size:11px;text-transform:uppercase;letter-spacing:1px;">Hourly Incoming/Outgoing — Tetra Gap Analysis</span>
                     </div>
                     <div class="table-wrap">
                         <table class="data-table" style="font-size:11px;">
-                            <thead><tr><th>Hour</th><th>Incoming ↓</th><th>Outgoing ↑</th><th>Net</th><th>Status</th><th>Cross-CC Info</th></tr></thead>
+                            <thead><tr><th>Hour</th><th>Incoming ↓</th><th>Outgoing ↑</th><th>Hr Net</th><th>Running</th><th id="tetraDashOtherHeader">Cross-CC</th><th>Note</th></tr></thead>
                             <tbody id="tetraDashHourlyBody"></tbody>
                         </table>
                     </div>

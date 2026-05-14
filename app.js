@@ -92,7 +92,11 @@ async function loadKmData() {
         const { data } = await sb.from('app_config').select('config_value').eq('config_key', 'km_data').single();
         if (data && data.config_value) {
             const uploaded = JSON.parse(data.config_value);
-            kmData = { ...KM_MAP, ...uploaded };
+            const normalized = {};
+            for (const key in uploaded) {
+                normalized[key.replace('→', '|')] = uploaded[key];
+            }
+            kmData = { ...KM_MAP, ...normalized };
         } else {
             kmData = { ...KM_MAP };
         }
@@ -124,7 +128,9 @@ async function uploadKmCsv() {
     for (const line of lines) {
         const parts = line.split(',');
         if (parts.length < 2) continue;
-        const route = parts[0].trim().toUpperCase();
+        let route = parts[0].trim().toUpperCase();
+        if (route.startsWith('"') && route.endsWith('"')) route = route.slice(1, -1);
+        route = route.replace('→', '|');
         const km = parseFloat(parts[1].trim());
         if (route && !isNaN(km)) map[route] = km;
     }
@@ -231,7 +237,7 @@ async function getDutyData(type, dutyNo) {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                kmValue = kmData[from + '|' + to] || 0;
+                kmValue = kmData[(from + '|' + to).replace(/\s+/g, ' ')] || 0;
                 totalKm += kmValue;
             }
             r.calculated_km = kmValue;
@@ -672,6 +678,7 @@ function switchAdminTab(tabName) {
     if (tabContent) tabContent.style.display = 'block';
     if (tabName === 'messages') loadVisitorStats();
     if (tabName === 'upload') loadKmData();
+    if (tabName === 'km' || tabName === 'chart') loadKmData();
     if (tabName === 'users') loadUserManagementData();
     if (tabName === 'chart') initSeriesGrid();
 }
@@ -1468,7 +1475,7 @@ async function downloadKmExcel() {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                dutyTotals[d].km += kmData[from + '|' + to] || 0;
+                dutyTotals[d].km += kmData[(from + '|' + to).replace(/\s+/g, ' ')] || 0;
             }
             if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
                 dutyTotals[d].signOn = r["Sign On Time"];
@@ -1646,6 +1653,7 @@ async function clearVisitorLog() {
 }
 
 async function generateKmReport() {
+    await loadKmData();
     const dayType = document.getElementById('kmDay')?.value || 'Weekday';
     const series = Array.from(document.querySelectorAll('input[name="kmSeries"]:checked')).map(cb => cb.value);
     const customDuties = getCustomDuties('customDutiesKm');
@@ -1674,7 +1682,7 @@ async function generateKmReport() {
             if (r["Rake Num"] && r["Rake Num"].toString().trim() !== '') {
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                dutyTotals[d].km += kmData[from + '|' + to] || 0;
+                dutyTotals[d].km += kmData[(from + '|' + to).replace(/\s+/g, ' ')] || 0;
             }
             if (r["Sign On Time"] && (!dutyTotals[d].signOn || r["Sign On Time"] < dutyTotals[d].signOn)) {
                 dutyTotals[d].signOn = r["Sign On Time"];
@@ -1717,6 +1725,7 @@ async function generateKmReport() {
 
 // MISSING KM AUDIT
 async function findMissingKm() {
+    await loadKmData();
     try {
         const types = ['Weekday', 'Saturday', 'Sunday', 'Special'];
         const missing = {};
@@ -1731,7 +1740,7 @@ async function findMissingKm() {
                 if (!rake) continue;
                 const from = (r["Start Stn"] || '').toString().trim().toUpperCase();
                 const to = (r["End Stn"] || '').toString().trim().toUpperCase();
-                const key = from + '|' + to;
+                const key = (from + '|' + to).replace(/\s+/g, ' ');
                 const km = kmData[key];
                 if (!km || km === 0) {
                     const route = from + ' → ' + to;
@@ -1889,11 +1898,11 @@ async function generateTetraDashboard() {
     try {
         const { data } = await sb.from('trip_data').select('*').eq('day_type', dayType);
         if (!data || data.length === 0) {
-            document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No data found for ' + dayType + '</td></tr>';
-            document.getElementById('tetraDashAlerts').style.display = 'none';
-            document.getElementById('tetraDashUpcomingBadge').style.display = 'none';
+            document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No data found for ' + dayType + '</td></tr>';
             document.getElementById('tetraDashSignOnSection').style.display = 'none';
             document.getElementById('tetraDashSignOffSection').style.display = 'none';
+            const aiSec = document.getElementById('tetraDashAiSection');
+            if (aiSec) aiSec.style.display = 'none';
             return;
         }
 
@@ -1910,19 +1919,29 @@ async function generateTetraDashboard() {
                 arrLoc: (data[i]["End Stn"] || '').toString().trim().toUpperCase()
             });
         }
-        const signOnStation = station === 'KKDA' ? 'IPE' : 'MKPR';
-        const signOffStation = station === 'KKDA' ? 'IPE' : 'MKPR';
-        const signOnList = [];
-        const signOffList = [];
+        // Extract sign-ons/offs for both IPE and MKPR
+        const ipeSignOn = [], ipeSignOff = [], mkprSignOn = [], mkprSignOff = [];
         for (const duty in dutyTrips) {
             const trips = dutyTrips[duty].sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
             const first = trips[0];
             const last = trips[trips.length - 1];
-            if (first.depLoc === signOnStation) signOnList.push({ duty, time: first.depTime });
-            if (last.arrLoc === signOffStation) signOffList.push({ duty, time: last.arrTime });
+            if (first.depLoc === 'IPE') ipeSignOn.push({ duty, time: first.depTime });
+            if (last.arrLoc === 'IPE') ipeSignOff.push({ duty, time: last.arrTime });
+            if (first.depLoc === 'MKPR') mkprSignOn.push({ duty, time: first.depTime });
+            if (last.arrLoc === 'MKPR') mkprSignOff.push({ duty, time: last.arrTime });
         }
-        signOnList.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
-        signOffList.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+        ipeSignOn.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+        ipeSignOff.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+        mkprSignOn.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+        mkprSignOff.sort((a, b) => timeToMins(a.time) - timeToMins(b.time));
+
+        const signOnStation = station === 'KKDA' ? 'IPE' : 'MKPR';
+        const signOffStation = station === 'KKDA' ? 'IPE' : 'MKPR';
+        const signOnList = station === 'KKDA' ? ipeSignOn : mkprSignOn;
+        const signOffList = station === 'KKDA' ? ipeSignOff : mkprSignOff;
+        const otherSignOnList = station === 'KKDA' ? mkprSignOn : ipeSignOn;
+        const otherSignOffList = station === 'KKDA' ? mkprSignOff : ipeSignOff;
+        const otherKeyLoc = station === 'KKDA' ? 'MKPR' : 'IPE';
 
         // Render sign on
         document.getElementById('tetraDashSignOnTitle').textContent = 'Sign On at ' + signOnStation + ' — ' + signOnList.length + ' duties';
@@ -1939,6 +1958,124 @@ async function generateTetraDashboard() {
             ? signOffList.map(s => '<tr><td style="color:var(--cyan);font-weight:600;">' + s.duty + '</td><td><span class="time-display">' + s.time + '</span></td></tr>').join('')
             : '<tr><td colspan="2" style="text-align:center;color:rgba(255,255,255,0.3);padding:8px;">No sign off at ' + signOffStation + '</td></tr>';
         document.getElementById('tetraDashSignOffSection').style.display = 'block';
+
+        // ===== HOURLY SIGN-ON/OFF ANALYSIS =====
+        // Count sign-ons/offs per hour for current station and other station
+        const soHourly = {}, soOtherHourly = {};
+        for (let h = 0; h < 24; h++) { soHourly[h] = { on: 0, off: 0 }; soOtherHourly[h] = { on: 0, off: 0 }; }
+        signOnList.forEach(s => { const h = parseInt(s.time.split(':')[0]); if (soHourly[h]) soHourly[h].on++; });
+        signOffList.forEach(s => { const h = parseInt(s.time.split(':')[0]); if (soHourly[h]) soHourly[h].off++; });
+        otherSignOnList.forEach(s => { const h = parseInt(s.time.split(':')[0]); if (soOtherHourly[h]) soOtherHourly[h].on++; });
+        otherSignOffList.forEach(s => { const h = parseInt(s.time.split(':')[0]); if (soOtherHourly[h]) soOtherHourly[h].off++; });
+
+        // Running balance for current station
+        let soRunning = 0;
+        const soBalance = {};
+        for (let h = 0; h < 24; h++) {
+            soRunning += soHourly[h].on - soHourly[h].off;
+            soBalance[h] = soRunning;
+        }
+        // Running balance for other station (for cross-CC)
+        let otherSoRunning = 0;
+        const otherSoBalance = {};
+        for (let h = 0; h < 24; h++) {
+            otherSoRunning += soOtherHourly[h].on - soOtherHourly[h].off;
+            otherSoBalance[h] = otherSoRunning;
+        }
+
+        // ===== PREV DAY COMPARISON (baseline for acknowledging current tetra status) =====
+        const prevDayType = getPreviousDayType(dayType);
+        let prevIncomingCount = -1, prevOutgoingCount = -1;
+        const prevHourly = {};
+        for (let h = 0; h < 24; h++) prevHourly[h] = { in: 0, out: 0 };
+        let prevHourlyBalance = {};
+        if (prevDayType && prevDayType !== dayType) {
+            try {
+                const { data: prevData } = await sb.from('trip_data').select('*').eq('day_type', prevDayType);
+                if (prevData && prevData.length > 0) {
+                    // Build rake trips for prev day
+                    const prevRakeTrips = {};
+                    for (let i = 0; i < prevData.length; i++) {
+                        const rake = (prevData[i]["Rake Num"] || '').toString().trim();
+                        if (!rake) continue;
+                        if (!prevRakeTrips[rake]) prevRakeTrips[rake] = [];
+                        prevRakeTrips[rake].push({
+                            duty: prevData[i]["Duty No"],
+                            depTime: prevData[i]["Start Time"],
+                            arrTime: prevData[i]["End Time"],
+                            depLoc: (prevData[i]["Start Stn"] || '').toString().trim().toUpperCase(),
+                            arrLoc: (prevData[i]["End Stn"] || '').toString().trim().toUpperCase()
+                        });
+                    }
+                    // Tetra events for prev day
+                    const prevTetraEvents = [];
+                    const prevAdded = {};
+                    for (const rake in prevRakeTrips) {
+                        let trips = prevRakeTrips[rake];
+                        trips.sort((a, b) => timeToMins(a.depTime) - timeToMins(b.depTime));
+                        const deduped = [];
+                        const seen = {};
+                        for (const t of trips) {
+                            const key = t.depTime + '|' + t.arrTime + '|' + t.depLoc + '|' + t.arrLoc;
+                            if (!seen[key]) { seen[key] = true; deduped.push(t); }
+                        }
+                        trips = deduped;
+                        if (trips.length === 0) continue;
+                        if (!mathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
+                            const uniq = rake + '|' + trips[0].depTime + '|BOARDING';
+                            if (!prevAdded[uniq]) {
+                                prevAdded[uniq] = true;
+                                prevTetraEvents.push({ rakeId: rake, duty: trips[0].duty, station: trips[0].depLoc, time: trips[0].depTime, from: trips[0].depLoc, to: trips[0].arrLoc, action: 'BOARDING' });
+                            }
+                        }
+                        for (let j = 0; j < trips.length - 1; j++) {
+                            const currentEnd = timeToMins(trips[j].arrTime);
+                            const nextStart = timeToMins(trips[j + 1].depTime);
+                            const sameDuty = trips[j].duty === trips[j + 1].duty;
+                            const mkprException = (trips[j].arrLoc === 'MKPR' && trips[j + 1].depLoc === 'MKPR' && sameDuty);
+                            if (!mathTolerant(currentEnd, nextStart) && !mkprException) {
+                                let uniq = rake + '|' + trips[j].arrTime + '|ALIGHTING';
+                                if (!prevAdded[uniq]) {
+                                    prevAdded[uniq] = true;
+                                    prevTetraEvents.push({ rakeId: rake, duty: trips[j].duty, station: trips[j].arrLoc, time: trips[j].arrTime, from: trips[j].depLoc, to: trips[j].arrLoc, action: 'ALIGHTING' });
+                                }
+                                uniq = rake + '|' + trips[j + 1].depTime + '|BOARDING';
+                                if (!prevAdded[uniq]) {
+                                    prevAdded[uniq] = true;
+                                    prevTetraEvents.push({ rakeId: rake, duty: trips[j + 1].duty, station: trips[j + 1].depLoc, time: trips[j + 1].depTime, from: trips[j + 1].depLoc, to: trips[j + 1].arrLoc, action: 'BOARDING' });
+                                }
+                            }
+                        }
+                        const last = trips[trips.length - 1];
+                        if (!mathTolerant(timeToMins(last.depTime), timeToMins(last.arrTime))) {
+                            const uniq = rake + '|' + last.arrTime + '|ALIGHTING';
+                            if (!prevAdded[uniq]) {
+                                prevAdded[uniq] = true;
+                                prevTetraEvents.push({ rakeId: rake, duty: last.duty, station: last.arrLoc, time: last.arrTime, from: last.depLoc, to: last.arrLoc, action: 'ALIGHTING' });
+                            }
+                        }
+                    }
+                    // Filter prev events by same station
+                    const prevFiltered = prevTetraEvents.filter(e => e.station.indexOf(station) !== -1);
+                    prevIncomingCount = prevFiltered.filter(e => e.action === 'ALIGHTING').length;
+                    prevOutgoingCount = prevFiltered.filter(e => e.action === 'BOARDING').length;
+                    // Hourly counts for prev day
+                    prevFiltered.forEach(e => {
+                        const hour = parseInt(e.time.split(':')[0]);
+                        if (prevHourly[hour]) {
+                            if (e.action === 'ALIGHTING') prevHourly[hour].in++;
+                            else prevHourly[hour].out++;
+                        }
+                    });
+                    // Running balance for prev day
+                    let prevRunning = 0;
+                    for (let h = 0; h < 24; h++) {
+                        prevRunning += prevHourly[h].in - prevHourly[h].out;
+                        prevHourlyBalance[h] = prevRunning;
+                    }
+                }
+            } catch (e) { console.error('Prev day calc error:', e); }
+        }
 
         // ===== TETRA GAP ANALYSIS =====
         const rakeTrips = {};
@@ -2037,7 +2174,28 @@ async function generateTetraDashboard() {
             }
         });
 
-        // Summary cards
+        // Running balance for tetra gap analysis (incoming − outgoing)
+        let hourlyRunning = 0;
+        const hourlyBalance = {};
+        for (let h = 0; h < 24; h++) {
+            hourlyRunning += hourly[h].in - hourly[h].out;
+            hourlyBalance[h] = hourlyRunning;
+        }
+        let otherHourlyRunning = 0;
+        const otherHourlyBalance = {};
+        for (let h = 0; h < 24; h++) {
+            otherHourlyRunning += otherHourly[h].in - otherHourly[h].out;
+            otherHourlyBalance[h] = otherHourlyRunning;
+        }
+
+        // Hourly variance from previous day baseline
+        const hourlyDiff = {};
+        for (let h = 0; h < 24; h++) {
+            const prev = (typeof prevHourlyBalance[h] !== 'undefined') ? prevHourlyBalance[h] : null;
+            hourlyDiff[h] = prev !== null ? hourlyBalance[h] - prev : null;
+        }
+
+        // Summary cards (tetra events)
         document.getElementById('tetraDashTotal').textContent = filtered.length;
         document.getElementById('tetraDashIncoming').textContent = incoming.length;
         document.getElementById('tetraDashOutgoing').textContent = outgoing.length;
@@ -2046,105 +2204,99 @@ async function generateTetraDashboard() {
         netEl.textContent = netBalance >= 0 ? '+' + netBalance : netBalance;
         netEl.style.color = netBalance >= 0 ? 'var(--green)' : 'var(--red)';
 
-        // Running balance across all 24 hours
-        let runningBalance = 0;
-        const hourlyBalance = {};
+        // Render hourly table (tetra event gap analysis at station)
+        // Compute future minimum balance for absolute spare detection
+        const otherFutureMin = {};
         for (let h = 0; h < 24; h++) {
-            runningBalance += hourly[h].in - hourly[h].out;
-            hourlyBalance[h] = runningBalance;
+            let minVal = otherHourlyBalance[h];
+            for (let f = h + 1; f < 24; f++) {
+                if (otherHourlyBalance[f] < minVal) minVal = otherHourlyBalance[f];
+            }
+            otherFutureMin[h] = minVal;
         }
-
-        // Render hourly table with running balance
         const currentHour = new Date().getHours();
-        let hourlyHtml = '';
-        let shortageAlerts = [];
-        let upcomingReqs = [];
+        // Update cross-CC column header
+        const otherHeader = document.getElementById('tetraDashOtherHeader');
+        if (otherHeader) otherHeader.textContent = otherStation;
 
+        // Find first and last hour with any tetra event activity
+        let firstHr = 0, lastHr = 23;
         for (let h = 0; h < 24; h++) {
-            const hd = hourly[h];
-            if (hd.in === 0 && hd.out === 0) continue;
+            if (hourly[h].in > 0 || hourly[h].out > 0) { firstHr = h; break; }
+        }
+        for (let h = 23; h >= 0; h--) {
+            if (hourly[h].in > 0 || hourly[h].out > 0) { lastHr = h; break; }
+        }
+        // Show from start of first event hour to end of last event hour
+        let hourlyHtml = '';
+        for (let h = Math.max(0, firstHr - 1); h <= Math.min(23, lastHr + 1); h++) {
+            const inc = hourly[h].in;
+            const out = hourly[h].out;
             const bal = hourlyBalance[h];
+            const hrNet = inc - out;
             const isCurrent = h === currentHour;
-            const isFuture = h > currentHour;
-            const isShortage = bal < 0;
 
-            let statusText, statusColor;
+            // Running balance status
+            let runText, runColor, aiNote = '-';
             if (bal > 0) {
-                statusText = '✅ Surplus +' + bal;
-                statusColor = 'var(--green)';
+                runText = 'Surplus ' + bal;
+                runColor = 'var(--green)';
+                aiNote = inc > 0 ? '+' + inc + ' incoming, ' + out + ' outgoing. Surplus at ' + station : 'No events — surplus ' + bal + ' carries forward';
             } else if (bal === 0) {
-                statusText = '✅ Balanced';
-                statusColor = 'rgba(255,255,255,0.5)';
+                runText = '0';
+                runColor = 'rgba(255,255,255,0.5)';
             } else {
-                statusText = isFuture ? '⏳ Need ' + Math.abs(bal) : '⛔ Need ' + Math.abs(bal);
-                statusColor = isFuture ? 'var(--orange)' : 'var(--red)';
+                runText = 'Gap ' + Math.abs(bal);
+                runColor = 'var(--red)';
+                aiNote = inc > 0 ? '+' + inc + ' incoming, ' + out + ' outgoing. Gap at ' + station : 'No events — gap ' + Math.abs(bal) + ' carries forward';
             }
 
-            // Cross-CC info
-            const otherNet = otherHourly[h].in - otherHourly[h].out;
-            let crossCcText = '-';
-            if (isShortage && otherNet > 0) {
-                crossCcText = '📞 ' + otherStation + ' has +' + otherNet;
-            } else if (otherNet > 0) {
-                crossCcText = otherStation + ' has +' + otherNet;
+            // Other station balance
+            const otherBal = otherHourlyBalance[h];
+            let otherText = '', otherColor = '';
+            if (otherBal > 0) {
+                otherText = 'Surplus ' + otherBal;
+                otherColor = 'var(--green)';
+            } else if (otherBal === 0) {
+                otherText = '0';
+                otherColor = 'rgba(255,255,255,0.4)';
+            } else {
+                otherText = 'Gap ' + Math.abs(otherBal);
+                otherColor = 'var(--red)';
             }
 
-            // Shortage alerts
-            if (isShortage) {
-                shortageAlerts.push({ hour: h, need: Math.abs(bal), otherNet: otherNet });
-            }
-
-            // Upcoming shortages
-            if (isFuture && isShortage) {
-                upcomingReqs.push({ hour: h, need: Math.abs(bal) });
+            // Cross-CC check
+            const otherAbsSpare = Math.max(0, otherFutureMin[h]);
+            if (bal < 0 && otherAbsSpare > 0) {
+                const transfer = Math.min(Math.abs(bal), otherAbsSpare);
+                aiNote = 'Gap ' + Math.abs(bal) + ' — Call ' + transfer + ' from ' + otherStation + ' (abs surplus ' + otherAbsSpare + ')';
+                otherText = '📞 Surplus ' + otherAbsSpare;
+                otherColor = 'var(--cyan)';
+            } else if (bal < 0 && otherBal > 0) {
+                aiNote = 'Gap ' + Math.abs(bal) + ' — ' + otherStation + ' has ' + otherBal + ' surplus but may need later';
             }
 
             // Row styling
             let rowBg = '';
             if (isCurrent) rowBg = 'background:rgba(239,68,68,0.25);border-left:3px solid var(--red);';
-            else if (isFuture && isShortage) rowBg = 'background:rgba(255,160,0,0.1);border-left:3px solid rgba(255,160,0,0.3);';
-            else if (isShortage) rowBg = 'background:rgba(239,68,68,0.1);border-left:3px solid rgba(239,68,68,0.3);';
-            else if (bal > 0) rowBg = 'background:rgba(34,197,94,0.08);border-left:3px solid rgba(34,197,94,0.3);';
+            else if (bal < 0) rowBg = 'background:rgba(239,68,68,0.08);border-left:3px solid rgba(239,68,68,0.2);';
+            else if (bal > 0) rowBg = 'background:rgba(34,197,94,0.06);border-left:3px solid rgba(34,197,94,0.2);';
 
             hourlyHtml += '<tr style="' + rowBg + '">' +
                 '<td style="font-weight:700;' + (isCurrent ? 'color:var(--red);' : '') + '">' + (isCurrent ? '▶ ' : '') + ('0' + h).slice(-2) + ':00</td>' +
-                '<td style="color:var(--green);font-weight:600;">' + hd.in + '</td>' +
-                '<td style="color:var(--orange);font-weight:600;">' + hd.out + '</td>' +
-                '<td style="color:' + (bal > 0 ? 'var(--green)' : bal < 0 ? (isFuture ? 'var(--orange)' : 'var(--red)') : 'rgba(255,255,255,0.5)') + ';font-weight:700;">' + (bal > 0 ? '+' : '') + bal + '</td>' +
-                '<td style="color:' + statusColor + ';font-weight:600;">' + statusText + '</td>' +
-                '<td style="font-size:10px;color:' + (otherNet > 0 ? 'var(--cyan)' : 'rgba(255,255,255,0.4)') + ';">' + crossCcText + '</td>' +
+                '<td style="color:var(--green);font-weight:600;">' + inc + '</td>' +
+                '<td style="color:var(--orange);font-weight:600;">' + out + '</td>' +
+                '<td style="color:' + (hrNet > 0 ? 'var(--green)' : hrNet < 0 ? 'var(--red)' : 'rgba(255,255,255,0.4)') + ';font-weight:600;">' + (hrNet > 0 ? '+' : hrNet < 0 ? '' : '') + hrNet + '</td>' +
+                '<td style="color:' + runColor + ';font-weight:700;">' + runText + '</td>' +
+                '<td style="font-size:10px;color:' + otherColor + ';">' + otherText + '</td>' +
+                '<td style="font-size:9px;color:rgba(255,255,255,0.5);max-width:160px;">' + aiNote + '</td>' +
                 '</tr>';
         }
 
         if (!hourlyHtml) {
-            hourlyHtml = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);padding:15px;">No tetra key events at ' + station + '</td></tr>';
+            hourlyHtml = '<tr><td colspan="7" style="text-align:center;color:rgba(255,255,255,0.4);padding:15px;">No tetra events at ' + station + '</td></tr>';
         }
         document.getElementById('tetraDashHourlyBody').innerHTML = hourlyHtml;
-
-        // Alert bars (collapsible section)
-        const alertSection = document.getElementById('tetraDashAlertSection');
-        const alertContainer = document.getElementById('tetraDashAlerts');
-        if (shortageAlerts.length > 0) {
-            let alertHtml = '';
-            shortageAlerts.forEach(a => {
-                const isPast = a.hour < currentHour;
-                alertHtml += '<div style="background:rgba(239,68,68,0.2);border:2px solid var(--red);border-radius:10px;padding:10px 15px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">' +
-                    '<span style="font-size:20px;">' + (isPast ? '⛔' : '⏳') + '</span>' +
-                    '<div style="flex:1;"><strong style="color:var(--red);font-size:13px;">Hour ' + ('0' + a.hour).slice(-2) + ':00 ' + (isPast ? 'SHORTAGE' : 'UPCOMING SHORTAGE') + '</strong>' +
-                    '<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">Running deficit of ' + a.need + ' tetra key(s)' + (isPast ? '' : ' (future)') + '</div></div>';
-                if (a.otherNet > 0) {
-                    alertHtml += '<div style="background:rgba(0,212,255,0.2);border:1px solid var(--cyan);border-radius:6px;padding:6px 10px;text-align:center;font-size:10px;">' +
-                        '<span style="color:var(--cyan);font-weight:700;">📞 ' + otherStation + '</span><br><span style="color:#fff;">+' + a.otherNet + ' spare</span></div>';
-                }
-                alertHtml += '</div>';
-            });
-            alertContainer.innerHTML = alertHtml;
-            document.getElementById('tetraDashAlertToggleText').textContent = shortageAlerts.length + ' shortage alert(s)';
-            alertContainer.style.display = 'block';
-            alertSection.style.display = 'block';
-        } else {
-            alertSection.style.display = 'none';
-        }
 
         // Detail tables
         const inBody = document.getElementById('tetraDashIncomingBody');
@@ -2158,9 +2310,156 @@ async function generateTetraDashboard() {
             : '<tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);padding:12px;">No outgoing events</td></tr>';
 
         highlightCurrentHour();
+
+        // ===== AI ASSESSMENT (tetra event gap analysis with baseline comparison) =====
+        const aiSection = document.getElementById('tetraDashAiSection');
+        const aiDetail = document.getElementById('tetraDashAiDetail');
+        const aiSummary = document.getElementById('tetraDashAiSummary');
+        if (aiSection && aiDetail && aiSummary) {
+            let aiLines = [];
+            let summaryText = '';
+
+            const totalInc = incoming.length;
+            const totalOut = outgoing.length;
+            const totalNet = totalInc - totalOut;
+            const otherTotalInc = otherFiltered.filter(e => e.action === 'ALIGHTING').length;
+            const otherTotalOut = otherFiltered.filter(e => e.action === 'BOARDING').length;
+            const otherTotalNet = otherTotalInc - otherTotalOut;
+
+            // 1. Morning tetra position — previous day baseline acknowledgment
+            if (prevDayType && prevIncomingCount >= 0 && prevOutgoingCount >= 0) {
+                aiLines.push('<strong style="color:var(--cyan);">📋 Baseline Comparison (' + prevDayType + ')</strong>');
+                const prevNet = prevIncomingCount - prevOutgoingCount;
+                const incDiff = totalInc - prevIncomingCount;
+                const outDiff = totalOut - prevOutgoingCount;
+                const netDiff = totalNet - prevNet;
+                aiLines.push('🔑 ' + station + ': <strong>' + totalInc + ' incoming</strong> / <strong>' + totalOut + ' outgoing</strong> today vs ' +
+                    prevIncomingCount + '/' + prevOutgoingCount + ' on ' + prevDayType +
+                    ' (net: <strong style="color:' + (netDiff >= 0 ? 'var(--green)' : 'var(--red)') + ';">' + (netDiff >= 0 ? '+' : '') + netDiff + '</strong> vs baseline). ' +
+                    (netDiff > 0 ? 'Surplus improved.' : netDiff < 0 ? 'Gap widened.' : 'Matching baseline.'));
+                aiLines.push('🔑 ' + otherStation + ': <strong>' + otherTotalInc + ' incoming</strong> / <strong>' + otherTotalOut + ' outgoing</strong> (net: ' + (otherTotalNet >= 0 ? '+' : '') + otherTotalNet + ').');
+            } else if (prevDayType) {
+                aiLines.push('📋 No ' + prevDayType + ' data available. Using current day data only.');
+                aiLines.push('🔑 ' + station + ': <strong>' + totalInc + ' incoming</strong> / <strong>' + totalOut + ' outgoing</strong> (net: ' + (totalNet >= 0 ? '+' : '') + totalNet + ').');
+                aiLines.push('🔑 ' + otherStation + ': <strong>' + otherTotalInc + ' incoming</strong> / <strong>' + otherTotalOut + ' outgoing</strong> (net: ' + (otherTotalNet >= 0 ? '+' : '') + otherTotalNet + ').');
+            }
+
+            // 2. Daily running balance assessment (end-of-day)
+            aiLines.push('<strong style="color:var(--purple);">📈 End-of-Day Balance</strong>');
+            if (totalNet > 0) {
+                aiLines.push(station + ': Overall <strong style="color:var(--green);">surplus ' + totalNet + ' tetra(s)</strong> (' + totalInc + ' incoming, ' + totalOut + ' outgoing).');
+            } else if (totalNet < 0) {
+                aiLines.push(station + ': Overall <strong style="color:var(--red);">gap ' + Math.abs(totalNet) + ' tetra(s)</strong> (' + totalInc + ' incoming, ' + totalOut + ' outgoing).');
+            } else {
+                aiLines.push(station + ': <strong>Balanced</strong> (' + totalInc + ' incoming, ' + totalOut + ' outgoing).');
+            }
+            if (otherTotalNet > 0) {
+                aiLines.push(otherStation + ': <strong style="color:var(--green);">Surplus ' + otherTotalNet + '</strong>.');
+            } else if (otherTotalNet < 0) {
+                aiLines.push(otherStation + ': <strong style="color:var(--red);">Gap ' + Math.abs(otherTotalNet) + '</strong>.');
+            } else {
+                aiLines.push(otherStation + ': <strong>Balanced</strong>.');
+            }
+
+            // 3. Hourly pattern vs baseline — find peak deviations
+            let peakVariance = 0, peakVarHour = -1, worstGap = 0, worstGapHour = -1;
+            for (let h = 0; h < 24; h++) {
+                if (hourlyDiff[h] !== null && Math.abs(hourlyDiff[h]) > Math.abs(peakVariance)) {
+                    peakVariance = hourlyDiff[h];
+                    peakVarHour = h;
+                }
+                if (hourlyBalance[h] < 0 && hourlyBalance[h] < worstGap) {
+                    worstGap = hourlyBalance[h];
+                    worstGapHour = h;
+                }
+            }
+            if (peakVarHour >= 0) {
+                const dir = peakVariance > 0 ? 'better' : 'worse';
+                const sign = peakVariance > 0 ? '+' : '';
+                aiLines.push('<strong style="color:var(--orange);">⏱️ Peak Variance from ' + prevDayType + ' Baseline</strong>');
+                aiLines.push('Hour ' + ('0' + peakVarHour).slice(-2) + ':00 — balance <strong style="color:' + (peakVariance >= 0 ? 'var(--green)' : 'var(--red)') + ';">' + sign + peakVariance + '</strong> vs baseline (' + dir + '). ' +
+                    (peakVariance < 0 ? 'Crew control: verify tetra availability at this hour.' : ''));
+            }
+            if (worstGapHour >= 0) {
+                const maxGapAssess = Math.abs(worstGap);
+                aiLines.push('🔴 Worst gap hour: ' + ('0' + worstGapHour).slice(-2) + ':00 — <strong style="color:var(--red);">gap ' + maxGapAssess + '</strong> tetra(s). ' +
+                    'Ensure ' + maxGapAssess + ' tetra(s) available at ' + station + ' by ' + ('0' + worstGapHour).slice(-2) + ':00.');
+            }
+
+            // 4. Cross-CC coordination
+            aiLines.push('<strong style="color:var(--orange);">📞 Cross-CC Coordination</strong>');
+            const otherAbsMin = Math.max(0, otherFutureMin[0]);
+            if (totalNet < 0 && otherTotalNet > 0) {
+                const canTransfer = Math.min(Math.abs(totalNet), otherTotalNet);
+                aiLines.push('✅ Morning call: Transfer <strong style="color:var(--cyan);">' + canTransfer + ' tetra(s)</strong> from ' + otherStation + ' to ' + station + ' to cover gap.');
+                let transferHours = [];
+                for (let h = 0; h < 24; h++) {
+                    if (hourlyBalance[h] < 0 && otherAbsMin > 0) {
+                        const xfer = Math.min(Math.abs(hourlyBalance[h]), otherAbsMin);
+                        transferHours.push({ hour: h, xfer: xfer });
+                    }
+                }
+                if (transferHours.length > 0) {
+                    const firstXfer = transferHours[0];
+                    aiLines.push('⏰ Transfer before hour ' + ('0' + firstXfer.hour).slice(-2) + ':00 — need ' + firstXfer.xfer + ' tetra(s) by then. ' + otherStation + ' absolute surplus: ' + otherAbsMin + '.');
+                }
+            } else if (totalNet > 0 && otherTotalNet < 0) {
+                const canTransfer = Math.min(totalNet, Math.abs(otherTotalNet));
+                aiLines.push('✅ Morning call: Send <strong style="color:var(--cyan);">' + canTransfer + ' tetra(s)</strong> from ' + station + ' to ' + otherStation + ' to cover their gap.');
+            } else if (totalNet < 0 && otherTotalNet < 0) {
+                aiLines.push('⚠️ Both stations <strong style="color:var(--red);">have gaps</strong>. No cross-CC transfer possible. Escalate.');
+            } else {
+                aiLines.push('✅ Both stations have surplus or balanced. No cross-CC transfer required.');
+            }
+
+            // Hour-specific cross-CC alerts
+            let coordFound = false;
+            for (let h = 0; h < 24; h++) {
+                if (hourlyBalance[h] < 0) {
+                    const absSpare = Math.max(0, otherFutureMin[h]);
+                    if (absSpare > 0) {
+                        coordFound = true;
+                        const xfer = Math.min(Math.abs(hourlyBalance[h]), absSpare);
+                        aiLines.push('📞 At hour ' + ('0' + h).slice(-2) + ':00 — gap ' + Math.abs(hourlyBalance[h]) + ', ' + otherStation + ' has <strong style="color:var(--cyan);">absolute surplus ' + absSpare + '</strong>. Transfer ' + xfer + ' before this hour.');
+                    } else if (otherHourlyBalance[h] > 0) {
+                        aiLines.push('📞 At hour ' + ('0' + h).slice(-2) + ':00 — gap ' + Math.abs(hourlyBalance[h]) + ', ' + otherStation + ' has <strong style="color:var(--green);">' + otherHourlyBalance[h] + ' surplus</strong> (but will need later — temp transfer only).');
+                    }
+                }
+            }
+            if (!coordFound && totalNet < 0) {
+                aiLines.push('📞 No absolute surplus at ' + otherStation + ' — balance cannot sustain transfer. Plan within ' + station + '.');
+            }
+
+            // 5. Gap alert (replaces sign-off check)
+            if (worstGapHour >= 0) {
+                aiLines.push('🚨 <strong style="color:var(--orange);">Gap Alert:</strong> Peak gap ' + Math.abs(worstGap) + ' tetra(s) at hour ' + ('0' + worstGapHour).slice(-2) + ':00. ' +
+                    'Hour ' + ('0' + worstGapHour).slice(-2) + ' needs ' + Math.abs(hourlyBalance[worstGapHour]) + ' tetra(s) at ' + station + '.');
+            }
+
+            // Summary
+            if (totalNet < 0) {
+                if (otherTotalNet > 0) {
+                    const transfer = Math.min(Math.abs(totalNet), otherTotalNet);
+                    summaryText = '✅ Gap ' + Math.abs(totalNet) + ' — transfer ' + transfer + ' from ' + otherStation + ' to cover';
+                } else {
+                    summaryText = '⚠️ Gap ' + Math.abs(totalNet) + ' tetra(s) — no surplus at ' + otherStation + ', arrange within ' + station;
+                }
+            } else if (totalNet > 0) {
+                summaryText = '✅ Surplus ' + totalNet + ' tetra(s) — ' + (otherTotalNet < 0 ? 'can send ' + Math.min(totalNet, Math.abs(otherTotalNet)) + ' to ' + otherStation : 'no immediate cross-CC need');
+            } else {
+                summaryText = '✅ Balanced — no tetra action needed';
+            }
+            if (prevIncomingCount >= 0 && peakVarHour >= 0 && hourlyDiff[peakVarHour] < 0) {
+                summaryText += ' — ⚠️ hour ' + ('0' + peakVarHour).slice(-2) + ':00 worse than ' + prevDayType;
+            }
+
+            aiSummary.textContent = '🧠 AI: ' + summaryText;
+            aiDetail.innerHTML = aiLines.join('<hr style="border-color:rgba(168,85,247,0.12);margin:5px 0;">');
+            aiSection.style.display = 'block';
+        }
     } catch (e) {
         console.error('Tetra Dashboard Error:', e);
-        document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:15px;">Error: ' + e.toString() + '</td></tr>';
+        document.getElementById('tetraDashHourlyBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);padding:15px;">Error: ' + e.toString() + '</td></tr>';
     }
 }
 
@@ -2185,14 +2484,6 @@ function highlightCurrentHour() {
     });
 }
 
-function toggleTetraAlerts() {
-    const container = document.getElementById('tetraDashAlerts');
-    const arrow = document.getElementById('tetraDashAlertArrow');
-    if (!container || !arrow) return;
-    const isVisible = container.style.display !== 'none';
-    container.style.display = isVisible ? 'none' : 'block';
-    arrow.textContent = isVisible ? '▶' : '▼';
-}
 function toggleTetraSignOn() {
     const wrap = document.getElementById('tetraDashSignOnBodyWrap');
     const arrow = document.getElementById('tetraDashSignOnArrow');
@@ -2208,6 +2499,23 @@ function toggleTetraSignOff() {
     const isVisible = wrap.style.display !== 'none';
     wrap.style.display = isVisible ? 'none' : 'block';
     arrow.textContent = isVisible ? '▶' : '▼';
+}
+function toggleTetraAi() {
+    const detail = document.getElementById('tetraDashAiDetail');
+    const arrow = document.getElementById('tetraDashAiArrow');
+    if (!detail || !arrow) return;
+    const isVisible = detail.style.display !== 'none';
+    detail.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+}
+
+function getPreviousDayType(todayType) {
+    if (todayType === 'Special' || todayType === 'Test') return null;
+    const map = { 'Monday': 'Sunday', 'Tuesday': 'Weekday', 'Wednesday': 'Weekday', 'Thursday': 'Weekday', 'Friday': 'Weekday', 'Saturday': 'Weekday', 'Sunday': 'Saturday' };
+    const d = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    if (todayType === dayNames[d.getDay()]) return map[dayNames[d.getDay()]];
+    return todayType;
 }
 
 // === KM ANALYSIS ===
@@ -2256,7 +2564,7 @@ async function generateKmAnalysis() {
             if (!dutyMap[duty]) dutyMap[duty] = { trips: [], totalKm: 0 };
             const from = (row["Start Stn"] || '').toString().trim().toUpperCase();
             const to = (row["End Stn"] || '').toString().trim().toUpperCase();
-            const key = from + '|' + to;
+            const key = (from + '|' + to).replace(/\s+/g, ' ');
             const km = kmData[key] || 0;
             dutyMap[duty].trips.push({ from, to, km, depTime: row["Start Time"], arrTime: row["End Time"], rake: row["Rake Num"] });
             dutyMap[duty].totalKm += km;
