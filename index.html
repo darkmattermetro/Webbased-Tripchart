@@ -146,6 +146,9 @@
             <div id="kmAnalysisBtn" style="text-align:center;margin-top:8px;">
                 <a href="#" onclick="showKmAnalysis();return false;" class="tetra-home-link">📊 KM Data</a>
             </div>
+            <div id="studyMrgrBtn" style="text-align:center;margin-top:8px;">
+                <a href="#" onclick="showStudyMrgr();return false;" class="tetra-home-link" style="border-color:rgba(168,85,247,0.3);color:var(--purple);">📚 Feedback and Suggestions</a>
+            </div>
         </div>
         
         <div id="pageResult" class="page">
@@ -239,6 +242,24 @@
                             <table class="data-table" style="font-size:11px;">
                                 <thead><tr><th>Timestamp</th><th>Emp ID</th><th>Name</th><th>Action</th><th>Message</th></tr></thead>
                                 <tbody id="messageLogBody"><tr><td colspan="5" style="text-align:center;color:rgba(255,255,255,0.4);">No message activity logged yet</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Study MRGR Feedback Responses -->
+                    <div style="margin-top:25px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <h4 style="color:var(--purple);font-size:13px;margin:0;">📋 Study MRGR Feedback Responses</h4>
+                            <div style="display:flex;gap:8px;">
+                                <button class="jarvis-btn btn-sm" onclick="loadStudyMrgrFeedback()" style="font-size:10px;padding:6px 12px;">🔄 REFRESH</button>
+                                <button class="jarvis-btn btn-sm" onclick="downloadStudyMrgrFeedback()" style="font-size:10px;padding:6px 12px;">📥 EXPORT</button>
+                                <button class="jarvis-btn btn-sm" onclick="clearStudyMrgrFeedback()" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);color:var(--red);font-size:10px;padding:6px 12px;">🗑️ CLEAR</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+                            <table class="data-table" style="font-size:11px;">
+                                <thead><tr><th>#</th><th>Date/Time</th><th>Name</th><th>Emp No.</th><th>Designation</th><th>Suggestions</th></tr></thead>
+                                <tbody id="mrgrFeedbackBody"><tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);">No feedback submitted yet</td></tr></tbody>
                             </table>
                         </div>
                     </div>
@@ -758,6 +779,48 @@
                             <tbody id="kmAnalysisBody"></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Study DMRC MRGR using AI Page -->
+        <div id="pageStudyMrgr" class="page">
+            <div class="glass-card cinematic-enter" style="padding:20px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(168,85,247,0.3);">
+                    <h2 style="font-family:'Syncopate';font-size:16px;margin:0;color:var(--purple);">📚 Feedback and Suggestions</h2>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <button class="jarvis-btn btn-sm" onclick="showPage('pageHome')" style="background:rgba(255,255,255,0.1);font-size:9px;padding:6px 10px;">← BACK</button>
+                    </div>
+                </div>
+                
+                <!-- Streamlit App Link -->
+                <div style="padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.06);margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-size:11px;color:rgba(255,255,255,0.25);">🧠 <span style="font-size:9px;color:rgba(255,255,255,0.18);">AI</span></span>
+                        <a href="https://dmrc-search-engine.streamlit.app/" target="_blank" style="color:rgba(168,85,247,0.35);font-size:10px;text-decoration:none;cursor:pointer;letter-spacing:0.5px;">launch →</a>
+                    </div>
+                </div>
+                
+                <!-- Feedback Form -->
+                <div style="padding:15px;background:linear-gradient(135deg,rgba(34,197,94,0.1),rgba(21,128,61,0.05));border-radius:12px;border:1px solid rgba(34,197,94,0.2);">
+                    <div style="font-size:13px;color:var(--green);font-weight:600;margin-bottom:12px;">📝 Feedback / Suggestions</div>
+                    <div class="input-group">
+                        <label class="input-label">Name <span style="color:var(--red);">*</span></label>
+                        <input type="text" id="mrgrName" class="jarvis-input" placeholder="Your full name">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Emp No. <span style="color:var(--red);">*</span></label>
+                        <input type="text" id="mrgrEmpNo" class="jarvis-input" placeholder="Employee number" style="text-transform:uppercase;">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Designation</label>
+                        <input type="text" id="mrgrDesg" class="jarvis-input" placeholder="e.g. Driver, Crew Controller, etc.">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Suggestions / Improvements <span style="color:var(--red);">*</span></label>
+                        <textarea id="mrgrSuggestions" class="jarvis-input" style="min-height:80px;resize:vertical;font-family:inherit;" placeholder="Share your feedback, suggestions, or improvement ideas..."></textarea>
+                    </div>
+                    <button class="jarvis-btn btn-green" onclick="submitStudyMrgrFeedback()" id="mrgrSubmitBtn" style="width:100%;">📤 SUBMIT FEEDBACK</button>
                 </div>
             </div>
         </div>
