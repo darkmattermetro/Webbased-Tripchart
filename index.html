@@ -232,6 +232,42 @@
                                 <div id="visitWeek" style="font-size:18px;color:var(--red);font-weight:bold;">-</div>
                             </div>
                         </div>
+                        
+                        <!-- Visitor Trend Chart (collapsible) -->
+                        <div style="margin-top:15px;">
+                            <div onclick="toggleVisitorChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(0,150,200,0.1));border-radius:8px;border-left:4px solid var(--cyan);">
+                                <span style="font-size:14px;">📈</span>
+                                <span style="font-family:'Syncopate';font-size:10px;text-transform:uppercase;letter-spacing:1px;flex:1;color:var(--cyan);">Visitor Trend</span>
+                                <span id="visitorChartArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▶</span>
+                            </div>
+                            <div id="visitorChartBody" style="display:none;padding:12px;background:rgba(0,0,0,0.2);border-radius:0 0 8px 8px;border:1px solid rgba(0,212,255,0.1);border-top:none;">
+                                <canvas id="visitorChart" style="width:100%;height:250px;"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Hour of Day (collapsible) -->
+                        <div style="margin-top:10px;">
+                            <div onclick="toggleHourChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(255,107,53,0.2),rgba(200,80,30,0.1));border-radius:8px;border-left:4px solid var(--orange);">
+                                <span style="font-size:14px;">⏰</span>
+                                <span style="font-family:'Syncopate';font-size:10px;text-transform:uppercase;letter-spacing:1px;flex:1;color:var(--orange);">By Hour of Day</span>
+                                <span id="hourChartArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▶</span>
+                            </div>
+                            <div id="hourChartBody" style="display:none;padding:12px;background:rgba(0,0,0,0.2);border-radius:0 0 8px 8px;border:1px solid rgba(255,107,53,0.1);border-top:none;">
+                                <canvas id="hourChart" style="width:100%;height:250px;"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Page Popularity (collapsible) -->
+                        <div style="margin-top:10px;">
+                            <div onclick="togglePageChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(100,50,200,0.1));border-radius:8px;border-left:4px solid var(--purple);">
+                                <span style="font-size:14px;">📄</span>
+                                <span style="font-family:'Syncopate';font-size:10px;text-transform:uppercase;letter-spacing:1px;flex:1;color:var(--purple);">Page Popularity</span>
+                                <span id="pageChartArrow" style="font-size:8px;color:rgba(255,255,255,0.4);">▶</span>
+                            </div>
+                            <div id="pageChartBody" style="display:none;padding:12px;background:rgba(0,0,0,0.2);border-radius:0 0 8px 8px;border:1px solid rgba(168,85,247,0.1);border-top:none;">
+                                <canvas id="pageChart" style="width:100%;height:250px;"></canvas>
+                            </div>
+                        </div>
                     </div>
                     <div style="margin-top:25px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -249,7 +285,7 @@
                     <!-- Study MRGR Feedback Responses -->
                     <div style="margin-top:25px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                            <h4 style="color:var(--purple);font-size:13px;margin:0;">📋Feedback Responses</h4>
+                            <h4 style="color:var(--purple);font-size:13px;margin:0;">📋 Feedback and Responses</h4>
                             <div style="display:flex;gap:8px;">
                                 <button class="jarvis-btn btn-sm" onclick="loadStudyMrgrFeedback()" style="font-size:10px;padding:6px 12px;">🔄 REFRESH</button>
                                 <button class="jarvis-btn btn-sm" onclick="downloadStudyMrgrFeedback()" style="font-size:10px;padding:6px 12px;">📥 EXPORT</button>
