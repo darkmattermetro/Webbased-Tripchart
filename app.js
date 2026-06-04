@@ -1518,6 +1518,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (page && page.id) trackVisit(page.id, 'pageview');
 });
 
+async function fetchAllVisitorLogs() {
+    let allData = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+        const { data, error } = await sb.from('visitor_logs').select('*').range(from, from + pageSize - 1).order('id', { ascending: true });
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+    }
+    return allData;
+}
+
 function trackVisit(page, type) {
     logVisit(page, type, currentUser ? currentUser.empId : null);
 }
@@ -1586,8 +1600,8 @@ async function logVisit(page, type, empId) {
 
 async function getVisitorStats() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*');
-        if (error || !data) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1615,6 +1629,213 @@ async function loadVisitorStats() {
     document.getElementById('visitLoggedIn').textContent = stats.loggedIn;
     document.getElementById('visitToday').textContent = stats.today;
     document.getElementById('visitWeek').textContent = stats.thisWeek;
+    const chartBody = document.getElementById('visitorChartBody');
+    if (chartBody && chartBody.style.display !== 'none') {
+        if (visitorChartInstance) { visitorChartInstance.destroy(); visitorChartInstance = null; }
+        renderVisitorChart();
+    }
+    const hourBody = document.getElementById('hourChartBody');
+    if (hourBody && hourBody.style.display !== 'none') {
+        if (hourChartInstance) { hourChartInstance.destroy(); hourChartInstance = null; }
+        renderHourChart();
+    }
+    const pageBody = document.getElementById('pageChartBody');
+    if (pageBody && pageBody.style.display !== 'none') {
+        if (pageChartInstance) { pageChartInstance.destroy(); pageChartInstance = null; }
+        renderPageChart();
+    }
+}
+
+// === VISITOR TREND CHART ===
+let visitorChartInstance = null;
+
+function toggleVisitorChart() {
+    const body = document.getElementById('visitorChartBody');
+    const arrow = document.getElementById('visitorChartArrow');
+    if (!body || !arrow) return;
+    const isVisible = body.style.display !== 'none';
+    body.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+    if (!isVisible && !visitorChartInstance) {
+        renderVisitorChart();
+    }
+}
+
+async function renderVisitorChart() {
+    try {
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
+        const dailyMap = {};
+        data.forEach(v => {
+            if (!v.timestamp) return;
+            const key = new Date(v.timestamp).toISOString().slice(0, 10);
+            dailyMap[key] = (dailyMap[key] || 0) + 1;
+        });
+        const sortedDates = Object.keys(dailyMap).sort();
+        if (sortedDates.length === 0) return;
+        const labels = sortedDates.map(d => {
+            const parts = d.split('-');
+            return parts[2] + '/' + parts[1];
+        });
+        const values = sortedDates.map(d => dailyMap[d]);
+        const canvas = document.getElementById('visitorChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (visitorChartInstance) visitorChartInstance.destroy();
+        visitorChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Visitors',
+                    data: values,
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0,212,255,0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#00d4ff',
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#fff', font: { size: 11 }, stepSize: 1 }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'rgba(255,255,255,0.7)', font: { size: 10 }, maxTicksLimit: 15 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(20,20,40,0.98)',
+                        borderColor: '#00d4ff',
+                        borderWidth: 2,
+                        titleColor: '#00d4ff',
+                        bodyColor: '#fff',
+                        padding: 10
+                    }
+                }
+            }
+        });
+    } catch (e) { console.error('Visitor chart error:', e); }
+}
+
+// === HOUR OF DAY CHART ===
+let hourChartInstance = null;
+
+function toggleHourChart() {
+    const body = document.getElementById('hourChartBody');
+    const arrow = document.getElementById('hourChartArrow');
+    if (!body || !arrow) return;
+    const isVisible = body.style.display !== 'none';
+    body.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+    if (!isVisible && !hourChartInstance) renderHourChart();
+}
+
+async function renderHourChart() {
+    try {
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
+        const hourCounts = Array(24).fill(0);
+        data.forEach(v => {
+            if (!v.timestamp) return;
+            const hour = new Date(v.timestamp).getHours();
+            hourCounts[hour]++;
+        });
+        const canvas = document.getElementById('hourChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (hourChartInstance) hourChartInstance.destroy();
+        hourChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0') + ':00'),
+                datasets: [{
+                    label: 'Visits',
+                    data: hourCounts,
+                    backgroundColor: hourCounts.map(v =>
+                        v > 0 ? 'rgba(255,107,53,0.7)' : 'rgba(255,107,53,0.15)'
+                    ),
+                    borderColor: 'rgba(255,107,53,0.9)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#fff', font: { size: 11 }, stepSize: 1 } },
+                    x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.7)', font: { size: 9 }, maxTicksLimit: 24 } }
+                },
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(20,20,40,0.98)', borderColor: '#ff6b35', borderWidth: 2, titleColor: '#ff6b35', bodyColor: '#fff', padding: 10 } }
+            }
+        });
+    } catch (e) { console.error('Hour chart error:', e); }
+}
+
+// === PAGE POPULARITY CHART ===
+let pageChartInstance = null;
+
+function togglePageChart() {
+    const body = document.getElementById('pageChartBody');
+    const arrow = document.getElementById('pageChartArrow');
+    if (!body || !arrow) return;
+    const isVisible = body.style.display !== 'none';
+    body.style.display = isVisible ? 'none' : 'block';
+    arrow.textContent = isVisible ? '▶' : '▼';
+    if (!isVisible && !pageChartInstance) renderPageChart();
+}
+
+async function renderPageChart() {
+    try {
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
+        const pageMap = {};
+        data.forEach(v => {
+            const p = (v.page || 'unknown').trim().toLowerCase();
+            pageMap[p] = (pageMap[p] || 0) + 1;
+        });
+        const sorted = Object.entries(pageMap).sort((a, b) => b[1] - a[1]);
+        if (sorted.length === 0) return;
+        const labels = sorted.map(s => s[0]);
+        const values = sorted.map(s => s[1]);
+        const canvas = document.getElementById('pageChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (pageChartInstance) pageChartInstance.destroy();
+        pageChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Views',
+                    data: values,
+                    backgroundColor: 'rgba(168,85,247,0.6)',
+                    borderColor: 'rgba(168,85,247,0.9)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    y: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.7)', font: { size: 11 } } },
+                    x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#fff', font: { size: 11 }, stepSize: 1 } }
+                },
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(20,20,40,0.98)', borderColor: '#a855f7', borderWidth: 2, titleColor: '#a855f7', bodyColor: '#fff', padding: 10 } }
+            }
+        });
+    } catch (e) { console.error('Page chart error:', e); }
 }
 
 function clearSession() {
@@ -1634,12 +1855,13 @@ function handleLogout() {
 
 async function downloadVisitorLog() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*').order('timestamp', { ascending: false });
-        if (error || !data || data.length === 0) { alert('No visitor data to export'); return; }
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) { alert('No visitor data to export'); return; }
+        data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         const wsData = [['VISITOR LOG REPORT'], ['Generated: ' + new Date().toLocaleString()], []];
         wsData.push(['Date/Time', 'Page', 'Type', 'Emp ID', 'User Agent']);
         data.forEach(v => {
-            wsData.push([v.timestamp || '', v.page || '', v.type || '', v.emp_id || 'Organic', v.user_agent || '']);
+            wsData.push([v.timestamp ? new Date(v.timestamp) : '', v.page || '', v.type || '', v.emp_id || 'Organic', v.user_agent || '']);
         });
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         const wb = XLSX.utils.book_new();
