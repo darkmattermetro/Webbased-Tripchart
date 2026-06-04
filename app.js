@@ -1518,6 +1518,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (page && page.id) trackVisit(page.id, 'pageview');
 });
 
+async function fetchAllVisitorLogs() {
+    let allData = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+        const { data, error } = await sb.from('visitor_logs').select('*').range(from, from + pageSize - 1).order('id', { ascending: true });
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+    }
+    return allData;
+}
+
 function trackVisit(page, type) {
     logVisit(page, type, currentUser ? currentUser.empId : null);
 }
@@ -1586,8 +1600,8 @@ async function logVisit(page, type, empId) {
 
 async function getVisitorStats() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*').limit(1000000);
-        if (error || !data) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1649,8 +1663,8 @@ function toggleVisitorChart() {
 
 async function renderVisitorChart() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*').limit(1000000);
-        if (error || !data) return;
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
         const dailyMap = {};
         data.forEach(v => {
             if (!v.timestamp) return;
@@ -1729,8 +1743,8 @@ function toggleHourChart() {
 
 async function renderHourChart() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*').limit(1000000);
-        if (error || !data) return;
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
         const hourCounts = Array(24).fill(0);
         data.forEach(v => {
             if (!v.timestamp) return;
@@ -1783,8 +1797,8 @@ function togglePageChart() {
 
 async function renderPageChart() {
     try {
-        const { data, error } = await sb.from('visitor_logs').select('*').limit(1000000);
-        if (error || !data) return;
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) return;
         const pageMap = {};
         data.forEach(v => {
             const p = (v.page || 'unknown').trim().toLowerCase();
@@ -1841,8 +1855,14 @@ function handleLogout() {
 
 async function downloadVisitorLog() {
     try {
+<<<<<<< HEAD
         const { data, error } = await sb.from('visitor_logs').select('*').order('timestamp', { ascending: false }).limit(1000000);
         if (error || !data || data.length === 0) { alert('No visitor data to export'); return; }
+=======
+        const data = await fetchAllVisitorLogs();
+        if (!data || data.length === 0) { alert('No visitor data to export'); return; }
+        data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+>>>>>>> dev
         const wsData = [['VISITOR LOG REPORT'], ['Generated: ' + new Date().toLocaleString()], []];
         wsData.push(['Date/Time', 'Page', 'Type', 'Emp ID', 'User Agent']);
         data.forEach(v => {
