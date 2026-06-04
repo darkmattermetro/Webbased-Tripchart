@@ -1855,14 +1855,9 @@ function handleLogout() {
 
 async function downloadVisitorLog() {
     try {
-<<<<<<< HEAD
-        const { data, error } = await sb.from('visitor_logs').select('*').order('timestamp', { ascending: false }).limit(1000000);
-        if (error || !data || data.length === 0) { alert('No visitor data to export'); return; }
-=======
         const data = await fetchAllVisitorLogs();
         if (!data || data.length === 0) { alert('No visitor data to export'); return; }
         data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
->>>>>>> dev
         const wsData = [['VISITOR LOG REPORT'], ['Generated: ' + new Date().toLocaleString()], []];
         wsData.push(['Date/Time', 'Page', 'Type', 'Emp ID', 'User Agent']);
         data.forEach(v => {
