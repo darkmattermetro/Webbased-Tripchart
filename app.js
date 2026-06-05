@@ -676,7 +676,7 @@ function switchAdminTab(tabName) {
     document.querySelectorAll('.admin-tab-content').forEach(t => t.style.display = 'none');
     const tabContent = document.getElementById('adminTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     if (tabContent) tabContent.style.display = 'block';
-    if (tabName === 'messages') { loadVisitorStats(); loadStudyMrgrFeedback(); }
+    if (tabName === 'messages') { loadVisitorStats(); }
     if (tabName === 'upload') loadKmData();
     if (tabName === 'km' || tabName === 'chart') loadKmData();
     if (tabName === 'users') loadUserManagementData();
@@ -833,7 +833,6 @@ async function loadAdminData() {
     if (isAdmin) {
         loadMessageLog();
         loadVisitorStats();
-        loadStudyMrgrFeedback();
     }
     // Restrict "Admin" dropdown option to emp 3623 only
     ['newUserAccessLevel', 'removeUserAccessLevel'].forEach(id => {
@@ -2754,83 +2753,6 @@ async function showKmAnalysis() {
         }
     }
     await generateKmAnalysis();
-}
-
-// === STUDY DMRC MRGR USING AI ===
-function showStudyMrgr() {
-    showPage('pageStudyMrgr');
-}
-
-async function submitStudyMrgrFeedback() {
-    const name = document.getElementById('mrgrName').value.trim();
-    const empNo = document.getElementById('mrgrEmpNo').value.trim();
-    const desg = document.getElementById('mrgrDesg').value.trim();
-    const suggestions = document.getElementById('mrgrSuggestions').value.trim();
-    if (!name) return alert('Please enter your name!');
-    if (!empNo) return alert('Please enter your employee number!');
-    if (!suggestions) return alert('Please enter your suggestions or feedback!');
-    const btn = document.getElementById('mrgrSubmitBtn');
-    btn.textContent = '⏳ Submitting...';
-    btn.disabled = true;
-    try {
-        const { error } = await sb.from('study_mrgr_feedback').insert({
-            name: name,
-            emp_no: empNo,
-            designation: desg || '',
-            suggestions: suggestions,
-            created_at: new Date()
-        });
-        if (error) { alert('Error: ' + error.message); return; }
-        alert('Thank you! Your feedback has been submitted successfully.');
-        document.getElementById('mrgrName').value = '';
-        document.getElementById('mrgrEmpNo').value = '';
-        document.getElementById('mrgrDesg').value = '';
-        document.getElementById('mrgrSuggestions').value = '';
-    } catch (e) { alert('Error: ' + e.toString()); }
-    finally { btn.textContent = '📤 SUBMIT FEEDBACK'; btn.disabled = false; }
-}
-
-async function loadStudyMrgrFeedback() {
-    try {
-        const { data, error } = await sb.from('study_mrgr_feedback').select('*').order('created_at', { ascending: false });
-        const tbody = document.getElementById('mrgrFeedbackBody');
-        if (error) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:15px;">DB Error: ' + error.message + '</td></tr>'; return; }
-        if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:rgba(255,255,255,0.4);">No feedback submitted yet</td></tr>'; return; }
-        let html = '';
-        data.forEach((r, i) => {
-            const date = r.created_at ? new Date(r.created_at).toLocaleString() : '-';
-            html += '<tr>' +
-                '<td style="color:rgba(255,255,255,0.4);">' + (i + 1) + '</td>' +
-                '<td style="font-size:10px;">' + date + '</td>' +
-                '<td>' + escapeHtml(r.name) + '</td>' +
-                '<td>' + escapeHtml(r.emp_no) + '</td>' +
-                '<td>' + escapeHtml(r.designation || '-') + '</td>' +
-                '<td style="max-width:250px;white-space:pre-wrap;word-break:break-word;">' + escapeHtml(r.suggestions) + '</td>' +
-                '</tr>';
-        });
-        tbody.innerHTML = html;
-    } catch (e) { document.getElementById('mrgrFeedbackBody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:15px;">Error: ' + e.toString() + '</td></tr>'; }
-}
-
-async function downloadStudyMrgrFeedback() {
-    try {
-        const { data, error } = await sb.from('study_mrgr_feedback').select('*').order('created_at', { ascending: false });
-        if (error || !data || data.length === 0) { alert('No feedback data to export'); return; }
-        const wsData = [['STUDY MRGR FEEDBACK REPORT'], ['Generated: ' + new Date().toLocaleString()], []];
-        wsData.push(['#', 'Date/Time', 'Name', 'Emp No.', 'Designation', 'Suggestions']);
-        data.forEach((r, i) => {
-            wsData.push([(i + 1), r.created_at || '', r.name || '', r.emp_no || '', r.designation || '', r.suggestions || '']);
-        });
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'MRGR Feedback');
-        XLSX.writeFile(wb, 'StudyMRGR_Feedback_' + new Date().toISOString().slice(0, 10) + '.xlsx');
-    } catch (e) { alert('Error: ' + e.toString()); }
-}
-
-async function clearStudyMrgrFeedback() {
-    if (!confirm('Clear all MRGR feedback responses?')) return;
-    try { await sb.from('study_mrgr_feedback').delete().neq('id', 0); alert('Feedback cleared!'); loadStudyMrgrFeedback(); } catch (e) { alert('Error: ' + e.toString()); }
 }
 
 function escapeHtml(str) {

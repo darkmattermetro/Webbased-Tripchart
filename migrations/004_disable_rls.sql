@@ -18,9 +18,7 @@ BEGIN
   IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'form_activity_log') THEN
     EXECUTE 'ALTER TABLE form_activity_log DISABLE ROW LEVEL SECURITY';
   END IF;
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'study_mrgr_feedback') THEN
-    EXECUTE 'ALTER TABLE study_mrgr_feedback DISABLE ROW LEVEL SECURITY';
-  END IF;
+
 END $$;
 
 -- Drop ALL existing RLS policies on guaranteed tables
