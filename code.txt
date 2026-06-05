@@ -1,0 +1,2134 @@
+// In-memory cache for rake gaps (clears on deploy, but fast while running)
+var _rakeGapsCache = {};
+
+function doGet() {
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
+    .setTitle('DMRC Line 7 Roster Master')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// ============ USER MANAGEMENT SYSTEM ============
+
+// Hardcoded Admin Access Code
+var ADMIN_ACCESS_CODE = "satvik";
+
+// MAIN ADMIN EMP ID - DO NOT CHANGE EASILY
+var MAIN_ADMIN_EMP_ID = "3623";
+
+// Secret code for admin access modification
+var ADMIN_SECRET_CODE = "mudit";
+
+// Get Allowed Admin IDs from dedicated sheet
+function getAllowedAdminIds() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('AllowedAdmins');
+    if (!sheet) {
+      sheet = ss.insertSheet('AllowedAdmins');
+      sheet.appendRow([MAIN_ADMIN_EMP_ID]);
+      return [MAIN_ADMIN_EMP_ID];
+    }
+    var data = sheet.getDataRange().getValues();
+    var ids = data.map(function(row) { return (row[0] || "").toString().trim().toUpperCase(); }).filter(function(id) { return id.length > 0; });
+    
+    if (ids.length === 0) return [MAIN_ADMIN_EMP_ID];
+    
+    // ALWAYS ensure MAIN_ADMIN_EMP_ID is in the list (protection layer)
+    if (ids.indexOf(MAIN_ADMIN_EMP_ID) === -1) {
+      ids.unshift(MAIN_ADMIN_EMP_ID);
+      setAllowedAdminIds(ids);
+    }
+    
+    return ids;
+  } catch (e) {
+    return [MAIN_ADMIN_EMP_ID];
+  }
+}
+
+// Set Allowed Admin IDs in dedicated sheet
+function setAllowedAdminIds(ids) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('AllowedAdmins');
+  if (!sheet) {
+    sheet = ss.insertSheet('AllowedAdmins');
+  }
+  
+  var normalizedIds = ids.map(function(id) { return id.toString().trim().toUpperCase(); });
+  if (normalizedIds.indexOf(MAIN_ADMIN_EMP_ID) === -1) {
+    normalizedIds.unshift(MAIN_ADMIN_EMP_ID);
+  }
+  
+  sheet.clear();
+  var rows = normalizedIds.map(function(id) { return [id]; });
+  if (rows.length > 0) {
+    sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+  }
+}
+
+// Get Allowed Crew Controller IDs from dedicated sheet
+function getAllowedCcIds() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('AllowedCCs');
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    return data.map(function(row) { return (row[0] || "").toString().trim().toUpperCase(); }).filter(function(id) { return id.length > 0; });
+  } catch (e) {
+    return [];
+  }
+}
+
+// Set Allowed Crew Controller IDs in dedicated sheet
+function setAllowedCcIds(ids) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('AllowedCCs');
+  if (!sheet) {
+    sheet = ss.insertSheet('AllowedCCs');
+  }
+  
+  var normalizedIds = ids.map(function(id) { return id.toString().trim().toUpperCase(); });
+  sheet.clear();
+  var rows = normalizedIds.map(function(id) { return [id]; });
+  if (rows.length > 0) {
+    sheet.getRange(1, 1, rows.length, 1).setValues(rows);
+  }
+}
+
+// Reset Allowed Admins to only main admin 3623
+function resetAllowedAdmins() {
+  setAllowedAdminIds(['3623']);
+  return "Admin IDs reset to 3623 only!";
+}
+
+// Reset Allowed Crew Controllers
+function resetAllowedCcIds() {
+  setAllowedCcIds([]);
+  return "Crew Controller IDs cleared!";
+}
+
+// Add user access permission
+function addUserAccess(empId, accessLevel) {
+  try {
+    var normalizedId = empId.toString().trim().toUpperCase();
+    if (accessLevel === 'admin') {
+      var current = getAllowedAdminIds();
+      if (current.indexOf(normalizedId) === -1) {
+        current.push(normalizedId);
+        setAllowedAdminIds(current);
+      }
+      return "Admin access added for " + normalizedId;
+    } else {
+      var currentCC = getAllowedCcIds();
+      if (currentCC.indexOf(normalizedId) === -1) {
+        currentCC.push(normalizedId);
+        setAllowedCcIds(currentCC);
+      }
+      return "Crew Controller access added for " + normalizedId;
+    }
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+// Remove user access permission
+function removeUserAccess(empId, accessLevel) {
+  try {
+    var normalizedId = empId.toString().trim().toUpperCase();
+    if (normalizedId === '3623') return "Cannot remove Main Admin!";
+    
+    if (accessLevel === 'admin') {
+      var current = getAllowedAdminIds();
+      var idx = current.indexOf(normalizedId);
+      if (idx > -1) {
+        current.splice(idx, 1);
+        setAllowedAdminIds(current);
+      }
+      return "Admin access removed for " + normalizedId;
+    } else {
+      var currentCC = getAllowedCcIds();
+      var idxCC = currentCC.indexOf(normalizedId);
+      if (idxCC > -1) {
+        currentCC.splice(idxCC, 1);
+        setAllowedCcIds(currentCC);
+      }
+      return "Crew Controller access removed for " + normalizedId;
+    }
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+// Get all registered users
+function getAllUsers() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var usersSheet = ss.getSheetByName('Users');
+    if (!usersSheet) return [];
+    var data = usersSheet.getDataRange().getValues();
+    var users = [];
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0]) {
+        users.push({
+          empId: data[i][0],
+          name: data[i][1] || '',
+          accessLevel: data[i][3] || 'crewcontroller',
+          created: data[i][4] || ''
+        });
+      }
+    }
+    return users;
+  } catch (e) { return []; }
+}
+
+// Helper to get config value
+function getConfigValue(key) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Config');
+    if (!sheet) return null;
+    var data = sheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === key) {
+        var val = data[i][1];
+        return (val !== null && val !== undefined) ? val.toString() : null;
+      }
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+// Helper to set config value
+function setConfigValue(key, value) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Config');
+    if (!sheet) {
+      sheet = ss.insertSheet('Config');
+    }
+    var data = sheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === key) {
+        sheet.getRange(i + 1, 2).setValue(value);
+        return true;
+      }
+    }
+    sheet.appendRow([key, value]);
+    return true;
+  } catch (e) { return false; }
+}
+
+// Simple hash function for passwords
+function hashPassword(password) {
+  var hash = 0;
+  for (var i = 0; i < password.length; i++) {
+    var char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString();
+}
+
+// Setup Users sheet
+function setupUsersSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var usersSheet = ss.getSheetByName('Users');
+  if (!usersSheet) {
+    usersSheet = ss.insertSheet('Users');
+    usersSheet.getRange(1, 1, 1, 6).setValues([['EmpID', 'Name', 'PasswordHash', 'AccessLevel', 'CreatedAt', 'LastLogin']]);
+    usersSheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+    usersSheet.setFrozenRows(1);
+  }
+  return usersSheet;
+}
+
+// Check if Emp ID is allowed for registration
+function isEmpIdAllowed(empId, accessLevel) {
+  var normalizedId = (empId || "").toString().trim().toUpperCase();
+  if (accessLevel === 'admin') {
+    var adminIds = getAllowedAdminIds();
+    return adminIds.indexOf(normalizedId) !== -1;
+  } else if (accessLevel === 'crewcontroller') {
+    var ccIds = getAllowedCcIds();
+    return ccIds.indexOf(normalizedId) !== -1;
+  }
+  return false;
+}
+
+// Register new user
+function registerUser(empId, name, password, accessCode, accessLevel) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var usersSheet = setupUsersSheet();
+    
+    // Verify access code
+    if (accessCode !== ADMIN_ACCESS_CODE) {
+      return { success: false, message: "Invalid Access Code!" };
+    }
+    
+    // Verify Emp ID is allowed
+    if (!isEmpIdAllowed(empId, accessLevel)) {
+      return { success: false, message: "Emp ID not authorized for this access level!" };
+    }
+    
+    var normalizedId = (empId || "").toString().trim().toUpperCase();
+    var normalizedName = (name || "").toString().trim();
+    
+    // Check if Emp ID already registered
+    var userData = usersSheet.getDataRange().getValues();
+    for (var i = 1; i < userData.length; i++) {
+      if (userData[i][0].toString().toUpperCase() === normalizedId) {
+        return { success: false, message: "Emp ID already registered! Please login." };
+      }
+    }
+    
+    // Hash password and save
+    var passwordHash = hashPassword(password);
+    var now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    
+    usersSheet.appendRow([normalizedId, normalizedName, passwordHash, accessLevel, now, '']);
+    
+    return { success: true, message: "Registration successful! Please login with Emp ID and Password." };
+  } catch (e) {
+    return { success: false, message: "Error: " + e.toString() };
+  }
+}
+
+// Login user
+function loginUser(empId, password) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var usersSheet = setupUsersSheet();
+    
+    var normalizedId = (empId || "").toString().trim().toUpperCase();
+    var passwordHash = hashPassword(password);
+    
+    var userData = usersSheet.getDataRange().getValues();
+    for (var i = 1; i < userData.length; i++) {
+      if (userData[i][0].toString().toUpperCase() === normalizedId) {
+        // Check password
+        if (userData[i][2].toString() === passwordHash) {
+          // Update last login
+          var now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+          usersSheet.getRange(i + 1, 6).setValue(now);
+          
+          return { 
+            success: true, 
+            empId: userData[i][0], 
+            name: userData[i][1], 
+            accessLevel: (userData[i][3] || "").toString().toLowerCase(),
+            message: "Login successful!" 
+          };
+        } else {
+          return { success: false, message: "Invalid Password!" };
+        }
+      }
+    }
+    
+    return { success: false, message: "Emp ID not found! Please register first." };
+  } catch (e) {
+    return { success: false, message: "Error: " + e.toString() };
+  }
+}
+
+// Get user info by Emp ID
+function getUserInfo(empId) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var usersSheet = ss.getSheetByName('Users');
+    if (!usersSheet) return null;
+    
+    var normalizedId = (empId || "").toString().trim().toUpperCase();
+    var userData = usersSheet.getDataRange().getValues();
+    
+    for (var i = 1; i < userData.length; i++) {
+      if (userData[i][0].toString().toUpperCase() === normalizedId) {
+        return {
+          empId: userData[i][0],
+          name: userData[i][1],
+          accessLevel: userData[i][3],
+          createdAt: userData[i][4],
+          lastLogin: userData[i][5]
+        };
+      }
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Get all allowed Emp IDs for admin reference
+function getAllowedEmpIds() {
+  return {
+    admin: getAllowedAdminIds(),
+    crewController: getAllowedCcIds(),
+    mainAdmin: MAIN_ADMIN_EMP_ID
+  };
+}
+
+// Get registered users list
+function getRegisteredUsers() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var usersSheet = ss.getSheetByName('Users');
+    if (!usersSheet) return [];
+    var data = usersSheet.getDataRange().getValues();
+    var users = [];
+    for (var i = 1; i < data.length; i++) {
+      users.push({
+        empId: data[i][0],
+        name: data[i][1],
+        accessLevel: data[i][3],
+        createdAt: data[i][4],
+        lastLogin: data[i][5]
+      });
+    }
+    return users;
+  } catch (e) {
+    return [];
+  }
+}
+
+// Add allowed Emp ID (Only admins can do this, secret code required for admin access)
+function addAllowedEmpId(empId, accessLevel, secretCode, requesterEmpId) {
+  try {
+    var adminIds = getAllowedAdminIds();
+    var requesterNormalized = (requesterEmpId || "").toString().trim().toUpperCase();
+    if (adminIds.indexOf(requesterNormalized) === -1) {
+      return { success: false, message: "Only admins can modify access!" };
+    }
+    
+    var normalizedId = (empId || "").toString().trim().toUpperCase();
+    
+    if (normalizedId === MAIN_ADMIN_EMP_ID) {
+      return { success: false, message: "Cannot modify main admin access!" };
+    }
+    
+    if (accessLevel === 'admin') {
+      // Secret code required for admin access modification
+      if ((secretCode || "").toString().trim().toLowerCase() !== ADMIN_SECRET_CODE) {
+        return { success: false, message: "Invalid Secret Code!" };
+      }
+      if (adminIds.indexOf(normalizedId) !== -1) {
+        return { success: false, message: "Emp ID already in admin list!" };
+      }
+      adminIds.push(normalizedId);
+      setAllowedAdminIds(adminIds);
+      return { success: true, message: normalizedId + " added to Admin access!" };
+    } else if (accessLevel === 'crewcontroller') {
+      var ccIds = getAllowedCcIds();
+      if (ccIds.indexOf(normalizedId) !== -1) {
+        return { success: false, message: "Emp ID already in Crew Controller list!" };
+      }
+      ccIds.push(normalizedId);
+      setAllowedCcIds(ccIds);
+      return { success: true, message: normalizedId + " added to Crew Controller access!" };
+    }
+    
+    return { success: false, message: "Invalid access level!" };
+  } catch (e) {
+    return { success: false, message: "Error: " + e.toString() };
+  }
+}
+
+// Remove allowed Emp ID (Only admins can do this, secret code required for admin access)
+function removeAllowedEmpId(empId, accessLevel, secretCode, requesterEmpId) {
+  try {
+    var adminIds = getAllowedAdminIds();
+    var requesterNormalized = (requesterEmpId || "").toString().trim().toUpperCase();
+    if (adminIds.indexOf(requesterNormalized) === -1) {
+      return { success: false, message: "Only admins can modify access!" };
+    }
+    
+    var normalizedId = (empId || "").toString().trim().toUpperCase();
+    
+    if (normalizedId === MAIN_ADMIN_EMP_ID) {
+      return { success: false, message: "Cannot modify main admin access!" };
+    }
+    
+    if (accessLevel === 'admin') {
+      // Secret code required for admin access modification
+      if ((secretCode || "").toString().trim().toLowerCase() !== ADMIN_SECRET_CODE) {
+        return { success: false, message: "Invalid Secret Code!" };
+      }
+      var idx = adminIds.indexOf(normalizedId);
+      if (idx === -1) {
+        return { success: false, message: "Emp ID not in admin list!" };
+      }
+      adminIds.splice(idx, 1);
+      setAllowedAdminIds(adminIds);
+      return { success: true, message: normalizedId + " removed from Admin access!" };
+    } else if (accessLevel === 'crewcontroller') {
+      var ccIds = getAllowedCcIds();
+      var idx2 = ccIds.indexOf(normalizedId);
+      if (idx2 === -1) {
+        return { success: false, message: "Emp ID not in Crew Controller list!" };
+      }
+      ccIds.splice(idx2, 1);
+      setAllowedCcIds(ccIds);
+      return { success: true, message: normalizedId + " removed from Crew Controller access!" };
+    }
+    
+    return { success: false, message: "Invalid access level!" };
+  } catch (e) {
+    return { success: false, message: "Error: " + e.toString() };
+  }
+}
+
+// Reset admin IDs to default (only MAIN_ADMIN_EMP_ID)
+function resetAdminIds() {
+  setAllowedAdminIds([MAIN_ADMIN_EMP_ID]);
+  return "Admin IDs reset to default: " + MAIN_ADMIN_EMP_ID;
+}
+
+// Reset CC IDs to empty
+function resetCcIds() {
+  setAllowedCcIds([]);
+  return "CC IDs reset to empty";
+}
+
+// ============ END USER MANAGEMENT ============
+
+function initialSetup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ['Weekday', 'Saturday', 'Sunday', 'Special', 'Config', 'FormBuilder', 'FormResponses'];
+  sheets.forEach(function(name) {
+    if (!ss.getSheetByName(name)) ss.insertSheet(name);
+  });
+  setupUsersSheet();
+  var configSheet = ss.getSheetByName('Config');
+  var configData = configSheet.getDataRange().getValues();
+  var hasFormActive = false;
+  for (var i = 0; i < configData.length; i++) {
+    if (configData[i][0] === 'FormActive') {
+      hasFormActive = true;
+      break;
+    }
+  }
+  if (!hasFormActive) configSheet.appendRow(['FormActive', 'false']);
+  
+  // No longer using Config sheet for IDs, using dedicated sheets
+  // These will be created automatically by the getter functions
+  
+  return "All tabs and settings initialized!";
+}
+
+function initApp() {
+  try {
+    initialSetup();
+    return { status: 'ok', formActive: getFormStatus() };
+  } catch (e) {
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ============ VISITOR TRACKING ============
+
+function getOrCreateVisitorSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('VisitorLog');
+  if (!sheet) {
+    sheet = ss.insertSheet('VisitorLog');
+    sheet.appendRow(['Timestamp', 'Page', 'Type', 'EmpID', 'UserAgent']);
+  }
+  return sheet;
+}
+
+function logVisit(page, type, empId) {
+  try {
+    var sheet = getOrCreateVisitorSheet();
+    var userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
+    sheet.appendRow([new Date(), page, type, empId || 'Organic', userAgent.substring(0, 100)]);
+    return { success: true };
+  } catch (e) { return { success: false }; }
+}
+
+function getVisitorStats() {
+  try {
+    var sheet = getOrCreateVisitorSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
+    
+    var data = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    var total = data.length;
+    var organic = 0;
+    var loggedIn = 0;
+    var todayCount = 0;
+    var weekCount = 0;
+    
+    for (var i = 0; i < data.length; i++) {
+      var timestamp = data[i][0];
+      var empId = data[i][3]; // Column 4 is EmpID
+      
+      if (!empId || empId === 'Organic' || empId.trim() === '') organic++;
+      else loggedIn++;
+      
+      if (timestamp) {
+        var visitDate = new Date(timestamp);
+        if (!isNaN(visitDate.getTime())) {
+          var visitDay = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate());
+          if (visitDay.getTime() === today.getTime()) todayCount++;
+          if (visitDay >= weekAgo) weekCount++;
+        }
+      }
+    }
+    
+    return { totalVisits: total, organic: organic, loggedIn: loggedIn, today: todayCount, thisWeek: weekCount };
+  } catch (e) { return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 }; }
+}
+
+function clearVisitorLog() {
+  try {
+    var sheet = getOrCreateVisitorSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) sheet.deleteRows(2, lastRow - 1);
+    return 'Visitor log cleared!';
+  } catch (e) { return 'Error: ' + e.toString(); }
+}
+
+function getVisitorLogData() {
+  try {
+    var sheet = getOrCreateVisitorSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { error: 'No visitor data' };
+    
+    var data = sheet.getRange(2, 1, lastRow - 1, 5).getDisplayValues();
+    var rows = [];
+    var dailyStats = {};
+    var totalOrganic = 0;
+    var totalLoggedIn = 0;
+    var hours = {};
+    
+    for (var i = 0; i < data.length; i++) {
+      var timestamp = data[i][0];
+      var page = data[i][1];
+      var type = data[i][2];
+      var empId = data[i][3];
+      var userAgent = data[i][4];
+      
+      var userType = (!empId || empId === 'Organic' || empId.trim() === '') ? 'Organic' : 'Logged In';
+      if (userType === 'Organic') totalOrganic++;
+      else totalLoggedIn++;
+      
+      if (timestamp) {
+        var visitDate = new Date(timestamp);
+        if (!isNaN(visitDate.getTime())) {
+          var dateStr = visitDate.toLocaleDateString('en-GB');
+          var timeStr = visitDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          var hour = visitDate.getHours();
+          
+          if (!dailyStats[dateStr]) dailyStats[dateStr] = { total: 0, organic: 0, loggedIn: 0, pages: {} };
+          dailyStats[dateStr].total++;
+          dailyStats[dateStr][userType === 'Organic' ? 'organic' : 'loggedIn']++;
+          if (!dailyStats[dateStr].pages[page]) dailyStats[dateStr].pages[page] = 0;
+          dailyStats[dateStr].pages[page]++;
+          
+          if (!hours[hour]) hours[hour] = 0;
+          hours[hour]++;
+        }
+      }
+      
+      rows.push({
+        date: timestamp,
+        page: page,
+        type: type,
+        empId: empId || 'Organic',
+        userType: userType,
+        userAgent: userAgent
+      });
+    }
+    
+    var dailyArray = [];
+    for (var date in dailyStats) {
+      dailyArray.push({
+        date: date,
+        total: dailyStats[date].total,
+        organic: dailyStats[date].organic,
+        loggedIn: dailyStats[date].loggedIn,
+        pages: dailyStats[date].pages,
+        hourBreakdown: hours
+      });
+    }
+    dailyArray.sort(function(a, b) {
+      var da = new Date(a.date.split('/').reverse().join('-'));
+      var db = new Date(b.date.split('/').reverse().join('-'));
+      return db - da;
+    });
+    
+    return {
+      visits: rows.reverse(),
+      totalVisits: rows.length,
+      totalOrganic: totalOrganic,
+      totalLoggedIn: totalLoggedIn,
+      dailyStats: dailyArray,
+      hourBreakdown: hours
+    };
+  } catch (e) { return { error: e.toString() }; }
+}
+
+function uploadData(csvData, type, wef, remarks) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(type);
+    var configSheet = ss.getSheetByName('Config');
+    var configData = configSheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 0; i < configData.length; i++) {
+      if (configData[i][0] == type) {
+        configSheet.getRange(i + 1, 2, 1, 2).setValues([[wef, remarks]]);
+        found = true; break;
+      }
+    }
+    if (!found) configSheet.appendRow([type, wef, remarks]);
+    sheet.clear();
+    var rows = Utilities.parseCsv(csvData.replace(/\r/g, ""));
+    if (rows.length > 0) {
+      sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+      return type + " data uploaded.";
+    }
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function clearRosterData(type) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(type);
+  if (sheet) { sheet.clear(); return type + " database cleared."; }
+  return "Error.";
+}
+
+function timeToMins(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string' || timeStr.indexOf(':') === -1) return -1;
+  var parts = timeStr.split(':');
+  return (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
+}
+
+function analyzeRakeRelievers(type) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(type);
+    if (!sheet || sheet.getLastRow() < 2) return {};
+    
+    var data = sheet.getDataRange().getDisplayValues();
+    var rakeTrips = {};
+    
+    // Group by Rake ID (index 8)
+    for (var i = 1; i < data.length; i++) {
+      var rake = (data[i][8] || "").toString().trim();
+      if (!rake) continue;
+      if (!rakeTrips[rake]) rakeTrips[rake] = [];
+      
+      rakeTrips[rake].push({
+        duty: data[i][0],
+        depTime: data[i][10],
+        arrTime: data[i][12],
+        arrLoc: (data[i][11] || "").toString().trim().toUpperCase(),
+        depLoc: (data[i][9] || "").toString().trim().toUpperCase(),
+        rake: rake
+      });
+    }
+    
+    var gaps = {}; // Key: Rake|Time -> true
+    
+    // After sorting rake ID data, mark start and end of each rake's journey
+    for (var rake in rakeTrips) {
+      var trips = rakeTrips[rake];
+      // Sort by departure time
+      trips.sort(function(a, b) {
+        return timeToMins(a.depTime) - timeToMins(b.depTime);
+      });
+      
+      // Deduplicate trips (same depTime + arrTime + depLoc + arrLoc)
+      var deduped = [];
+      var tripSeen = {};
+      for (var k = 0; k < trips.length; k++) {
+        var key = trips[k].depTime + '|' + trips[k].arrTime + '|' + trips[k].depLoc + '|' + trips[k].arrLoc;
+        if (!tripSeen[key]) {
+          tripSeen[key] = true;
+          deduped.push(trips[k]);
+        }
+      }
+      trips = deduped;
+      
+      // First trip: mark departure (no person sitting in train at start)
+      // Skip if depTime == arrTime (stub/placeholder entry, not a real trip)
+      if (trips.length > 0) {
+        if (!MathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
+          var firstDepKey = rake + '|' + trips[0].depTime;
+          gaps[firstDepKey] = true;
+        }
+      }
+      
+      // Check for gaps between consecutive trips
+      for (var j = 0; j < trips.length - 1; j++) {
+        var currentEnd = timeToMins(trips[j].arrTime);
+        var nextStart = timeToMins(trips[j+1].depTime);
+        var sameDuty = trips[j].duty === trips[j+1].duty;
+        
+        // Exception: If current trip ends at MKPR and next trip starts from MKPR with same duty, no X needed
+        var mkprException = (trips[j].arrLoc === 'MKPR' && trips[j+1].depLoc === 'MKPR' && sameDuty);
+        
+        if (!MathTolerant(currentEnd, nextStart)) {
+          // Gap found
+          if (!mkprException) {
+            // Mark arrival (no reliever) and next departure (no person)
+            gaps[rake + '|' + trips[j].arrTime] = true;
+            gaps[rake + '|' + trips[j+1].depTime] = true;
+          }
+        }
+      }
+      
+      // Last trip: mark arrival (no one sitting further in train)
+      // Skip if depTime == arrTime (stub/placeholder entry, not a real trip)
+      if (trips.length > 0) {
+        var lastTrip = trips[trips.length - 1];
+        if (!MathTolerant(timeToMins(lastTrip.depTime), timeToMins(lastTrip.arrTime))) {
+          gaps[rake + '|' + lastTrip.arrTime] = true;
+        }
+      }
+    }
+    return gaps;
+  } catch (e) {
+    Logger.log("Reliever Analysis Error: " + e);
+    return {};
+  }
+}
+
+function MathTolerant(t1, t2) {
+  return Math.abs(t1 - t2) <= 1;
+}
+
+function getDutyData(type, dutyNo) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(type);
+    if (!sheet || sheet.getLastRow() < 1) return { error: "No database found for " + type };
+    var data = sheet.getDataRange().getDisplayValues();
+    var configData = ss.getSheetByName('Config').getDataRange().getDisplayValues();
+    var result = { roster: [], wef: "", remarks: "", totalKm: 0, rakeGaps: {} };
+    
+    for(var i=0; i<configData.length; i++){
+      if(configData[i][0] == type){ result.wef = configData[i][1]; result.remarks = configData[i][2]; break; }
+    }
+    
+    var searchDuty = (dutyNo || "").toString().trim().toLowerCase().replace('.0', '');
+    var found = false;
+    
+    for (var j = 0; j < data.length; j++) {
+      var rawCell = data[j][0];
+      var cellValue = (rawCell || "").toString().trim().toLowerCase().replace('.0', '');
+      
+      if (cellValue === searchDuty && cellValue !== "") {
+        found = true;
+        result.roster.push(data[j]);
+      } else if (found && (rawCell === "" || rawCell === undefined || rawCell === null)) {
+        if (data[j].join("").trim().length < 2) break; 
+        result.roster.push(data[j]);
+      } else if (found && cellValue !== "" && cellValue !== searchDuty) { 
+        break; 
+      }
+    }
+    
+    if (found) {
+      var kmMap = {
+        "DDSC DN|KKDA DN": 26.22,
+        "DDSC DN PF|KKDA DN": 26.22,
+        "DDSC DN PF STABLE|KKDA DN": 26.22,
+        "DDSC SDG|PBGW UP": 12.26,
+        "DDSC SDG STABLE|PBGW UP": 12.26,
+        "DDSC SDG|KKDA DN": 26.75,
+        "DDSC SDG STABLE|KKDA DN": 26.75,
+        "DDSC|DDSC SDG STABLE": 0.5,
+        "DDSC|DDSC SDG": 0.5,
+        "IPE|PBGW UP": 34.92,
+        "IPE|MUPR UP":10.4 ,
+        "IPE|KKDA DN": 3.16,
+        "KKDA DN|SAKP": 27.26,
+        "KKDA DN|MUPR DN": 7.3,
+        "KKDA DN|MKPR": 20.67,
+        "KKDA DN|PBGW DN": 29.10,
+        "KKDA DN|DDSC DN PF STABLE": 40.96,
+        "KKDA DN|DDSC DN PF": 40.96,
+        "KKDA DN|DDSC DN": 40.96,
+        "KKDA DN|DDSC SDG STABLE": 41.46,
+        "KKDA DN|DDSC SDG": 41.46,
+        "MUPR DN|MUPR 4TH SDG": 1.4,
+        "KKDA UP|PBGW UP": 38.08,
+        "KKDA UP|IPE": 3.16,
+        "KKDA UP|NZM": 13.26,
+        "MKPR|KKDA UP": 20.67,
+        "MKPR|PBGW DN": 8.43,
+        "MKPR|SAKP": 6.59,
+        "MKPR|MUPR": 13.36,
+        "MUPR UP|KKDA UP": 7.3,
+        "MUPR|SVVR DN SDG": 4,
+        "MUPR|SVVR DN SDG STABLE": 4,
+        "MUPR|MUPR 4TH PF STABLE": 1,
+        "MUPR|MUPR 4TH PF": 1,
+        "MUPR|MUPR 4TH SDG": 1.4,
+        "MUPR|MUPR 3RD SDG": 1.4,
+        "MUPR|MUPR DN PF STABLE": 0,
+        "MUPR 3RD SDG|KKDA UP": 7.7,
+        "MUPR 3RD SDG STABLE|KKDA UP": 7.7,
+        "MUPR 3RD SDG STABLE|SVVR UP": 4,
+        "MUPR 3RD SDG|SVVR UP": 4,
+        "MUPR 4TH|KKDA UP": 7.3,
+        "MUPR 4TH PF|KKDA UP": 7.3,
+        "MUPR 4TH PF STABLE|SVVR UP": 3.6,
+        "MUPR 4TH PF|SVVR UP": 3.6,
+        "MUPR 4TH SDG|SVVR UP": 4,
+        "MUPR 4TH SDG STABLE|SVVR UP": 4,
+        "MUPR DN|PBGW DN": 21.79,
+        "MVPO DN|KKDA DN": 7.95,
+        "NZM|MVPO DN": 6.31,
+        "NZM|MVPO DN PF STABLE": 6.31,
+        "NZM|MVPO DN PF": 6.31,
+        "PBGW DN|DDSC DN PF STABLE": 11.86,
+        "PBGW DN|DDSC DN PF": 11.86,
+        "PBGW DN|DDSC DN": 11.86,
+        "PBGW DN|DDSC SDG STABLE": 12.26,
+        "PBGW DN|DDSC SDG": 12.26,
+        "PBGW DN|IPE": 34.92,
+        "PBGW DN|KKDA DN": 38.08,
+        "PBGW DN|DDSC":11.86,
+        "PBGW UP|KKDA UP": 29.10,
+        "PBGW UP|MUPR":21.79,
+        "PBGW UP|MKPR":8.43,
+        "SAKP 3RD|PBGW DN":1.84,
+        "SVVR DN|KKDA UP":11.91,
+        "SVVR DN SDG|MUPR DN":4.8,
+        "SVVR DN PF|KKDA UP":11.91,
+        "SVVR DN PF STABLE|KKDA UP":11.91,
+        "SVVR DN|SVVR DN SDG STABLE":0.4,
+        "SVVR DN|SVVR DN SDG":0.4,
+        "SVVR DN PF|SVVR DN SDG STABLE":0.4,
+        "SVVR DN PF|SVVR DN SDG":0.4,
+        "SVVR DN SDG|MUPR": 4,
+        "SVVR DN SDG STABLE|MUPR": 4
+      };
+      
+      var totalKm = 0;
+      for (var i = 0; i < result.roster.length; i++) {
+        var r = result.roster[i];
+        var kmValue = 0;
+        
+        if (r[8] !== undefined && r[8] !== null && r[8].toString().trim() !== "") { 
+          var from = (r[9] || "").toString().trim().toUpperCase();
+          var to = (r[11] || "").toString().trim().toUpperCase();
+          kmValue = kmMap[from + '|' + to] || 0;
+          totalKm += kmValue;
+        }
+        
+        while(r.length <= 15) r.push("");
+        r[15] = kmValue;
+      }
+      result.totalKm = totalKm.toFixed(2);
+      
+      // Use cached rake gaps if available, otherwise calculate and cache
+      if (!_rakeGapsCache[type]) {
+        _rakeGapsCache[type] = analyzeRakeRelievers(type);
+      }
+      result.rakeGaps = _rakeGapsCache[type];
+    }
+    
+    return found ? result : { error: "Duty '" + dutyNo + "' not found." };
+  } catch (e) { return { error: e.toString() }; }
+}
+
+function getGraphData(type, seriesArray, customDuties) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(type);
+    if (!sheet || sheet.getLastRow() < 2) return { error: "No data in " + type };
+    var data = sheet.getDataRange().getDisplayValues();
+    var chartData = [];
+    var totalMinutes = 0;
+    var seenDuties = {};
+
+    for (var i = 1; i < data.length; i++) {
+      var d = (data[i][0] || "").toString().trim();
+      var isSeriesMatched = seriesArray.some(function(s) { 
+        if (s === '11-20') {
+          var num = parseInt(d);
+          return num >= 11 && num <= 20;
+        }
+        var num = parseInt(s);
+        if (num >= 10) return d === s || d.startsWith(s + '-') || d.startsWith(s + '0');
+        return d.startsWith(s);
+      });
+      var isCustomMatched = customDuties && customDuties.length > 0 && customDuties.indexOf(d) !== -1;
+      
+      if ((isSeriesMatched || isCustomMatched) && d !== "") {
+        if (seenDuties[d]) continue;
+        
+        var timeStr = (data[i][5] || "").toString().trim();
+        if (timeStr === "" || timeStr.indexOf(":") === -1) continue;
+        
+        var p = timeStr.split(':');
+        var mins = (parseInt(p[0]) || 0) * 60 + (parseInt(p[1]) || 0);
+        
+        seenDuties[d] = true;
+        
+        chartData.push({ 
+          duty: d, 
+          running: mins / 60, 
+          runningStr: timeStr, 
+          dutyStr: (data[i][6] || "").toString(), 
+          signOnLoc: (data[i][2] || "").toString(),
+          signOnTime: (data[i][1] || "").toString(),
+          signOffLoc: (data[i][3] || "").toString(),
+          signOffTime: (data[i][4] || "").toString()
+        });
+        totalMinutes += mins;
+      }
+    }
+    
+    if (!chartData.length) return { error: "No duties found." };
+    
+    var avgMins = totalMinutes / chartData.length;
+    var avgHrs = Math.floor(avgMins / 60);
+    var remMins = Math.round(avgMins % 60);
+    if (remMins === 60) { avgHrs++; remMins = 0; }
+    var avgStr = avgHrs.toString().padStart(2, '0') + ":" + remMins.toString().padStart(2, '0');
+
+    return { details: chartData, avgTime: avgStr, day: type };
+  } catch (e) { return { error: e.toString() }; }
+}
+
+function saveUserMessage(message, empId, empName) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) { ss.insertSheet('Config'); configSheet = ss.getSheetByName('Config'); }
+    var data = configSheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] == 'UserMessage') { configSheet.getRange(i + 1, 2).setValue(message); found = true; break; }
+    }
+    if (!found) configSheet.appendRow(['UserMessage', message]);
+    
+    // Log to MessageLog sheet for tracking
+    logMessageActivity(empId, empName, message, 'MSG_POSTED');
+    
+    return "Message saved and logged!";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function logMessageActivity(empId, empName, message, action) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('MessageLog');
+    if (!logSheet) {
+      logSheet = ss.insertSheet('MessageLog');
+      logSheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'EmpID', 'EmpName', 'Message', 'Action']]);
+      logSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+      logSheet.setFrozenRows(1);
+    }
+    var now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    logSheet.appendRow([now, empId || 'Unknown', empName || 'Unknown', message || '', action]);
+  } catch (e) { Logger.log("Log error: " + e.toString()); }
+}
+
+function getUserMessage() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) return { message: "" };
+    var data = configSheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) { if (data[i][0] == 'UserMessage') return { message: data[i][1] }; }
+    return { message: "" };
+  } catch (e) { return { message: "" }; }
+}
+
+function getMessageLog() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('MessageLog');
+    if (!logSheet) return [];
+    var data = logSheet.getDataRange().getValues();
+    var logs = [];
+    for (var i = 1; i < data.length; i++) {
+      logs.push({
+        timestamp: data[i][0],
+        empId: data[i][1],
+        empName: data[i][2],
+        message: data[i][3],
+        action: data[i][4]
+      });
+    }
+    return logs;
+  } catch (e) { return []; }
+}
+
+function clearMessageLogSheet() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('MessageLog');
+    if (logSheet) {
+      logSheet.clear();
+      logSheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'EmpID', 'EmpName', 'Message', 'Action']]);
+      logSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+    }
+    return "Message activity log cleared!";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function clearFormActivityLogSheet() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('FormActivityLog');
+    if (logSheet) {
+      logSheet.clear();
+      logSheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'EmpID', 'EmpName', 'Action', 'Details']]);
+      logSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+    }
+    return "Form activity log cleared!";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function clearUserMessage(empId, empName) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) return true;
+    var data = configSheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) { if (data[i][0] == 'UserMessage') { configSheet.getRange(i + 1, 2).clearContent(); break; } }
+    
+    // Log the clear action
+    logMessageActivity(empId, empName, '', 'MSG_CLEARED');
+    
+    return true;
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function savePopupMessage(message, empId, empName) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) { ss.insertSheet('Config'); configSheet = ss.getSheetByName('Config'); }
+    var data = configSheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] == 'PopupMessage') { configSheet.getRange(i + 1, 2).setValue(message); found = true; break; }
+    }
+    if (!found) configSheet.appendRow(['PopupMessage', message]);
+    
+    // Log to MessageLog sheet
+    logMessageActivity(empId, empName, message, 'POPUP_POSTED');
+    
+    return true;
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function getPopupMessage() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) return { message: "" };
+    var data = configSheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) { if (data[i][0] == 'PopupMessage') return { message: data[i][1] }; }
+    return { message: "" };
+  } catch (e) { return { message: "" }; }
+}
+
+function clearPopupMessage(empId, empName) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) return true;
+    var data = configSheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) { if (data[i][0] == 'PopupMessage') { configSheet.getRange(i + 1, 2).clearContent(); break; } }
+    
+    // Log to MessageLog sheet
+    logMessageActivity(empId, empName, '', 'POPUP_CLEARED');
+    
+    return true;
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+// ============= FORM BUILDER SYSTEM =============
+
+function initFormBuilder() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ['FormBuilder', 'FormResponses'];
+  sheets.forEach(function(name) {
+    if (!ss.getSheetByName(name)) {
+      ss.insertSheet(name);
+      var sheet = ss.getSheetByName(name);
+      if (name === 'FormBuilder') {
+        sheet.getRange(1, 1, 1, 4).setValues([['FieldName', 'FieldType', 'Required', 'Options']]);
+        sheet.getRange(1, 1, 1, 4).setBackground('#00d4ff').setFontWeight('bold');
+        sheet.getRange(2, 1, 1, 4).setValues([['Name', 'text', 'true', '']]);
+        sheet.getRange(3, 1, 1, 4).setValues([['Emp No', 'text', 'true', '']]);
+      } else {
+        sheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'SubmittedBy', 'EmpNo', 'Name', 'Status']]);
+        sheet.getRange(1, 1, 1, 5).setBackground('#22c55e').setFontWeight('bold');
+      }
+    }
+  });
+  return "Form Builder initialized!";
+}
+
+function getFormFields() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('FormBuilder');
+    if (!sheet) return { heading: '', fields: [] };
+    var data = sheet.getDataRange().getDisplayValues();
+    
+    var result = { heading: '', fields: [] };
+    
+    // Check if new format (has FormHeading in header)
+    if (data.length > 1 && data[0][0] === 'FormHeading') {
+      // Row 2 is the form heading
+      if (data.length > 2 && data[2][0]) {
+        result.heading = data[2][0];
+      }
+      
+      // Start from row 3 for fields (skip header row 1 and heading row 2)
+      for (var i = 3; i < data.length; i++) {
+        if (data[i][1]) { // FieldName is in column 2
+          result.fields.push({
+            name: data[i][1],
+            type: data[i][2] || 'text',
+            required: data[i][3] === 'true',
+            options: data[i][4] ? data[i][4].split(',').map(function(s){ return s.trim(); }) : []
+          });
+        }
+      }
+    } else {
+      // Old format - start from row 2
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0]) {
+          result.fields.push({
+            name: data[i][0],
+            type: data[i][1] || 'text',
+            required: data[i][2] === 'true',
+            options: data[i][3] ? data[i][3].split(',').map(function(s){ return s.trim(); }) : []
+          });
+        }
+      }
+    }
+    
+    return result;
+  } catch (e) { return { heading: '', fields: [] }; }
+}
+
+function saveFormFields(fieldsJson, formHeading, empId, empName) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('FormBuilder');
+    if (!sheet) {
+      ss.insertSheet('FormBuilder');
+      sheet = ss.getSheetByName('FormBuilder');
+    }
+    
+    // Clear and set headers
+    sheet.clear();
+    sheet.getRange(1, 1, 1, 5).setValues([['FormHeading', 'FieldName', 'FieldType', 'Required', 'Options']]);
+    sheet.getRange(1, 1, 1, 5).setBackground('#00d4ff').setFontWeight('bold');
+    
+    // Save form heading in first row
+    var heading = (formHeading || 'Untitled Form').trim();
+    sheet.getRange(2, 1, 1, 5).setValues([[heading, '', '', '', '']]);
+    sheet.getRange(2, 1, 1, 5).setBackground('rgba(0,212,255,0.1)');
+    
+    var fields = JSON.parse(fieldsJson);
+    var rowNum = 3;
+    for (var i = 0; i < fields.length; i++) {
+      sheet.getRange(rowNum, 2, 1, 4).setValues([[
+        fields[i].name,
+        fields[i].type,
+        fields[i].required ? 'true' : 'false',
+        fields[i].options ? fields[i].options.join(', ') : ''
+      ]]);
+      rowNum++;
+    }
+    
+    // Update FormResponses headers - NO default fields, ALL custom
+    var respSheet = ss.getSheetByName('FormResponses');
+    if (!respSheet) {
+      ss.insertSheet('FormResponses');
+      respSheet = ss.getSheetByName('FormResponses');
+    }
+    
+    var headers = ['Timestamp', 'SubmittedBy', 'EmpNo'];
+    fields.forEach(function(f) { headers.push(f.name); });
+    headers.push('Status');
+    respSheet.clear();
+    respSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    respSheet.getRange(1, 1, 1, headers.length).setBackground('#22c55e').setFontWeight('bold');
+    respSheet.setFrozenRows(1);
+    
+    // Log form activity
+    logFormActivity(empId, empName, 'FORM_PUBLISHED', heading + ' (' + fields.length + ' fields)');
+    
+    return "Form '" + heading + "' saved with " + fields.length + " custom fields!";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function logFormActivity(empId, empName, action, details) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('FormActivityLog');
+    if (!logSheet) {
+      logSheet = ss.insertSheet('FormActivityLog');
+      logSheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'EmpID', 'EmpName', 'Action', 'Details']]);
+      logSheet.getRange(1, 1, 1, 5).setFontWeight('bold');
+      logSheet.setFrozenRows(1);
+    }
+    var now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    logSheet.appendRow([now, empId || 'Unknown', empName || 'Unknown', action, details || '']);
+    return true;
+  } catch (e) { return false; }
+}
+
+function getFormActivityLog() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logSheet = ss.getSheetByName('FormActivityLog');
+    if (!logSheet) return [];
+    var data = logSheet.getDataRange().getValues();
+    var logs = [];
+    for (var i = 1; i < data.length; i++) {
+      logs.push({
+        timestamp: data[i][0],
+        empId: data[i][1],
+        empName: data[i][2],
+        action: data[i][3],
+        details: data[i][4]
+      });
+    }
+    return logs;
+  } catch (e) { return []; }
+}
+
+function submitFormData(dataJson) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var respSheet = ss.getSheetByName('FormResponses');
+    if (!respSheet) return { success: false, message: "Form not configured. Contact admin." };
+    
+    var data = JSON.parse(dataJson);
+    var fields = getFormFields();
+    var row = [new Date(), data.submittedBy || '', data.empNo || ''];
+    fields.forEach(function(f) {
+      row.push(data[f.name] || '');
+    });
+    row.push('Pending');
+    
+    respSheet.appendRow(row);
+    return { success: true, message: "Form submitted successfully!" };
+  } catch (e) { return { success: false, message: "Error: " + e.toString() }; }
+}
+
+function getFormResponses() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('FormResponses');
+    if (!sheet || sheet.getLastRow() < 2) return [];
+    return sheet.getDataRange().getDisplayValues();
+  } catch (e) { return []; }
+}
+
+function updateResponseStatus(rowNum, status) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('FormResponses');
+    if (sheet) {
+      var lastCol = sheet.getLastColumn();
+      sheet.getRange(rowNum, lastCol).setValue(status);
+      return true;
+    }
+    return false;
+  } catch (e) { return false; }
+}
+
+function clearFormResponses() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('FormResponses');
+    if (sheet) {
+      sheet.clear();
+      sheet.getRange(1, 1, 1, 5).setValues([['Timestamp', 'SubmittedBy', 'EmpNo', 'Name', 'Status']]);
+      sheet.getRange(1, 1, 1, 5).setBackground('#22c55e').setFontWeight('bold');
+      return "Form responses cleared!";
+    }
+    return "Sheet not found.";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function isFormActive() {
+  try {
+    var fields = getFormFields();
+    return fields.length > 0;
+  } catch (e) { return false; }
+}
+
+function getFormStatus() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) {
+      configSheet = ss.insertSheet('Config');
+      configSheet.appendRow(['FormActive', 'false']);
+      return false;
+    }
+    var data = configSheet.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === 'FormActive') {
+        var val = data[i][1];
+        return (val === true || val === 'true' || val === 'TRUE' || val === 1);
+      }
+    }
+    configSheet.appendRow(['FormActive', 'false']);
+    return false;
+  } catch (e) { return false; }
+}
+
+function setFormActive(active) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) {
+      configSheet = ss.insertSheet('Config');
+    }
+    var data = configSheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === 'FormActive') {
+        configSheet.getRange(i + 1, 2).setValue(active ? 'true' : 'false');
+        found = true;
+        break;
+      }
+    }
+    if (!found) configSheet.appendRow(['FormActive', active ? 'true' : 'false']);
+    
+    // Log form activation activity
+    logFormActivity('SYSTEM', 'SYSTEM', active ? 'FORM_ACTIVATED' : 'FORM_DEACTIVATED', 'Form link ' + (active ? 'activated' : 'deactivated'));
+    
+    return active ? "Form LINK ACTIVATED for users!" : "Form LINK DEACTIVATED!";
+  } catch (e) { return "Error: " + e.toString(); }
+}
+
+function debugLogTest() {
+  logMessageActivity('TEST', 'Debug Test', 'Test message', 'TEST_ACTION');
+  logFormActivity('TEST', 'Debug Test', 'FORM_TEST', 'Test form activity');
+  return "Debug test completed - check MessageLog and FormActivityLog sheets";
+}
+
+function debugFormStatus() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var configSheet = ss.getSheetByName('Config');
+    if (!configSheet) return "Config sheet not found!";
+    var data = configSheet.getDataRange().getValues();
+    var result = "Config Sheet Contents:\n";
+    for (var i = 0; i < data.length; i++) {
+      result += "Row " + (i+1) + ": [" + data[i].join(" | ") + "]\n";
+    }
+    result += "\ngetFormStatus() returns: " + getFormStatus();
+    return result;
+  } catch (e) {
+    return "Error: " + e.toString();
+  }
+}
+
+// ============ TETRA KEY CACHE FUNCTIONS ============
+
+function getOrCreateTetraCacheSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TetraCache');
+  if (!sheet) {
+    sheet = ss.insertSheet('TetraCache');
+    sheet.appendRow(['DayType', 'RakeID', 'Duty', 'BoardStn', 'BoardTime', 'AlightStn', 'AlightTime', 'Action']);
+  }
+  return sheet;
+}
+
+function analyzeAndCacheTetraData(type) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var dataSheet = ss.getSheetByName(type);
+    if (!dataSheet || dataSheet.getLastRow() < 2) return { success: false, message: 'No ' + type + ' data found. Upload CSV first.' };
+    
+    var lastRow = dataSheet.getLastRow();
+    var lastCol = dataSheet.getLastColumn();
+    var data = dataSheet.getDataRange().getDisplayValues();
+    
+    // Show debug info
+    Logger.log(type + ' - Rows: ' + lastRow + ', Cols: ' + lastCol);
+    if (data.length > 0) {
+      Logger.log('Header row: ' + data[0].join(' | '));
+    }
+    
+    // Count valid trips (rows with rake ID in column 9 - index 8)
+    var validTrips = 0;
+    var rakeList = [];
+    
+    // Check columns 9-13 for sample row
+    if (data.length > 1) {
+      Logger.log('Sample data cols 9-13: ' + [data[1][8], data[1][9], data[1][10], data[1][11], data[1][12]]);
+    }
+    
+    for (var i = 1; i < data.length; i++) {
+      var rake = (data[i][8] || "").toString().trim();
+      var duty = (data[i][0] || "").toString().trim();
+      if (rake && duty) {
+        validTrips++;
+        if (rakeList.indexOf(rake) === -1) rakeList.push(rake);
+      }
+    }
+    
+    if (validTrips === 0) return { success: false, message: type + ' - No valid data! Check column I (rake ID). Found ' + validTrips + ' trips.' };
+    
+    // Build full data map
+    var allTrips = {};
+    
+    for (var i = 1; i < data.length; i++) {
+      var duty = (data[i][0] || "").toString().trim();
+      var rake = (data[i][8] || "").toString().trim();
+      var depTime = data[i][10];
+      var arrTime = data[i][12];
+      var depLoc = (data[i][9] || "").toString().trim().toUpperCase();
+      var arrLoc = (data[i][11] || "").toString().trim().toUpperCase();
+      
+      if (!rake || !duty) continue;
+      
+      if (!allTrips[rake]) allTrips[rake] = [];
+      allTrips[rake].push({
+        duty: duty,
+        depTime: depTime,
+        arrTime: arrTime,
+        depLoc: depLoc,
+        arrLoc: arrLoc
+      });
+    }
+    
+    var gaps = [];
+    
+    for (var rake in allTrips) {
+      var trips = allTrips[rake];
+      trips.sort(function(a, b) { return timeToMins(a.depTime) - timeToMins(b.depTime); });
+      
+      // Deduplicate trips (same depTime + arrTime + depLoc + arrLoc)
+      var deduped = [];
+      var tripSeen = {};
+      for (var k = 0; k < trips.length; k++) {
+        var key = trips[k].depTime + '|' + trips[k].arrTime + '|' + trips[k].depLoc + '|' + trips[k].arrLoc;
+        if (!tripSeen[key]) {
+          tripSeen[key] = true;
+          deduped.push(trips[k]);
+        }
+      }
+      trips = deduped;
+      
+      // First trip BOARDING — skip if depTime == arrTime (stub entry)
+      if (trips.length > 0) {
+        if (!MathTolerant(timeToMins(trips[0].depTime), timeToMins(trips[0].arrTime))) {
+          gaps.push({ rakeId: rake, duty: trips[0].duty, station: trips[0].depLoc, time: trips[0].depTime, action: 'BOARDING' });
+        }
+      }
+      
+      for (var j = 0; j < trips.length - 1; j++) {
+        var currentEnd = timeToMins(trips[j].arrTime);
+        var nextStart = timeToMins(trips[j+1].depTime);
+        var sameDuty = trips[j].duty === trips[j+1].duty;
+        var mkprException = (trips[j].arrLoc === 'MKPR' && trips[j+1].depLoc === 'MKPR' && sameDuty);
+        
+        if (!MathTolerant(currentEnd, nextStart) && !mkprException) {
+          gaps.push({ rakeId: rake, duty: trips[j].duty, station: trips[j].arrLoc, time: trips[j].arrTime, action: 'ALIGHTING' });
+          gaps.push({ rakeId: rake, duty: trips[j+1].duty, station: trips[j+1].depLoc, time: trips[j+1].depTime, action: 'BOARDING' });
+        }
+      }
+      
+      // Last trip ALIGHTING — skip if depTime == arrTime (stub entry)
+      if (trips.length > 0) {
+        var lastTrip = trips[trips.length - 1];
+        if (!MathTolerant(timeToMins(lastTrip.depTime), timeToMins(lastTrip.arrTime))) {
+          gaps.push({ rakeId: rake, duty: lastTrip.duty, station: lastTrip.arrLoc, time: lastTrip.arrTime, action: 'ALIGHTING' });
+        }
+      }
+    }
+    
+    var flatData = [];
+    for (var i = 0; i < gaps.length; i++) {
+      flatData.push([
+        type,
+        gaps[i].rakeId,
+        gaps[i].duty,
+        gaps[i].action === 'BOARDING' ? gaps[i].station : '-',
+        gaps[i].action === 'BOARDING' ? gaps[i].time : '-',
+        gaps[i].action === 'ALIGHTING' ? gaps[i].station : '-',
+        gaps[i].action === 'ALIGHTING' ? gaps[i].time : '-',
+        gaps[i].action
+      ]);
+    }
+    
+    var cacheSheet = getOrCreateTetraCacheSheet();
+    
+    // Clear all existing data for this type first
+    var cacheLastRow = cacheSheet.getLastRow();
+    if (cacheLastRow > 1) {
+      var existingData = cacheSheet.getDataRange().getValues();
+      var rowsToDelete = [];
+      for (var i = 1; i < existingData.length; i++) {
+        if ((existingData[i][0] || "").toString().trim() === type) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      if (rowsToDelete.length > 0) {
+        rowsToDelete.sort(function(a, b) { return b - a; });
+        for (var i = 0; i < rowsToDelete.length; i++) {
+          cacheSheet.deleteRow(rowsToDelete[i]);
+        }
+      }
+      // Force recalculation of last row
+      cacheLastRow = cacheSheet.getLastRow();
+    }
+    
+    // Append new data starting from row 2
+    if (flatData.length > 0) {
+      var startRow = cacheLastRow + 1;
+      if (cacheLastRow < 2) startRow = 2;
+      cacheSheet.getRange(startRow, 1, flatData.length, 8).setValues(flatData);
+      Logger.log('Wrote ' + flatData.length + ' rows starting at row ' + startRow);
+    }
+    
+    // Verify data was written
+    var verifyLastRow = cacheSheet.getLastRow();
+    var verifyData = cacheSheet.getDataRange().getDisplayValues();
+    var writeCount = 0;
+    for (var i = 1; i < verifyData.length; i++) {
+      if ((verifyData[i][0] || "").toString().trim() === type) writeCount++;
+    }
+    Logger.log('Verification: Found ' + writeCount + ' rows for ' + type + ' (expected ' + flatData.length + ')');
+    
+    return { success: true, message: type + ': ' + validTrips + ' trips, ' + rakeList.length + ' rakes, ' + flatData.length + ' tetra', writeCount: writeCount, count: flatData.length };
+  } catch (e) { return { success: false, message: 'Error: ' + e.toString() }; }
+}
+
+function clearTetraCache(type) {
+  try {
+    var cacheSheet = getOrCreateTetraCacheSheet();
+    var lastRow = cacheSheet.getLastRow();
+    if (lastRow > 1) {
+      // Delete ALL rows for this type - completely clear
+      var data = cacheSheet.getRange(1, 1, lastRow, 8).getDisplayValues();
+      var rowsToDelete = [];
+      for (var i = 1; i < data.length; i++) {
+        if ((data[i][0] || "").toString().trim() === type) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      if (rowsToDelete.length > 0) {
+        rowsToDelete.sort(function(a, b) { return b - a; });
+        for (var i = 0; i < rowsToDelete.length; i++) {
+          cacheSheet.deleteRow(rowsToDelete[i]);
+        }
+      }
+    }
+    return { success: true, message: type + ' cache cleared' };
+  } catch (e) { return { success: false, message: 'Error: ' + e.toString() }; }
+}
+
+function getTetraCacheStatus() {
+  try {
+    var cacheSheet = getOrCreateTetraCacheSheet();
+    var lastRow = cacheSheet.getLastRow();
+    if (lastRow < 2) return { Weekday: false, Saturday: false, Sunday: false, Special: false };
+    var data = cacheSheet.getRange(1, 1, lastRow, 1).getValues();
+    var status = { Weekday: false, Saturday: false, Sunday: false, Special: false };
+    for (var i = 1; i < data.length; i++) {
+      var dayType = (data[i][0] || "").toString().trim();
+      if (dayType && status.hasOwnProperty(dayType)) status[dayType] = true;
+    }
+    return status;
+  } catch (e) { return { Weekday: false, Saturday: false, Sunday: false, Special: false }; }
+}
+
+function getLiveTetraData(type, stationFilter, directionFilter) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(type);
+    if (!sheet || sheet.getLastRow() < 2) return { error: "No data for " + type + ". Upload CSV first." };
+    
+    var data = sheet.getDataRange().getDisplayValues();
+    var gaps = analyzeRakeRelievers(type);
+    
+    var seenDuties = {};
+    var seenRakes = {};
+    var tripMap = {};
+    var depTimes = {};
+    var arrTimes = {};
+    
+    for (var i = 1; i < data.length; i++) {
+      var rake = (data[i][8] || "").toString().trim();
+      var duty = (data[i][0] || "").toString().trim();
+      var depTime = data[i][10];
+      var arrTime = data[i][12];
+      var depLoc = (data[i][9] || "").toString().trim().toUpperCase();
+      var arrLoc = (data[i][11] || "").toString().trim().toUpperCase();
+      
+      if (!rake || !duty) continue;
+      
+      var key = rake + '|' + depTime;
+      if (!tripMap[key]) {
+        tripMap[key] = { rakeId: rake, duty: duty, boardStn: depLoc, boardTime: depTime, alightStn: arrLoc, alightTime: arrTime };
+      }
+      depTimes[key] = true;
+      
+      var arrKey = rake + '|' + arrTime;
+      arrTimes[arrKey] = true;
+    }
+    
+    var tetraData = [];
+    var added = {};
+    
+    for (var gapKey in gaps) {
+      var rakeId = gapKey.split('|')[0];
+      var gapTime = gapKey.split('|')[1];
+      
+      var isBoard = depTimes[gapKey];
+      var isAlight = arrTimes[gapKey];
+      
+      if (tripMap[gapKey] && !seenDuties[tripMap[gapKey].duty]) { seenDuties[tripMap[gapKey].duty] = true; }
+      if (!seenRakes[rakeId]) { seenRakes[rakeId] = true; }
+      
+      if (isBoard && tripMap[gapKey]) {
+        var item = {
+          rakeId: rakeId,
+          duty: tripMap[gapKey].duty,
+          boardStn: tripMap[gapKey].boardStn,
+          boardTime: tripMap[gapKey].boardTime,
+          alightStn: tripMap[gapKey].alightStn,
+          alightTime: tripMap[gapKey].alightTime,
+          action: 'BOARDING'
+        };
+        
+        var addIt = true;
+        if (stationFilter && stationFilter !== 'ALL' && item.boardStn.indexOf(stationFilter) === -1) addIt = false;
+        if (directionFilter && directionFilter !== 'ALL' && directionFilter !== 'BOARDING' && item.action !== directionFilter) addIt = false;
+        
+        if (addIt) {
+          var uniqKey = rakeId + '|' + gapTime + '|BOARDING';
+          if (!added[uniqKey]) {
+            tetraData.push(item);
+            added[uniqKey] = true;
+          }
+        }
+      }
+      
+      if (isAlight) {
+        var arrKey = rakeId + '|' + gapTime;
+        var arrTrip = null;
+        for (var k in tripMap) {
+          var parts = k.split('|');
+          if (parts[0] === rakeId && tripMap[k].alightTime === gapTime) {
+            arrTrip = tripMap[k];
+            break;
+          }
+        }
+        
+        if (arrTrip) {
+          if (!seenDuties[arrTrip.duty]) { seenDuties[arrTrip.duty] = true; }
+          var item = {
+            rakeId: rakeId,
+            duty: arrTrip.duty,
+            boardStn: arrTrip.boardStn,
+            boardTime: arrTrip.boardTime,
+            alightStn: arrTrip.alightStn,
+            alightTime: arrTrip.alightTime,
+            action: 'ALIGHTING'
+          };
+          
+          var addIt = true;
+          if (stationFilter && stationFilter !== 'ALL' && item.alightStn.indexOf(stationFilter) === -1) addIt = false;
+          if (directionFilter && directionFilter !== 'ALL' && directionFilter !== 'DEBOARDING' && item.action !== directionFilter && directionFilter !== 'ALIGHTING') addIt = false;
+          
+          if (addIt) {
+            var uniqKey = rakeId + '|' + gapTime + '|ALIGHTING';
+            if (!added[uniqKey]) {
+              tetraData.push(item);
+              added[uniqKey] = true;
+            }
+          }
+        }
+      }
+    }
+    
+    tetraData.sort(function(a, b) {
+      var timeA = timeToMins(a.action === 'BOARDING' ? a.boardTime : a.alightTime);
+      var timeB = timeToMins(b.action === 'BOARDING' ? b.boardTime : b.alightTime);
+      if (timeA !== timeB) return timeA - timeB;
+      if (a.rakeId !== b.rakeId) return a.rakeId.localeCompare(b.rakeId);
+      return 0;
+    });
+    
+    return {
+      tetraData: tetraData,
+      tetraCount: tetraData.length,
+      dutyCount: Object.keys(seenDuties).length,
+      rakeCount: Object.keys(seenRakes).length,
+      day: type,
+      stationFilter: stationFilter,
+      directionFilter: directionFilter,
+      source: 'live'
+    };
+  } catch (e) { return { error: e.toString() }; }
+}
+
+function getCachedTetraData(type, stationFilter, directionFilter) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var cacheSheet = ss.getSheetByName('TetraCache');
+    if (!cacheSheet || cacheSheet.getLastRow() < 2) return null;
+    
+    var data = cacheSheet.getDataRange().getDisplayValues();
+    var tetraData = [];
+    var seenDuties = {};
+    var seenRakes = {};
+    
+    for (var i = 1; i < data.length; i++) {
+      var dayType = (data[i][0] || "").toString().trim();
+      if (dayType !== type) continue;
+      
+      var rakeId = (data[i][1] || "").toString().trim();
+      var duty = (data[i][2] || "").toString().trim();
+      var boardStn = (data[i][3] || "").toString().trim();
+      var boardTime = (data[i][4] || "").toString();
+      var alightStn = (data[i][5] || "").toString().trim();
+      var alightTime = (data[i][6] || "").toString();
+      var action = (data[i][7] || "").toString().trim();
+      
+      if (!rakeId) continue;
+      
+      if (duty && !seenDuties[duty]) seenDuties[duty] = true;
+      if (!seenRakes[rakeId]) seenRakes[rakeId] = true;
+      
+      if (stationFilter && stationFilter !== 'ALL' && action === 'BOARDING' && boardStn.indexOf(stationFilter) === -1) continue;
+      if (stationFilter && stationFilter !== 'ALL' && action === 'ALIGHTING' && alightStn.indexOf(stationFilter) === -1) continue;
+      if (directionFilter && directionFilter !== 'ALL' && directionFilter !== 'BOARDING' && directionFilter !== 'DEBOARDING' && directionFilter !== 'ALIGHTING' && action !== directionFilter) continue;
+      
+      var item = {
+        rakeId: rakeId,
+        duty: duty,
+        boardStn: boardStn,
+        boardTime: boardTime,
+        alightStn: alightStn,
+        alightTime: alightTime,
+        action: action
+      };
+      tetraData.push(item);
+    }
+    
+    if (tetraData.length === 0) return null;
+    
+    tetraData.sort(function(a, b) {
+      var timeA = timeToMins(a.action === 'BOARDING' ? a.boardTime : a.alightTime);
+      var timeB = timeToMins(b.action === 'BOARDING' ? b.boardTime : b.alightTime);
+      if (timeA !== timeB) return timeA - timeB;
+      if (a.rakeId !== b.rakeId) return a.rakeId.localeCompare(b.rakeId);
+      return 0;
+    });
+    
+    return {
+      tetraData: tetraData,
+      tetraCount: tetraData.length,
+      dutyCount: Object.keys(seenDuties).length,
+      rakeCount: Object.keys(seenRakes).length,
+      day: type,
+      stationFilter: stationFilter,
+      directionFilter: directionFilter,
+      source: 'cache'
+    };
+  } catch (e) { return null; }
+}
+
+function getTetraKeyData(type, seriesArray, customDuties, stationFilter, directionFilter) {
+  var cachedResult = getCachedTetraData(type, stationFilter, directionFilter);
+  if (cachedResult) return cachedResult;
+  return getLiveTetraData(type, stationFilter, directionFilter);
+}
+
+// ============ KM DATA CACHE FUNCTIONS ============
+
+function getOrCreateKMCacheSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('KMCache');
+  if (!sheet) {
+    sheet = ss.insertSheet('KMCache');
+    sheet.appendRow(['DayType', 'Duty', 'SignOn', 'SignOnLoc', 'SignOff', 'SignOffLoc', 'KM']);
+  }
+  return sheet;
+}
+
+function analyzeAndCacheKMData(type) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var dataSheet = ss.getSheetByName(type);
+    if (!dataSheet || dataSheet.getLastRow() < 2) return { success: false, message: 'No data found for ' + type };
+    
+    var data = dataSheet.getDataRange().getDisplayValues();
+    var kmMap = {
+      "DDSC DN|KKDA DN": 26.22, "DDSC DN PF|KKDA DN": 26.22, "DDSC DN PF STABLE|KKDA DN": 26.22,
+      "DDSC SDG|PBGW UP": 12.26, "DDSC SDG STABLE|PBGW UP": 12.26, "DDSC SDG|KKDA DN": 26.75,
+      "DDSC SDG STABLE|KKDA DN": 26.75, "DDSC|DDSC SDG STABLE": 0.5, "DDSC|DDSC SDG": 0.5,
+      "IPE|PBGW UP": 34.92, "IPE|KKDA DN": 3.16, "KKDA DN|SAKP": 27.26, "KKDA DN|MUPR DN": 7.3,
+      "KKDA DN|MKPR": 20.67, "KKDA DN|PBGW DN": 29.10, "KKDA DN|DDSC DN PF STABLE": 40.96,
+      "KKDA DN|DDSC DN PF": 40.96, "KKDA DN|DDSC DN": 40.96, "KKDA DN|DDSC SDG STABLE": 41.46,
+      "KKDA DN|DDSC SDG": 41.46, "MUPR DN|MUPR 4TH SDG": 1.4, "KKDA UP|PBGW UP": 38.08,
+      "KKDA UP|IPE": 3.16, "KKDA UP|NZM": 13.26, "MKPR|KKDA UP": 20.67, "MKPR|PBGW DN": 8.43,
+      "MKPR|SAKP": 6.59, "MKPR|MUPR": 13.36, "MUPR|SVVR DN SDG": 4, "MUPR|SVVR DN SDG STABLE": 4,
+      "MUPR|MUPR 4TH PF STABLE": 1, "MUPR|MUPR 4TH PF": 1, "MUPR|MUPR 4TH SDG": 1.4,
+      "MUPR|MUPR 3RD SDG": 1.4, "MUPR|MUPR DN PF STABLE": 0, "MUPR 3RD SDG|KKDA UP": 7.7,
+      "MUPR 3RD SDG STABLE|KKDA UP": 7.7, "MUPR 3RD SDG STABLE|SVVR UP": 4, "MUPR 3RD SDG|SVVR UP": 4,
+      "MUPR 4TH|KKDA UP": 7.3, "MUPR 4TH PF|KKDA UP": 7.3, "MUPR 4TH PF STABLE|SVVR UP": 3.6,
+      "MUPR 4TH PF|SVVR UP": 3.6, "MUPR 4TH SDG|SVVR UP": 4, "MUPR 4TH SDG STABLE|SVVR UP": 4,
+      "MUPR DN|PBGW DN": 21.79, "MVPO DN|KKDA DN": 7.95, "NZM|MVPO DN": 6.31,
+      "NZM|MVPO DN PF STABLE": 6.31, "NZM|MVPO DN PF": 6.31, "PBGW DN|DDSC DN PF STABLE": 11.86,
+      "PBGW DN|DDSC DN PF": 11.86, "PBGW DN|DDSC DN": 11.86, "PBGW DN|DDSC SDG STABLE": 12.26,
+      "PBGW DN|DDSC SDG": 12.26, "PBGW DN|IPE": 34.92, "PBGW DN|KKDA DN": 38.08, "PBGW DN|DDSC":11.86,
+      "PBGW UP|KKDA UP": 29.10, "PBGW UP|MUPR":21.79, "PBGW UP|MKPR":8.43, "SAKP 3RD|PBGW DN":1.84,
+      "SVVR DN|KKDA UP":11.91, "SVVR DN PF|KKDA UP":11.91, "SVVR DN PF STABLE|KKDA UP":11.91,
+      "SVVR DN|SVVR DN SDG STABLE":0.4, "SVVR DN|SVVR DN SDG":0.4, "SVVR DN PF|SVVR DN SDG STABLE":0.4,
+      "SVVR DN PF|SVVR DN SDG":0.4, "SVVR DN SDG|MUPR": 4, "SVVR DN SDG STABLE|MUPR": 4
+    };
+    
+    var dutyDataMap = {};
+    for (var i = 1; i < data.length; i++) {
+      var dutyNo = (data[i][0] || "").toString().trim();
+      if (!dutyNo || dutyNo === "") continue;
+      
+      if (!dutyDataMap[dutyNo]) {
+        dutyDataMap[dutyNo] = { km: 0, signOn: (data[i][1] || "").toString(), signOnLoc: (data[i][2] || "").toString(), signOff: (data[i][4] || "").toString(), signOffLoc: (data[i][3] || "").toString() };
+      }
+      
+      var rake = (data[i][8] || "").toString().trim();
+      if (rake !== "") {
+        var from = (data[i][9] || "").toString().trim().toUpperCase();
+        var to = (data[i][11] || "").toString().trim().toUpperCase();
+        var km = kmMap[from + '|' + to] || 0;
+        dutyDataMap[dutyNo].km += km;
+      }
+    }
+    
+    var cacheSheet = getOrCreateKMCacheSheet();
+    var cacheLastRow = cacheSheet.getLastRow();
+    
+    // Delete all existing data for this type first
+    if (cacheLastRow > 1) {
+      var existingData = cacheSheet.getDataRange().getValues();
+      var rowsToDelete = [];
+      for (var i = 1; i < existingData.length; i++) {
+        if ((existingData[i][0] || "").toString().trim() === type) {
+          rowsToDelete.push(i + 1);
+        }
+      }
+      if (rowsToDelete.length > 0) {
+        rowsToDelete.sort(function(a, b) { return b - a; });
+        for (var i = 0; i < rowsToDelete.length; i++) {
+          cacheSheet.deleteRow(rowsToDelete[i]);
+        }
+      }
+      // Force recalculation
+      cacheLastRow = cacheSheet.getLastRow();
+    }
+    
+    var rows = [];
+    for (var duty in dutyDataMap) {
+      rows.push([type, duty, dutyDataMap[duty].signOn, dutyDataMap[duty].signOnLoc, dutyDataMap[duty].signOff, dutyDataMap[duty].signOffLoc, dutyDataMap[duty].km.toFixed(2)]);
+    }
+    
+    // Append new data
+    if (rows.length > 0) {
+      var startRow = cacheLastRow + 1;
+      if (cacheLastRow < 2) startRow = 2;
+      cacheSheet.getRange(startRow, 1, rows.length, 7).setValues(rows);
+      Logger.log('KM Wrote ' + rows.length + ' rows starting at row ' + startRow);
+    }
+    
+    // Verify
+    var verifyData = cacheSheet.getDataRange().getValues();
+    var savedCount = 0;
+    for (var v = 1; v < verifyData.length; v++) {
+      if ((verifyData[v][0] || "").toString().trim() === type) savedCount++;
+    }
+    Logger.log('KM Verification: Found ' + savedCount + ' rows (expected ' + rows.length + ')');
+    
+    var totalKm = 0;
+    for (var d in dutyDataMap) totalKm += dutyDataMap[d].km;
+    
+    return { success: true, message: type + ' KM data cached (' + rows.length + ' duties verified, ' + totalKm.toFixed(2) + ' km)', count: rows.length, totalKm: totalKm.toFixed(2) };
+  } catch (e) { return { success: false, message: 'Error: ' + e.toString() }; }
+}
+
+function clearKMCache(type) {
+  try {
+    var cacheSheet = getOrCreateKMCacheSheet();
+    var lastRow = cacheSheet.getLastRow();
+    if (lastRow > 1) {
+      var data = cacheSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      var rowsToDelete = [];
+      for (var i = 0; i < data.length; i++) {
+        if ((data[i][0] || "").toString().trim() === type) {
+          rowsToDelete.push(i + 2);
+        }
+      }
+      rowsToDelete.sort(function(a, b) { return b - a; });
+      for (var i = 0; i < rowsToDelete.length; i++) {
+        cacheSheet.deleteRow(rowsToDelete[i]);
+      }
+    }
+    return { success: true, message: type + ' KM cache cleared' };
+  } catch (e) { return { success: false, message: 'Error: ' + e.toString() }; }
+}
+
+function getKMCacheStatus() {
+  try {
+    var cacheSheet = getOrCreateKMCacheSheet();
+    var lastRow = cacheSheet.getLastRow();
+    if (lastRow < 2) return { Weekday: false, Saturday: false, Sunday: false, Special: false };
+    var data = cacheSheet.getRange(1, 1, lastRow, 1).getValues();
+    var status = { Weekday: false, Saturday: false, Sunday: false, Special: false };
+    for (var i = 1; i < data.length; i++) {
+      var dayType = data[i][0];
+      if (status.hasOwnProperty(dayType)) status[dayType] = true;
+    }
+    return status;
+  } catch (e) { return { Weekday: false, Saturday: false, Sunday: false, Special: false }; }
+}
+
+function getLiveKMData(type, seriesArray, customDuties) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var dataSheet = ss.getSheetByName(type);
+    if (!dataSheet || dataSheet.getLastRow() < 2) return { error: "No data for " + type + ". Upload CSV first." };
+    
+    var data = dataSheet.getDataRange().getDisplayValues();
+    var kmMap = {
+      "DDSC DN|KKDA DN": 26.22, "DDSC DN PF|KKDA DN": 26.22, "DDSC DN PF STABLE|KKDA DN": 26.22,
+      "DDSC SDG|PBGW UP": 12.26, "DDSC SDG STABLE|PBGW UP": 12.26, "DDSC SDG|KKDA DN": 26.75,
+      "DDSC SDG STABLE|KKDA DN": 26.75, "DDSC|DDSC SDG STABLE": 0.5, "DDSC|DDSC SDG": 0.5,
+      "IPE|PBGW UP": 34.92, "IPE|KKDA DN": 3.16, "KKDA DN|SAKP": 27.26, "KKDA DN|MUPR DN": 7.3,
+      "KKDA DN|MKPR": 20.67, "KKDA DN|PBGW DN": 29.10, "KKDA DN|DDSC DN PF STABLE": 40.96,
+      "KKDA DN|DDSC DN PF": 40.96, "KKDA DN|DDSC DN": 40.96, "KKDA DN|DDSC SDG STABLE": 41.46,
+      "KKDA DN|DDSC SDG": 41.46, "MUPR DN|MUPR 4TH SDG": 1.4, "KKDA UP|PBGW UP": 38.08,
+      "KKDA UP|IPE": 3.16, "KKDA UP|NZM": 13.26, "MKPR|KKDA UP": 20.67, "MKPR|PBGW DN": 8.43,
+      "MKPR|SAKP": 6.59, "MKPR|MUPR": 13.36, "MUPR|SVVR DN SDG": 4, "MUPR|SVVR DN SDG STABLE": 4,
+      "MUPR|MUPR 4TH PF STABLE": 1, "MUPR|MUPR 4TH PF": 1, "MUPR|MUPR 4TH SDG": 1.4,
+      "MUPR|MUPR 3RD SDG": 1.4, "MUPR|MUPR DN PF STABLE": 0, "MUPR 3RD SDG|KKDA UP": 7.7,
+      "MUPR 3RD SDG STABLE|KKDA UP": 7.7, "MUPR 3RD SDG STABLE|SVVR UP": 4, "MUPR 3RD SDG|SVVR UP": 4,
+      "MUPR 4TH|KKDA UP": 7.3, "MUPR 4TH PF|KKDA UP": 7.3, "MUPR 4TH PF STABLE|SVVR UP": 3.6,
+      "MUPR 4TH PF|SVVR UP": 3.6, "MUPR 4TH SDG|SVVR UP": 4, "MUPR 4TH SDG STABLE|SVVR UP": 4,
+      "MUPR DN|PBGW DN": 21.79, "MVPO DN|KKDA DN": 7.95, "NZM|MVPO DN": 6.31,
+      "NZM|MVPO DN PF STABLE": 6.31, "NZM|MVPO DN PF": 6.31, "PBGW DN|DDSC DN PF STABLE": 11.86,
+      "PBGW DN|DDSC DN PF": 11.86, "PBGW DN|DDSC DN": 11.86, "PBGW DN|DDSC SDG STABLE": 12.26,
+      "PBGW DN|DDSC SDG": 12.26, "PBGW DN|IPE": 34.92, "PBGW DN|KKDA DN": 38.08, "PBGW DN|DDSC":11.86,
+      "PBGW UP|KKDA UP": 29.10, "PBGW UP|MUPR":21.79, "PBGW UP|MKPR":8.43, "SAKP 3RD|PBGW DN":1.84,
+      "SVVR DN|KKDA UP":11.91, "SVVR DN PF|KKDA UP":11.91, "SVVR DN PF STABLE|KKDA UP":11.91,
+      "SVVR DN|SVVR DN SDG STABLE":0.4, "SVVR DN|SVVR DN SDG":0.4, "SVVR DN PF|SVVR DN SDG STABLE":0.4,
+      "SVVR DN PF|SVVR DN SDG":0.4, "SVVR DN SDG|MUPR": 4, "SVVR DN SDG STABLE|MUPR": 4
+    };
+    
+    var dutyDataMap = {};
+    for (var i = 1; i < data.length; i++) {
+      var dutyNo = (data[i][0] || "").toString().trim();
+      if (!dutyNo || dutyNo === "") continue;
+      
+      if (!dutyDataMap[dutyNo]) {
+        dutyDataMap[dutyNo] = { km: 0, signOn: (data[i][1] || "").toString(), signOnLoc: (data[i][2] || "").toString(), signOff: (data[i][4] || "").toString(), signOffLoc: (data[i][3] || "").toString() };
+      }
+      
+      var rake = (data[i][8] || "").toString().trim();
+      if (rake !== "") {
+        var from = (data[i][9] || "").toString().trim().toUpperCase();
+        var to = (data[i][11] || "").toString().trim().toUpperCase();
+        var km = kmMap[from + '|' + to] || 0;
+        dutyDataMap[dutyNo].km += km;
+      }
+    }
+    
+    var duties = [];
+    var totalKm = 0;
+    
+    for (var dutyNo in dutyDataMap) {
+      var isSeriesMatched = false;
+      var isCustomMatched = false;
+      
+      if (seriesArray && seriesArray.length > 0) {
+        isSeriesMatched = seriesArray.some(function(s) { 
+          if (s === '11-20') {
+            var num = parseInt(dutyNo);
+            return num >= 11 && num <= 20;
+          }
+          var num = parseInt(s);
+          if (num >= 10) return dutyNo === s || dutyNo.startsWith(s + '-') || dutyNo.startsWith(s + '0');
+          return dutyNo.startsWith(s);
+        });
+      }
+      
+      if (customDuties && customDuties.length > 0) {
+        isCustomMatched = customDuties.indexOf(dutyNo) !== -1;
+      }
+      
+      if ((isSeriesMatched || isCustomMatched) && dutyNo !== "") {
+        var km = dutyDataMap[dutyNo].km;
+        duties.push({ duty: dutyNo, signOn: dutyDataMap[dutyNo].signOn, signOnLoc: dutyDataMap[dutyNo].signOnLoc, signOff: dutyDataMap[dutyNo].signOff, signOffLoc: dutyDataMap[dutyNo].signOffLoc, km: km });
+        totalKm += km;
+      }
+    }
+    
+    duties.sort(function(a, b) { return parseFloat(b.km) - parseFloat(a.km); });
+    
+    return {
+      duties: duties,
+      totalKm: totalKm.toFixed(2),
+      dutyCount: duties.length,
+      avgKm: duties.length > 0 ? (totalKm / duties.length).toFixed(2) : 0,
+      day: type,
+      source: 'live'
+    };
+  } catch (e) { return { error: e.toString() }; }
+}
+
+function getSeriesKmData(type, seriesArray, customDuties) {
+  return getLiveKMData(type, seriesArray, customDuties);
+}
+
+// ============ BATCH CACHE OPERATIONS ============
+
+function cacheAllDaysTetra() {
+  var days = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+  var results = {};
+  days.forEach(function(day) {
+    results[day] = analyzeAndCacheTetraData(day);
+  });
+  return results;
+}
+
+function cacheAllDaysKM() {
+  var days = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+  var results = {};
+  days.forEach(function(day) {
+    results[day] = analyzeAndCacheKMData(day);
+  });
+  return results;
+}
+
+function clearAllDaysTetra() {
+  var days = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+  var results = {};
+  days.forEach(function(day) {
+    results[day] = clearTetraCache(day);
+  });
+  return results;
+}
+
+function clearAllDaysKM() {
+  var days = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+  var results = {};
+  days.forEach(function(day) {
+    results[day] = clearKMCache(day);
+  });
+  return results;
+}
