@@ -468,7 +468,8 @@ async function handleRegister() {
         errorDiv.style.display = 'block';
         return;
     }
-    if (accessCode !== 'satvik') {
+    const regCode = await getConfigValue('registration_code');
+    if (!regCode || accessCode !== regCode) {
         errorDiv.textContent = 'Invalid Access Code!';
         errorDiv.style.display = 'block';
         return;
@@ -869,6 +870,16 @@ async function saveAppConfigList(key, list) {
     await sb.from('app_config').upsert({ config_key: key, config_value: JSON.stringify(list), updated_at: new Date().toISOString() }, { onConflict: 'config_key' });
 }
 
+let _configCache = {};
+async function getConfigValue(key) {
+    if (_configCache[key]) return _configCache[key];
+    try {
+        const { data } = await sb.from('app_config').select('config_value').eq('config_key', key).single();
+        _configCache[key] = data ? data.config_value : null;
+        return _configCache[key];
+    } catch { return null; }
+}
+
 async function loadUserManagementData() {
     try {
         const loggedSpan = document.getElementById('changePwdLoggedEmpId');
@@ -935,7 +946,7 @@ async function addNewUserAccess() {
     const secretCode = document.getElementById('newSecretCode')?.value;
     if (!empId) return alert('Enter Emp ID!');
     if (accessLevel === 'admin' && currentUser.empId !== '3623') return alert('Only Main Admin (3623) can grant admin access!');
-    if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
+    if (accessLevel === 'admin' && secretCode !== await getConfigValue('admin_secret_code')) return alert('Wrong Secret Code!');
     try {
         const { data: existing, error: selErr } = await sb.from('profiles').select('*').eq('emp_id', empId);
         if (selErr) return alert('DB Error: ' + selErr.message);
@@ -977,7 +988,7 @@ async function removeUserAccess() {
     const secretCode = document.getElementById('removeSecretCode')?.value;
     if (!empId) return alert('Enter Emp ID!');
     if (accessLevel === 'admin' && currentUser.empId !== '3623') return alert('Only Main Admin (3623) can remove admin access!');
-    if (accessLevel === 'admin' && secretCode !== 'mudit') return alert('Wrong Secret Code!');
+    if (accessLevel === 'admin' && secretCode !== await getConfigValue('admin_secret_code')) return alert('Wrong Secret Code!');
     if (empId === '3623') return alert('Cannot remove Main Admin!');
     try {
         const { error: delErr } = await sb.from('profiles').delete().eq('emp_id', empId);
