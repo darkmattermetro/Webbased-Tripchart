@@ -1599,12 +1599,14 @@ async function logVisit(page, type, empId) {
 
 async function getVisitorStats() {
     try {
+        const { count } = await sb.from('visitor_logs').select('*', { count: 'exact', head: true });
+        const totalVisits = count || 0;
         const data = await fetchAllVisitorLogs();
-        if (!data || data.length === 0) return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
+        if (!data || data.length === 0) return { totalVisits: totalVisits, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 };
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        let total = data.length, organic = 0, loggedIn = 0, todayCount = 0, weekCount = 0;
+        let organic = 0, loggedIn = 0, todayCount = 0, weekCount = 0;
         for (let i = 0; i < data.length; i++) {
             if (!data[i].emp_id || data[i].emp_id === 'Organic' || data[i].emp_id.trim() === '') organic++;
             else loggedIn++;
@@ -1617,7 +1619,7 @@ async function getVisitorStats() {
                 }
             }
         }
-        return { totalVisits: total, organic: organic, loggedIn: loggedIn, today: todayCount, thisWeek: weekCount };
+        return { totalVisits: totalVisits, organic: organic, loggedIn: loggedIn, today: todayCount, thisWeek: weekCount };
     } catch (e) { return { totalVisits: 0, organic: 0, loggedIn: 0, today: 0, thisWeek: 0 }; }
 }
 
@@ -1742,8 +1744,10 @@ function toggleHourChart() {
 
 async function renderHourChart() {
     try {
-        const data = await fetchAllVisitorLogs();
-        if (!data || data.length === 0) return;
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+        const { data, error } = await sb.from('visitor_logs').select('timestamp').gte('timestamp', todayStart);
+        if (error || !data || data.length === 0) return;
         const hourCounts = Array(24).fill(0);
         data.forEach(v => {
             if (!v.timestamp) return;
