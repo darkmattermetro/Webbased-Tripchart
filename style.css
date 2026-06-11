@@ -376,7 +376,7 @@ body {
     .logged-in-user .user-name { font-size: 9px; }
     .logged-in-user .user-id { font-size: 7px; }
     
-    div[style*="bottom:25px;left:25px"] { display: none !important; }
+    div[style*="bottom:25px;left:25px"] { bottom: 10px !important; left: 10px !important; padding: 6px 12px !important; font-size: 10px !important; letter-spacing: 1px !important; }
     
     .data-table { font-size: 8px; }
     .data-table th, .data-table td { padding: 3px 2px; }
