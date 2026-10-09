@@ -30,7 +30,7 @@ whenever this folder is rebuilt so browsers fetch the new copy.
 | `l7-data.js`, `l7-meta.js` | Generated: the `window.L7_DATA` / `window.L7_META` payloads. |
 | `line7-timetable-timesync.html` | **Generated** deployable viewer. |
 | `line7-timetable-admin.html` | **Generated** deployable admin console. |
-| `l7-test.html` | Browser regression suite (28 checks). Drives the generated files in hidden iframes. |
+| `l7-test.html` | Browser regression suite (29 checks). Drives the generated files in hidden iframes. |
 | `l7-test-results.md` | Latest recorded suite result. |
 
 ## Build
@@ -111,6 +111,32 @@ table: the board draws the fallback services (or refuses in strict mode) and lab
 the readouts `FALLBACK` / `SHOWN FOR` / `NOT LOADED`, for all the same reasons a
 viewer must never mistake substitute service for the requested type. Covered by
 check 28.
+
+## Uploading one timetable beside another (admin)
+
+One board means one corridor, and every loaded timetable is indexed against it.
+The admin console now makes "add the Saturday book next to the weekday book" easy:
+
+- **Re-map a sheet onto the current station list.** When an imported sheet's
+  station list differs but appears inside the file's list *in the same order*
+  (typically shorter — a Saturday book built on a subset of the same stations,
+  ring closure included), its report card gains a **RE-MAP THIS SHEET ONTO THE
+  CURRENT STATION LIST (BY STATION NAME)** checkbox. Ticking it keeps the sheet
+  *and* every already-loaded timetable: no corridor change and no unload. Trips
+  are re-based by station name and interior gaps are filled exactly like blank
+  grid cells.
+- **Corridor change with a choice.** When a sheet genuinely changes the corridor
+  for every timetable, each incompatible loaded timetable now offers **UNLOAD**
+  or **RE-MAP ONTO THE NEW STATION LIST (BY STATION NAME)** radio buttons. Re-map
+  is offered only when the loaded table's stations appear in the new list in
+  order; otherwise it is disabled and the table must be unloaded.
+- **Exact diagnostics.** A differing sheet reports which slots the file has that
+  the sheet lacks and which the sheet has that the file lacks, so the workbook can
+  be aligned or the corridor change agreed on deliberately.
+- **Tolerant date entry.** WEF / VALID-TO (metadata tab) and VALID-FROM (upload
+  tab) are `yyyy-mm-dd` style fields that accept `24-09-2026`, `09/24/2026`,
+  `2026.09.24` and ISO, normalising to `yyyy-mm-dd` on blur/Enter. Partial typing
+  never wipes a stored date (the old native date input did). Covered by check 29.
 
 ## Notes
 

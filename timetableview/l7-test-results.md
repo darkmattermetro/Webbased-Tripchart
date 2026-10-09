@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**28 / 28 checks passed** — 464 assertions pass, 0 fail, 0 skip.
+**29 / 29 checks passed** — 485 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -40,6 +40,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
 | 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
+| 29 | Admin and export | Upload re-map by station name and tolerant WEF dates | PASS |
 
 ## Fixes covered by the suite
 
@@ -144,6 +145,32 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   `window.__L7.view()` / `setView(id)` expose the same state the tabs set. Covered
   by check 28.
 
+### Uploading one timetable beside another (this pass)
+
+- **Why the "UNLOAD WEEKDAY" gate existed.** One board means one corridor; a sheet
+  whose station list differs from the file's cannot be drawn on it, so the apply
+  used to demand that every loaded timetable built on the old list be unloaded.
+- **Re-map by station name.** A sheet whose station list appears inside the file's
+  list *in the same order* (possibly shorter, e.g. a Saturday book built on a
+  subset of the same stations, including the MKPR ring closure) now gets a
+  "RE-MAP THIS SHEET ONTO THE CURRENT STATION LIST" option on its report card.
+  Ticking it keeps the sheet *and* every already-loaded timetable — no corridor
+  change, no unload. At apply, each trip is re-based by station name and interior
+  gaps are filled exactly like blank grid cells.
+- **Corridor change with a choice.** When a sheet genuinely changes the corridor,
+  each incompatible loaded timetable now shows **UNLOAD** or **RE-MAP ONTO THE NEW
+  STATION LIST (BY STATION NAME)** radio buttons instead of a forced unload
+  checkbox. Re-map is only offered when the loaded timetable's stations appear in
+  the new list in order; otherwise it is disabled with an explanation.
+- **Honest diagnostics.** A differing sheet's card reports exactly which slots the
+  file has that the sheet lacks, and which slots the sheet has that the file lacks,
+  so an admin can see at a glance whether the workbook matches or needs aligning.
+- **Tolerant WEF / VALID-FROM entry.** The native locale-bound date input was
+  wiping values on partial keystrokes. WEF, VALID-TO and VALID-FROM are now plain
+  `yyyy-mm-dd` fields that accept `24-09-2026`, `09/24/2026`, `2026.09.24`, etc.,
+  normalise to ISO `yyyy-mm-dd` on blur/Enter, and never let an invalid blur clear
+  a stored date. Covered by check 29.
+
 ## How to run
 
 ```
@@ -151,7 +178,7 @@ python -m http.server 8765 --bind 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8765/timetableview/l7-test.html`. The page drives the real built files
-in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/28
+in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/29
 checks" summary. `window.__TEST_RESULT` holds the machine-readable result
 (`pass`, `fail`, `skip`, `checked`, `total`, `rows[]`, `checklist[]`).
 

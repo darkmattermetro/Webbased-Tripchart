@@ -74,7 +74,7 @@ var R = { pass: 0, fail: 0, skip: 0, rows: [] };
 var VIEWER = "line7-timetable-timesync.html";
 var ADMIN  = "line7-timetable-admin.html";
 
-/* ---------------- the 28-item checklist ---------------- */
+/* ---------------- the 29-item checklist ---------------- */
 var CHECKS = [
   ["Data validation", "Missing L7_DATA or missing required properties"],
   ["Data validation", "Null or non-finite departure and terminal times"],
@@ -107,7 +107,8 @@ var CHECKS = [
   ["Performance and usability", "No uncaught console errors during playback"],
   ["Time engine", "Service clock across midnight and the after-midnight tail"],
   ["Duty roster", "Duty number or X shown above each train for the displayed time"],
-  ["Service tabs", "AUTO and weekday / Saturday / Sunday / Special view selection"]
+  ["Service tabs", "AUTO and weekday / Saturday / Sunday / Special view selection"],
+  ["Admin and export", "Upload re-map by station name and tolerant WEF dates"]
 ];
 var NCHECK = CHECKS.length;
 
@@ -958,6 +959,63 @@ T.admin = async function (WA) {
      booted ? W2.__L7.trips().length + " trips" : "(not booted)");
   eq(g, "the exported file raises no uncaught errors", (W2.__ERRS || []).length, 0, (W2.__ERRS || []).join(" | "));
   if (f.parentNode) f.parentNode.removeChild(f);
+
+  /* C29: an uploaded sheet whose station list appears in the file's list in the
+     same order can be re-mapped onto the file's corridor, so it joins WITHOUT
+     unloading the tables already loaded; a sheet with extra or re-ordered
+     stations cannot and is refused by name. Plus the tolerant WEF date entry:
+     common formats normalise to YYYY-MM-DD and junk never sticks. */
+  C(29);
+  g = "F. upload re-map by station name and tolerant dates";
+  var ringS = ["MKPR", "A", "B", "C", "MKPR"];
+  var subS  = ["MKPR", "A", "C", "MKPR"];
+  eq(g, "a same-order shorter list is a subsequence", A.isSubseq(subS, ringS), true);
+  eq(g, "a re-ordered list is not a subsequence", A.isSubseq(["MKPR", "C", "A"], ringS), false);
+  eq(g, "extra stations are not a subsequence",
+     A.isSubseq(["MKPR", "A", "B", "D", "C", "MKPR"], ringS), false);
+  var sd = A.slotDiff(["MKPR", "B", "D", "MKPR"], ringS);
+  eq(g, "the slot diff names the missing stations", sd.missing.join(","), "A,C");
+  eq(g, "the slot diff names the extra stations", sd.extra.join(","), "D");
+  var rb = A.reindexSheet(
+    { stops: subS, dn: [{ n: "T1", a: 0, b: 3, t: [100, 200, 300, 400] }], up: [] },
+    ringS);
+  eq(g, "re-mapped slots line up by station name", rb.dn[0].t.join(","), "100,200,200,300,400");
+  eq(g, "the re-mapped span covers the target corridor",
+     rb.dn[0].a + ".." + rb.dn[0].b, "0..4");
+  ok(g, "re-mapped times stay non-decreasing",
+     rb.dn[0].t[0] <= rb.dn[0].t[1] && rb.dn[0].t[1] <= rb.dn[0].t[2] &&
+     rb.dn[0].t[2] <= rb.dn[0].t[3] && rb.dn[0].t[3] <= rb.dn[0].t[4]);
+
+  var corr = A.data().meta.corridor.slice();
+  var subC = [corr[0], corr[1], corr[2], corr[corr.length - 1]];
+  up["r1"] = fakeRes("saturday", "SheetR1", subC.slice());
+  up["r1"].rebase = true;
+  var pa = A.stageApply();
+  eq(g, "a re-mappable sheet keeps the corridor unchanged",
+     pa.corridorChanged, false, pa.problems.join(" "));
+  eq(g, "the re-mappable sheet is planned as re-based", !!pa.rebased.saturday, true);
+  eq(g, "no loaded timetable becomes incompatible", pa.incompatible.length, 0,
+     pa.incompatible.join(","));
+  Object.keys(up).forEach(function (k) { delete up[k]; });
+
+  var rnd = [corr[0], corr[2], corr[1]];
+  up["r2"] = fakeRes("sunday", "SheetR2", rnd);
+  up["r2"].rebase = true;
+  var pb = A.stageApply();
+  ok(g, "a non-re-mappable sheet is refused by name",
+     pb.problems.length > 0 && /SheetR2/.test(pb.problems.join(" ")),
+     pb.problems.join(" "));
+  eq(g, "the refusal leaves the data untouched", A.dirty(), false);
+  Object.keys(up).forEach(function (k) { delete up[k]; });
+
+  eq(g, "dd-mm-yyyy normalises to yyyy-mm-dd", A.normDate("24-09-2026"), "2026-09-24");
+  eq(g, "mm/dd/yyyy normalises to yyyy-mm-dd", A.normDate("09/24/2026"), "2026-09-24");
+  eq(g, "yyyy.mm.dd normalises to yyyy-mm-dd", A.normDate("2026.09.24"), "2026-09-24");
+  eq(g, "iso dates pass through untouched", A.normDate("2026-09-24"), "2026-09-24");
+  eq(g, "a day-dominant dd/mm/yyyy keeps its order", A.normDate("24/09/2026"), "2026-09-24");
+  eq(g, "month-dominant dd/mm is read as mm/dd", A.normDate("05/08/2026"), "2026-05-08");
+  eq(g, "garbage is rejected", A.normDate("next monday"), "");
+  eq(g, "impossible dates are rejected", A.normDate("2026-13-40"), "");
 
   /* C13: the admin refuses to create two rules of the SAME specificity on one
      day, while allowing an exact date and an annual recurrence to share one --

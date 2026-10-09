@@ -185,7 +185,7 @@ td.dim{color:var(--dim)}
 .upsheet .sz{font-size:9.5px;color:var(--dim)}
 .upsheet .fld{display:flex;align-items:center;gap:6px}
 .upsheet .fld label{font-size:8.5px;letter-spacing:.13em;color:var(--dim)}
-.upsheet select,.upsheet input[type=date]{width:auto;min-width:150px}
+.upsheet select,.upsheet input[type=date],.upsheet input.dt{width:auto;min-width:150px}
 .upsheet .tag{font-size:8.5px;letter-spacing:.1em;padding:2px 6px;border:1px solid var(--border);border-radius:2px;color:var(--dim)}
 .upsheet .tag.hid{color:var(--amber);border-color:rgba(245,158,11,.45)}
 .upsheet .tag.guess{color:var(--up);border-color:rgba(34,211,238,.4)}
@@ -205,11 +205,17 @@ td.dim{color:var(--dim)}
 .upcard .warns{margin-top:8px}
 .upcard .warns div{font-size:10px;color:var(--amber);line-height:1.6}
 .upcard .warns div.ok{color:var(--up)}
+.upcard .warns .chk{display:flex;align-items:flex-start;gap:6px;font-size:10px;line-height:1.6;margin-top:6px}
+.upcard .warns .chk input{width:auto;margin-top:2px}
 .upapply{border:1px solid var(--dn);border-radius:2px;padding:12px 14px;background:rgba(251,191,36,.05);max-width:1180px}
 .upapply .chk{display:flex;align-items:flex-start;gap:8px;font-size:11px;margin-bottom:11px;line-height:1.6}
 .upapply input[type=checkbox]{width:auto;margin-top:2px}
 .upapply .excl{display:flex;flex-direction:column;gap:6px;margin:0 0 11px}
 .upapply .excl .chk{margin-bottom:0;color:var(--amber)}
+.upapply .excl .inc{display:flex;align-items:flex-start;gap:5px;flex-wrap:wrap;font-size:10.5px;line-height:1.7}
+.upapply .excl .inc input{width:auto;margin-top:2px}
+.upapply .excl .inc .stn{color:var(--bright)}
+.upapply .excl .inc .nor{color:var(--amber)}
 
 /* ---------- metadata form ---------- */
 .mt{border:1px solid var(--border);background:var(--panel);border-radius:3px;
@@ -663,6 +669,52 @@ window.L7_BASE = "/*__L7_BASE__*/";
     return i;
   }
 
+  /* Tolerant WEF/VALID-FROM entry. A native date input is locale-bound and a
+     partial keypress can silently wipe the stored value; instead keep whatever
+     the operator typed until it is valid, then normalise to YYYY-MM-DD on
+     blur/Enter. Partial typing is kept in the field but never replaces a valid
+     stored date. */
+  function normDate(v) {
+    if (!v) return "";
+    var m = /^\s*(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\s*$/.exec(v), a;
+    if (m) a = [+m[1], +m[2], +m[3]];
+    else {
+      m = /^\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\s*$/.exec(v);
+      if (!m) return "";
+      var p1 = +m[1], p2 = +m[2];
+      a = p1 > 12 ? [+m[3], p2, p1] : [+m[3], p1, p2];
+    }
+    var y = a[0], mo = a[1], d = a[2];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return "";
+    return y + "-" + pad2(mo) + "-" + pad2(d);
+  }
+  function fldDate(parent, label, obj, key, onChange) {
+    el("label", "", parent).textContent = label;
+    var i = el("input", "dt", parent);
+    i.placeholder = "yyyy-mm-dd";
+    i.maxLength = 10;
+    i.value = /^\d{4}-\d{2}-\d{2}$/.test(obj[key] || "") ? obj[key] : "";
+    i.addEventListener("input", function () {
+      var v = i.value.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) obj[key] = v;
+    });
+    i.addEventListener("blur", function () {
+      var n = normDate(i.value);
+      if (n) {
+        i.value = n; obj[key] = n;
+        if (onChange) onChange(n);
+      } else if (i.value.trim()) {
+        i.value = obj[key] || "";
+      }
+    });
+    i.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") i.blur();
+    });
+    return i;
+  }
+
   function renderMeta() {
     q("#mCorridor").value = CONF.corridor || "";
     q("#mAuth").value = CONF.authority || "";
@@ -682,8 +734,10 @@ window.L7_BASE = "/*__L7_BASE__*/";
         : "NOT IN THIS BUILD";
       var g = el("div", "grid", box);
       fld(g, "LABEL SHOWN TO END USER", "lbl-" + id, t, "label");
-      fld(g, "WEF - WITH EFFECT FROM", "wef-" + id, t, "wef", "date");
-      fld(g, "VALID TO (OPTIONAL)", "weto-" + id, t, "weto", "date");
+      var wd = el("div", "", g);
+      fldDate(wd, "WEF - WITH EFFECT FROM", t, "wef");
+      var wt = el("div", "", g);
+      fldDate(wt, "VALID TO (OPTIONAL)", t, "weto");
       var nt = el("div", "", g);
       nt.style.gridColumn = "1 / -1";
       el("label", "", nt).textContent = "NOTE - SHOWN IN THE END-USER NOTICE PANEL";
@@ -1047,6 +1101,80 @@ window.L7_BASE = "/*__L7_BASE__*/";
     return false;
   }
 
+  /* A station list can share another when it appears inside it IN THE SAME
+     ORDER (possibly shorter). A ring closes with MKPR twice, so the k-th
+     occurrence must pair with the k-th occurrence of the target list too;
+     that bookkeeping lives in buildFrame(). */
+  function isSubseq(a, b) {
+    var j = 0, i;
+    for (i = 0; i < a.length; i++) {
+      while (j < b.length && b[j] !== a[i]) j++;
+      if (j >= b.length) return false;
+      j++;
+    }
+    return true;
+  }
+  function slotDiff(upload, cur) {
+    var set = {}, missing = [], extra = [], i;
+    for (i = 0; i < cur.length; i++) set[cur[i]] = true;
+    for (i = 0; i < upload.length; i++) if (!set[upload[i]]) extra.push(upload[i]);
+    set = {};
+    for (i = 0; i < upload.length; i++) set[upload[i]] = true;
+    for (i = 0; i < cur.length; i++) if (!set[cur[i]]) missing.push(cur[i]);
+    return { missing: missing, extra: extra };
+  }
+  function buildFrame(from, to) {
+    var seen = {}, frame = [], i, j;
+    for (i = 0; i < to.length; i++) {
+      var s = to[i], k = (seen[s] = (seen[s] || 0) + 1), n = 0, idx = -1;
+      for (j = 0; j < from.length; j++) {
+        if (from[j] === s && ++n === k) { idx = j; break; }
+      }
+      frame.push(idx);
+    }
+    return frame;
+  }
+  function windowOf(dn, up) {
+    var lo = Infinity, hi = -Infinity;
+    [dn, up].forEach(function (dir) {
+      dir.forEach(function (tr) {
+        var s = tr.t[tr.a], e = tr.t[tr.b];
+        if (s != null && s < lo) lo = s;
+        if (e != null && e > hi) hi = e;
+      });
+    });
+    return isFinite(lo) ? [lo, hi] : [0, 0];
+  }
+  /* Re-set a sheet's trips onto another station list by name. A target slot the
+     sheet has no row for is filled forward inside each trip's span - the same
+     repair the extractor applies to blank grid cells - so times stay
+     non-decreasing, and the span is recomputed from the re-placed times.
+     Callers gate this with isSubseq() so names and order always line up. */
+  function reindexSheet(d, newStops) {
+    var frame = buildFrame(d.stops, newStops), NS = newStops.length;
+    function one(dir) {
+      return dir.map(function (tr) {
+        var t = new Array(NS), i, a = -1, b = -1;
+        for (i = 0; i < NS; i++) {
+          var o = frame[i];
+          t[i] = o >= 0 ? tr.t[o] : null;
+          if (t[i] != null) { if (a < 0) a = i; b = i; }
+        }
+        if (a < 0) { a = 0; b = NS - 1; }
+        var prev = null;
+        for (i = a; i <= b; i++) {
+          if (t[i] != null) prev = t[i]; else t[i] = prev;
+        }
+        var out = { n: tr.n, a: a, b: b, t: t };
+        if (tr.d) out.d = tr.d;
+        if (tr.m) out.m = tr.m;
+        if (tr.x) out.x = tr.x;
+        return out;
+      });
+    }
+    return { dn: one(d.dn), up: one(d.up), stops: newStops.slice() };
+  }
+
   function renderUpNow() {
     var host = q("#upNow");
     host.textContent = "";
@@ -1171,16 +1299,12 @@ window.L7_BASE = "/*__L7_BASE__*/";
       }
 
       var f2 = el("div", "fld", top);
-      el("label", "", f2).textContent = "VALID FROM";
-      var din = document.createElement("input");
-      din.type = "date"; din.value = r.validFor; din.disabled = !!r.sh.hidden;
-      din.addEventListener("change", function () {
-        r.validFor = this.value;
-        var dt = isoDate(this.value);
+      fldDate(f2, "VALID FROM", r, "validFor", function (iso) {
+        var dt = isoDate(iso);
         r.dowKnown = !!dt; r.dow = dt ? dt.getDay() : null;
         renderSheets();
       });
-      f2.appendChild(din);
+      if (r.sh.hidden) f2.querySelector("input").disabled = true;
       if (r.dowKnown) el("span", "tag", top).textContent = DOW_NAME[r.dow];
 
       el("div", "sub", box).textContent = r.sh.path
@@ -1251,24 +1375,39 @@ window.L7_BASE = "/*__L7_BASE__*/";
   function stageApply() {
     var plan = {
       ok: [], problems: [], newStops: null, corridorChanged: false,
-      mismatched: [], replaced: {}, incompatible: []
+      mismatched: [], replaced: {}, incompatible: [], rebased: {}, canRemap: {}
     };
+    var eff = {};
     Object.keys(UP.results).forEach(function (k) {
       var res = UP.results[k];
       if (!res.ok) return;
       plan.ok.push(res);
       plan.replaced[res.r.mapTo] = true;
+      /* A re-mapped sheet lives on the file's own corridor, so it contributes
+         that list to the all-sheets-must-agree check. */
+      eff[res.r.mapTo] = res.rebase ? DATA.meta.corridor.slice() : res.d.stops;
     });
     if (!plan.ok.length) { plan.problems.push("No sheet was read successfully."); return plan; }
-    plan.newStops = plan.ok[0].d.stops;
     plan.ok.forEach(function (res) {
-      if (stopsDiffer(res.d.stops, plan.newStops)) plan.mismatched.push(res.r.sh.name);
+      if (!res.rebase) return;
+      if (isSubseq(res.d.stops, DATA.meta.corridor)) {
+        plan.rebased[res.r.mapTo] = true;
+      } else {
+        plan.problems.push("Sheet \u201C" + res.r.sh.name + "\u201D was told to re-map onto the "
+          + DATA.meta.corridor.length + "-slot station list, but it lists stations the file has no "
+          + "slot for, or in a different order, so it cannot be re-mapped by station name.");
+      }
+    });
+    if (plan.problems.length) return plan;
+    plan.newStops = eff[plan.ok[0].r.mapTo];
+    plan.ok.forEach(function (res) {
+      if (stopsDiffer(eff[res.r.mapTo], plan.newStops)) plan.mismatched.push(res.r.sh.name);
     });
     if (plan.mismatched.length) {
       plan.problems.push("The selected sheets do not all use the same station list: "
         + plan.mismatched.join(", ") + (plan.mismatched.length > 1 ? " disagree" : " disagrees")
         + " with " + plan.ok[0].r.sh.name + ". Every timetable in one file must share a single "
-        + "station list, so nothing was applied.");
+        + "station list (or be re-mapped onto the file's list), so nothing was applied.");
       return plan;
     }
     plan.corridorChanged = stopsDiffer(plan.newStops, DATA.meta.corridor);
@@ -1277,23 +1416,26 @@ window.L7_BASE = "/*__L7_BASE__*/";
         var t = DATA.tables[id];
         if (!t || !t.loaded) return;
         if (plan.replaced[id]) return;
-        var eff = t.stops || DATA.meta.corridor;
-        if (stopsDiffer(eff, plan.newStops)) plan.incompatible.push(id);
+        var effl = t.stops || DATA.meta.corridor;
+        if (stopsDiffer(effl, plan.newStops)) {
+          plan.incompatible.push(id);
+          plan.canRemap[id] = isSubseq(effl, plan.newStops);
+        }
       });
     }
     return plan;
   }
 
   /* APPLY stays disabled until the corridor acknowledgement is ticked and every
-     incompatible loaded timetable has been explicitly marked for unloading. */
+     incompatible loaded timetable has been resolved (unloaded or re-mapped). */
   function syncApplyGate() {
     var btn = q("#upApply"), plan = UP.plan;
     if (plan && plan.problems && plan.problems.length) { btn.disabled = true; return; }
     if (plan && !plan.corridorChanged) { btn.disabled = false; return; }
     if (!q("#upCorridorAck").checked) { btn.disabled = true; return; }
-    var boxes = q("#upCorridorExcl").querySelectorAll("input[type=checkbox]");
-    for (var i = 0; i < boxes.length; i++) {
-      if (!boxes[i].checked) { btn.disabled = true; return; }
+    var rows = q("#upCorridorExcl").querySelectorAll(".inc");
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].querySelector("input[type=radio]:checked")) { btn.disabled = true; return; }
     }
     btn.disabled = false;
   }
@@ -1367,9 +1509,31 @@ window.L7_BASE = "/*__L7_BASE__*/";
       add("CORRIDOR: " + d.stops.slice(0, 4).join(" \u2192 ") + " \u2026 \u2192 "
         + d.stops[d.stops.length - 1] + " (" + d.stops.length + " slots)", true);
       if (diff) {
-        add("STATION LIST DIFFERS from the " + STOPS.length + " slots now in the file. Applying will "
-          + "replace the corridor for EVERY timetable, and all loaded timetables must use the "
-          + "same station list or trains will be drawn against the wrong stations.");
+        var sl = slotDiff(d.stops, STOPS);
+        add("STATION LIST DIFFERS from the " + STOPS.length + " slots now in the file. "
+          + "The file has " + sl.missing.length + " slot" + (sl.missing.length === 1 ? "" : "s")
+          + " this sheet has not: " + (sl.missing.join(", ") || "none") + "; this sheet has "
+          + sl.extra.length + " slot" + (sl.extra.length === 1 ? "" : "s")
+          + " the file has not: " + (sl.extra.join(", ") || "none") + ".");
+        if (sl.extra.length) {
+          add("This sheet lists stations the file has no slot for, so it cannot share the "
+            + "current corridor by station name. Bring the sheet onto the same station list, or "
+            + "change the corridor for every timetable and choose how each loaded timetable is "
+            + "handled below.");
+        } else {
+          var rbw = el("div", "chk", w);
+          var rb = document.createElement("input");
+          rb.type = "checkbox";
+          rb.checked = !!res.rebase;
+          rbw.appendChild(rb);
+          rbw.appendChild(document.createTextNode("RE-MAP THIS SHEET ONTO THE CURRENT "
+            + STOPS.length + "-SLOT STATION LIST (BY STATION NAME) - KEEP IT WITH THE OTHER "
+            + "TIMETABLES, NO CORRIDOR CHANGE"));
+          rb.addEventListener("change", function () {
+            res.rebase = !!this.checked;
+            renderReport();
+          });
+        }
       } else {
         add("Station list matches the file exactly.", true);
       }
@@ -1418,19 +1582,38 @@ window.L7_BASE = "/*__L7_BASE__*/";
         + " slots, and that this applies to every timetable in the file.";
       q("#upCorridorAck").checked = false;
       var excl = q("#upCorridorExcl");
+      excl.textContent = "";
       plan.incompatible.forEach(function (id) {
         var old = DATA.tables[id].stops;
-        var lab = el("label", "chk", excl);
-        var cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.setAttribute("data-unload", id);
-        lab.appendChild(cb);
-        var sp = document.createElement("span");
-        sp.textContent = "UNLOAD " + lbl(id) + " - it was built against the old "
-          + (old ? old.length : STOPS.length) + "-slot station list and cannot stay.";
-        lab.appendChild(sp);
-        cb.addEventListener("change", syncApplyGate);
+        var row = el("div", "inc", excl);
+        el("span", "stn", row).textContent = lbl(id) + " is built against the "
+          + (old ? old.length : STOPS.length) + "-slot list \u2014 pick one:";
+        var grp = "upinc" + id;
+        var labU = el("label", "chk", row);
+        var u = document.createElement("input");
+        u.type = "radio"; u.name = grp; u.value = "unload";
+        u.checked = true;
+        u.setAttribute("data-inc", id);
+        labU.appendChild(u);
+        labU.appendChild(document.createTextNode("UNLOAD " + lbl(id)));
+        var labR = el("label", "chk", row);
+        var r = document.createElement("input");
+        r.type = "radio"; r.name = grp; r.value = "remap";
+        if (!plan.canRemap[id]) r.disabled = true;
+        r.setAttribute("data-inc", id);
+        labR.appendChild(r);
+        labR.appendChild(document.createTextNode("RE-MAP ONTO THE NEW STATION LIST (BY STATION NAME)"));
+        if (!plan.canRemap[id]) {
+          el("span", "nor", row).textContent = " - cannot be re-mapped: it lists stations the new "
+            + "list has no slot for (or in a different order), so it must be unloaded.";
+        }
+        u.addEventListener("change", syncApplyGate);
+        r.addEventListener("change", syncApplyGate);
       });
+      if (!plan.incompatible.length) {
+        el("div", "chk", excl).textContent = "No loaded timetable is affected by the station-list "
+          + "change (all are being replaced by this upload).";
+      }
     } else {
       q("#upCorridorChk").style.display = "none";
     }
@@ -1445,29 +1628,48 @@ window.L7_BASE = "/*__L7_BASE__*/";
     var plan = stageApply();
     if (plan.problems.length) { upMsg(plan.problems.join(" "), true); return; }
 
-    /* Exclusions first, each one explicitly ticked by the admin. */
-    var unloaded = [], boxes = q("#upCorridorExcl").querySelectorAll("input[data-unload]");
-    for (var b = 0; b < boxes.length; b++) {
-      if (!boxes[b].checked) continue;
-      var uid = boxes[b].getAttribute("data-unload");
+    /* Corridor change: each incompatible loaded timetable must have been
+       resolved as UNLOAD or as RE-MAP before this point. Unloads happen
+       first; re-maps re-index the loaded table onto the new corridor by
+       station name before the corridor swaps over. */
+    var unloaded = [], remapIds = [];
+    var radios = q("#upCorridorExcl").querySelectorAll("input[type=radio]:checked");
+    for (var b = 0; b < radios.length; b++) {
+      var wid = radios[b].getAttribute("data-inc");
+      if (radios[b].value === "remap") remapIds.push(wid); else unloaded.push(wid);
+    }
+    unloaded.forEach(function (uid) {
       DATA.tables[uid] = { loaded: false, label: (CONF.tables[uid] || {}).label || uid.toUpperCase() };
       if (CONF.tables[uid]) CONF.tables[uid].loaded = false;
-      unloaded.push(uid);
-    }
+    });
+    remapIds.forEach(function (id) {
+      var t = DATA.tables[id];
+      var base = { stops: t.stops || DATA.meta.corridor, dn: t.dn, up: t.up };
+      var rb = reindexSheet(base, plan.newStops);
+      t.dn = rb.dn; t.up = rb.up; t.stops = rb.stops;
+      t.window = windowOf(rb.dn, rb.up);
+    });
 
     var applied = [], wefSet = [];
     plan.ok.forEach(function (res) {
       var r = res.r;
+      var dd = res.d, win = res.w;
+      if (res.rebase) {
+        /* The sheet keeps its own station order but is re-based onto the
+           corridor in force, so it can sit beside tables built to it. */
+        dd = reindexSheet(res.d, DATA.meta.corridor);
+        win = windowOf(dd.dn, dd.up);
+      }
       DATA.tables[r.mapTo] = {
         loaded: true,
         label: (CONF.tables[r.mapTo] || {}).label || r.mapTo.toUpperCase(),
         sheet: r.sh.name,
         validFor: r.validFor || "",
         dow: r.dowKnown ? r.dow : -1,
-        window: res.w,
-        dn: res.d.dn,
-        up: res.d.up,
-        stops: res.d.stops
+        window: win,
+        dn: dd.dn,
+        up: dd.up,
+        stops: dd.stops
       };
       if (CONF.tables[r.mapTo]) {
         var ct = CONF.tables[r.mapTo];
@@ -1494,6 +1696,10 @@ window.L7_BASE = "/*__L7_BASE__*/";
     q("#upApplyMsg").textContent = "";
     upMsg("Applied " + applied.map(function (x) { return x.toUpperCase(); }).join(" + ")
       + " from " + UP.fileName
+      + (remapIds.length
+          ? ". Re-mapped " + remapIds.map(function (x) { return x.toUpperCase(); }).join(", ")
+            + " onto the new station list by station name."
+          : "")
       + (unloaded.length
           ? ". Unloaded " + unloaded.map(function (x) { return x.toUpperCase(); }).join(", ")
             + " because the station list changed."
@@ -2097,6 +2303,10 @@ window.L7_BASE = "/*__L7_BASE__*/";
        of DATA changing. */
     upResults: function () { return UP.results; },
     stageApply: stageApply,
+    isSubseq: isSubseq,
+    reindexSheet: reindexSheet,
+    normDate: normDate,
+    slotDiff: slotDiff,
     /* Headway view: the selector, its cache and its compute entry point are
        exposed so the regression suite can prove the cache is keyed by table and
        cleared when the data underneath it changes. */
