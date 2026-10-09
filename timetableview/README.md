@@ -8,6 +8,12 @@ notes): the viewer is shown from a **Time Table View** link on the home page, an
 admin console is a **Time Table** tab in the admin console, restricted to admin-level
 users.
 
+When the console is opened from that tab the main app has already logged the operator
+in, so the app sends the frame an `L7_ADMIN_UNLOCK` `postMessage` and the console skips
+its own passphrase. Opened directly (standalone) it stays locked. The app loads both
+pages with a `?v=<L7_TT_VERSION>` query: bump `L7_TT_VERSION` in the root `app.js`
+whenever this folder is rebuilt so browsers fetch the new copy.
+
 ## Files
 
 | File | Role |

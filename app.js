@@ -175,12 +175,24 @@ function loadTimetableFrame(id, url) {
     const frame = document.getElementById(id);
     if (frame && !frame.getAttribute('src')) frame.setAttribute('src', url);
 }
+// Bump this whenever the built pages under timetableview/ are regenerated, so
+// browsers fetch the new copy instead of a cached one.
+const L7_TT_VERSION = '20261009';
+function l7TtUrl(path) { return path + '?v=' + L7_TT_VERSION; }
 function showTimetable() {
-    loadTimetableFrame('ttViewerFrame', 'timetableview/line7-timetable-timesync.html');
+    loadTimetableFrame('ttViewerFrame', l7TtUrl('timetableview/line7-timetable-timesync.html'));
     showPage('pageTimetable');
 }
 function ensureTimetableAdmin() {
-    loadTimetableFrame('ttAdminFrame', 'timetableview/line7-timetable-admin.html');
+    const frame = document.getElementById('ttAdminFrame');
+    if (!frame || frame.getAttribute('src')) return;
+    // The console is admin-only and the operator has already logged in, so tell
+    // it to unlock rather than asking for its passphrase a second time. Sent on
+    // each load (so it survives an in-frame refresh) and only from here.
+    frame.addEventListener('load', function () {
+        try { frame.contentWindow.postMessage({ type: 'L7_ADMIN_UNLOCK' }, '*'); } catch (e) {}
+    });
+    frame.setAttribute('src', l7TtUrl('timetableview/line7-timetable-admin.html'));
 }
 
 function timeToMins(timeStr) {

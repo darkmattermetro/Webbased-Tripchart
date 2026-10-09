@@ -592,13 +592,17 @@ window.L7_BASE = "/*__L7_BASE__*/";
 
   /* ---------- lock ---------- */
   var unlocked = false;
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    q("#lock").style.display = "none";
+    q("#app").style.display = "flex";
+    q("#pw").value = "";
+    boot();
+  }
   function tryUnlock() {
     if (fnv1a(q("#pw").value) === PW_HASH) {
-      unlocked = true;
-      q("#lock").style.display = "none";
-      q("#app").style.display = "flex";
-      q("#pw").value = "";
-      boot();
+      unlock();
     } else {
       q("#pwErr").textContent = "PASSPHRASE NOT RECOGNISED";
       q("#pw").value = "";
@@ -610,6 +614,14 @@ window.L7_BASE = "/*__L7_BASE__*/";
     unlocked = false;
     q("#app").style.display = "none";
     q("#lock").style.display = "flex";
+  });
+  /* When this file is embedded in the main app, the parent has already
+     authenticated the operator (the Time Table tab is admin-only), so it asks us
+     to unlock and the operator is not prompted for a second passphrase. Only the
+     frame that embeds us may do this, so a standalone open stays locked. */
+  window.addEventListener("message", function (e) {
+    if (e.source !== window.parent) return;
+    if (e.data && e.data.type === "L7_ADMIN_UNLOCK") unlock();
   });
 
   /* ---------- tabs ---------- */
