@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**29 / 29 checks passed** — 485 assertions pass, 0 fail, 0 skip.
+**29 / 29 checks passed** — 493 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -40,7 +40,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
 | 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
-| 29 | Admin and export | Upload re-map by station name and tolerant WEF dates | PASS |
+| 29 | Admin and export | Upload re-map, shifted grids, and tolerant WEF dates | PASS |
 
 ## Fixes covered by the suite
 
@@ -170,6 +170,16 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   `yyyy-mm-dd` fields that accept `24-09-2026`, `09/24/2026`, `2026.09.24`, etc.,
   normalise to ISO `yyyy-mm-dd` on blur/Enter, and never let an invalid blur clear
   a stored date. Covered by check 29.
+- **Sheets shifted a few rows or columns parse anyway.** The weekday /
+  Saturday / Sunday books share one corridor — same names, same order, same count —
+  but the grid may sit a few rows or columns further into the page than the
+  workbook the viewer was built from. `buildFromCells()` now anchors on the known
+  station list wherever it appears, re-locates the whole DN/UP block relative to
+  it, and falls back to the fixed template layout when no anchor matches. A sheet
+  that re-anchors to the *same* corridor list applies alongside the load weekday
+  table with no station-list conflict, and its card prints a "GRID RE-ANCHORED"
+  note naming the column and rows it was found at. Covered by check 29 (8 new
+  assertions).
 
 ## How to run
 

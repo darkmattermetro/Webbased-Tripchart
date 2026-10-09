@@ -137,6 +137,17 @@ The admin console now makes "add the Saturday book next to the weekday book" eas
   tab) are `yyyy-mm-dd` style fields that accept `24-09-2026`, `09/24/2026`,
   `2026.09.24` and ISO, normalising to `yyyy-mm-dd` on blur/Enter. Partial typing
   never wipes a stored date (the old native date input did). Covered by check 29.
+- **Sheets shifted a few rows or columns still load.** The weekday / Saturday /
+  Sunday books share one corridor — the same names, the same order, the same count —
+  but the grid can sit a few rows or columns further into the page than the
+  workbook this viewer was built from. The upload engine now anchors on the known
+  station list wherever it appears and re-locates the whole DN/UP block relative
+  to it (trip rows, depot row, midday marker, first trip column), falling back to
+  the fixed template layout when nothing matches. A shifted sheet that re-anchors
+  onto the *same* corridor applies alongside the loaded weekday table with no
+  station-list conflict, and its card prints a **GRID RE-ANCHORED** line naming
+  the column and rows it was found at (shown only when the position differs from
+  the template). Covered by check 29.
 
 ## Notes
 

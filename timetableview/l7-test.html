@@ -1017,6 +1017,55 @@ T.admin = async function (WA) {
   eq(g, "garbage is rejected", A.normDate("next monday"), "");
   eq(g, "impossible dates are rejected", A.normDate("2026-13-40"), "");
 
+  /* Shifting rows and/or columns while keeping the exact same station list is
+     handled by re-anchoring on the known corridor: the whole block moves with
+     the grid, the same corridor comes out -- so a Saturday/Sunday book shifted
+     a few rows or columns still applies alongside weekday with no station-list
+     conflict. */
+  g = "F. shifted grids parse against the known corridor";
+  var RR = 3, CC = 1, scC = 1 + CC, cS = {}, tcS, qi;
+  corridor0.forEach(function (s, i) { cS[scC + "," + (9 + RR + i)] = s; });
+  var ttS = [21600, 22800, 24000, 25200, 26400];
+  for (tcS = 0; tcS < 3; tcS++) {
+    var ckw = scC + 2 + tcS;
+    cS[ckw + ",4"] = 101 + tcS;
+    cS[ckw + ",10"] = "DEPOT";
+    cS[ckw + ",11"] = "M";
+    for (qi = 0; qi < ttS.length; qi++) cS[ckw + "," + (12 + qi)] = ttS[qi] / 86400;
+  }
+  corridor0.forEach(function (s, i) { cS[scC + "," + (71 + i)] = s; });
+  cS[(scC + 2) + ",65"] = 201;
+  cS[(scC + 2) + ",69"] = "DEPOT";
+  cS[(scC + 2) + ",70"] = "D";
+  for (qi = 0; qi < ttS.length; qi++) cS[(scC + 2) + "," + (71 + qi)] = (ttS[qi] + 1200) / 86400;
+  var sh1 = U.buildFromCells(cS, { corridor: corridor0 });
+  ok(g, "a shifted grid is re-anchored onto the corridor",
+     !!(sh1.anchor && sh1.anchor.col === scC && sh1.anchor.r0 === 12),
+     JSON.stringify(sh1.anchor));
+  eq(g, "stops equal the corridor after re-anchoring",
+     sh1.stops.join("|"), corridor0.join("|"));
+  eq(g, "the ring closure survives the re-anchor", sh1.ring, true);
+  eq(g, "shifted DN trips are read in order",
+     sh1.dn.length + ":" + sh1.dn[0].n + ":" + sh1.dn[2].n, "3:101:103");
+  eq(g, "shifted DN times land on their stations",
+     sh1.dn[0].t[0] + "," + sh1.dn[0].t[4], "21600,26400");
+  eq(g, "shifted UP trips are read", sh1.up.length + ":" + sh1.up[0].n, "1:201");
+
+  var cX = {}, tcX;
+  corridor0.forEach(function (s, i) { cX["3," + (9 + i)] = s; });
+  for (tcX = 0; tcX < 2; tcX++) {
+    var cxw = 5 + tcX;
+    cX[cxw + ",1"] = 311 + tcX;
+    cX[cxw + ",7"] = "DEPOT";
+    cX[cxw + ",8"] = "D";
+    for (qi = 0; qi < ttS.length; qi++) cX[cxw + "," + (9 + qi)] = (ttS[qi] + 3600 * tcX) / 86400;
+  }
+  var sh2 = U.buildFromCells(cX, { corridor: corridor0 });
+  ok(g, "a column-shifted grid is re-anchored too",
+     !!(sh2.anchor && sh2.anchor.col === 3), JSON.stringify(sh2.anchor));
+  eq(g, "column-shifted trips are read",
+     sh2.dn.length + ":" + sh2.dn[0].n + ":" + sh2.dn[1].t[0], "2:311:25200");
+
   /* C13: the admin refuses to create two rules of the SAME specificity on one
      day, while allowing an exact date and an annual recurrence to share one --
      they are different rules and the exact one is the more specific. */

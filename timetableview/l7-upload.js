@@ -19,6 +19,13 @@
        file, so the cached values are all that exist. Reading <v> is what makes
        extraction possible at all.
 
+   A second, deliberately smaller rule set handles sheet-to-sheet drift: the
+   weekday / Saturday / Sunday books share one corridor (same names, same order,
+   same count) but the grid may sit a few rows or columns further into the page.
+   buildFromCells() accepts the known corridor as a reference and re-anchors the
+   whole block to wherever that list appears, falling back to the fixed template
+   layout above when no anchor matches.
+
    No third-party code: the zip is read with DataView plus the platform
    DecompressionStream, and the XML with regular expressions, matching the
    Python implementation step for step.
@@ -271,15 +278,153 @@ window.L7_UPLOAD = (function () {
     return Math.round(v * 86400);
   }
 
-  function buildFromCells(cells) {
-    var out = { stops: [], ring: false, dn: [], up: [] };
-    var st = { parity: [], dropped: [], repaired: 0, partial: 0, zero: 0 };
-    var DN = UPL.BLOCKS[0], raw = [], r, s;
+  function buildFromCells(cells, opts) {
+    opts = opts || {};
+    /* A shifted sheet (same corridor, a few rows/columns further into the page
+       than the template) is parsed by anchoring on the known station list and
+       re-locating every block row relative to it. Without a reference, or when
+       no anchor matches, parse the fixed template layout exactly as before. */
+    if (opts.corridor && opts.corridor.length) {
+      var runs = corridorRuns(cells, opts.corridor);
+      if (runs.length && runs[0].len === opts.corridor.length) return buildAnchored(cells, runs);
+    }
+    return buildLegacy(cells);
+  }
 
-    /* Corridor: column A, the DN grid rows. The last slot repeats the first
-       (MKPR) -- that repetition is the sheet closing the ring, so KEEP it. The
-       board then starts and finishes at MKPR and the closing link is drawn as
-       real track rather than hidden. */
+  /* corridorRuns(): every contiguous spot where the reference station list
+     appears verbatim (same names, same order, same count). The DN block and the
+     UP block are each one run; both re-anchor to it. */
+  function corridorRuns(cells, ref, maxCol, maxRow) {
+    var out = [];
+    maxCol = maxCol || 12; maxRow = maxRow || 500;
+    var col, r, s, i, j;
+    for (col = 1; col <= maxCol; col++) {
+      var txt = [], rows = [];
+      for (r = 1; r <= maxRow; r++) {
+        s = cells[col + "," + r];
+        if (typeof s === "string" && s.trim()) { txt.push(s.trim()); rows.push(r); }
+      }
+      if (txt.length < ref.length) continue;
+      for (i = 0; i + ref.length <= txt.length; i++) {
+        var hit = true;
+        for (j = 0; j < ref.length; j++) {
+          if (ref[j] !== txt[i + j]) { hit = false; break; }
+        }
+        if (hit) {
+          out.push({ col: col, r0: rows[i], len: ref.length,
+                     stops: txt.slice(i, i + ref.length) });
+          i += ref.length - 1;
+        }
+      }
+    }
+    out.sort(function (x, y) { return x.r0 - y.r0; });
+    return out;
+  }
+
+  function findFirstTripCol(cells, stationCol, tripRow) {
+    for (var c = stationCol + 1; c <= UPL.LAST_COL; c++) {
+      var v = cells[c + "," + tripRow];
+      if (typeof v === "number" && isFinite(v)) return c;
+    }
+    return 0;
+  }
+
+  function freshStats() {
+    return { parity: [], dropped: [], repaired: 0, partial: 0, zero: 0 };
+  }
+
+  /* One direction block (DN or UP). Every anchor is caller-supplied so the same
+     scanning logic serves the fixed template layout and a re-anchored one. */
+  function buildBlock(cells, o, st) {
+    var tripR = o.tripR, depotR = o.depotR, mdR = o.mdR,
+        r0 = o.r0, r1 = o.r1, firstCol = o.firstCol, label = o.label, key = o.key;
+    var out = [], col, no, t, times, filled, a, z, i;
+    for (col = firstCol; col <= UPL.LAST_COL; col++) {
+      no = cells[col + "," + tripR];
+      if (typeof no !== "number" || !isFinite(no)) continue;
+      no = Math.trunc(no);
+
+      times = []; filled = [];
+      for (var rr = r0; rr <= r1; rr++) {
+        t = toSecs(cells[col + "," + rr]);
+        times.push(t);
+        if (t !== null) filled.push(times.length - 1);
+      }
+      if (filled.length < UPL.MIN_CELLS) {
+        st.dropped.push([label, no, filled.length]);
+        continue;
+      }
+      a = filled[0]; z = filled[filled.length - 1];
+      if (a !== 0 || z !== times.length - 1) st.partial++;
+
+      /* Forward-fill interior gaps, then force non-decreasing so a train can
+         never jump backwards on screen. */
+      var repaired = false;
+      for (i = a + 1; i <= z; i++) {
+        if (times[i] === null) { times[i] = times[i - 1]; repaired = true; }
+        else if (times[i] < times[i - 1]) { times[i] = times[i - 1]; repaired = true; }
+      }
+      if (repaired) st.repaired++;
+
+      /* Two adjacent calls at the same instant are a zero-second link. They
+         are legal -- the real workbook has two, both a station with no booked
+         time that the fill above carries forward -- so they are counted for
+         review and left exactly as booked, never nudged a second apart.
+         Counted after the fill, because that is the shape the board will
+         actually draw. */
+      for (i = a + 1; i <= z; i++) {
+        if (times[i] === times[i - 1]) st.zero++;
+      }
+
+      var rec = { n: no, a: a, b: z, t: times };
+      var depot = cells[col + "," + depotR];
+      if (typeof depot === "string" && depot.trim() && depot.trim() !== "DEPOT") rec.d = depot.trim();
+      var md = cells[col + "," + mdR];
+      if (typeof md === "string" && (md.trim() === "M" || md.trim() === "D")) rec.m = md.trim();
+      if ((no % 2 === 0) === (key === "dn")) { rec.x = 1; st.parity.push([label, no]); }
+      out.push(rec);
+    }
+    return out;
+  }
+
+  /* Anchor-based parse: the station list tells us where the grid lives, and
+     every block row is re-located relative to it. The template keeps these
+     offsets: trip numbers 8 rows above the DN grid (6 above UP), depot 2 and
+     md 1 rows above either grid start. The first trip column is found by
+     scanning for the numeric trip number, so a differently-sized spacer column
+     does not matter either. */
+  function buildAnchored(cells, runs) {
+    var dn = runs[0], up = null, k, dnTrip, upTrip = 0, up0 = 0;
+    for (k = 1; k < runs.length; k++) {
+      if (runs[k].r0 > dn.r0) { up = runs[k]; break; }
+    }
+    var dn0 = dn.r0, dn1 = dn0 + dn.stops.length - 1;
+    dnTrip = findFirstTripCol(cells, dn.col, dn0 - 8);
+    if (up) {
+      up0 = up.r0;
+      upTrip = findFirstTripCol(cells, up.col, up0 - 6);
+    }
+    var st = freshStats();
+    var out = {
+      stops: dn.stops.slice(),
+      ring: dn.stops.length > 1 && dn.stops[0] === dn.stops[dn.stops.length - 1],
+      dn: dnTrip ? buildBlock(cells, { tripR: dn0 - 8, depotR: dn0 - 2, mdR: dn0 - 1,
+        r0: dn0, r1: dn1, firstCol: dnTrip, label: "DN", key: "dn" }, st) : [],
+      up: (up && upTrip) ? buildBlock(cells, { tripR: up0 - 6, depotR: up0 - 2, mdR: up0 - 1,
+        r0: up0, r1: up0 + up.stops.length - 1, firstCol: upTrip, label: "UP", key: "up" }, st) : [],
+      anchor: { col: dn.col, r0: dn0, len: dn.stops.length, up: (up && upTrip) ? up0 : 0 }
+    };
+    out._stats = st;
+    return out;
+  }
+
+  /* The fixed template layout: corridor in column A rows 9-52, trips from
+     column C, block rows as baked into UPL.BLOCKS. Kept byte-for-byte for
+     workbooks that are not shifted (and for the same error text). */
+  function buildLegacy(cells) {
+    var out = { stops: [], ring: false, dn: [], up: [] };
+    var st = freshStats();
+    var DN = UPL.BLOCKS[0], raw = [], r, s;
     for (r = DN[4]; r <= DN[5]; r++) {
       s = cells["1," + r];
       if (typeof s === "string" && s.trim()) raw.push(s.trim());
@@ -290,55 +435,11 @@ window.L7_UPLOAD = (function () {
       throw new Error("no station labels in column A rows " + DN[4] + "-" + DN[5]
         + " - this does not look like a Line 7 working timetable");
     }
-
     for (var b = 0; b < UPL.BLOCKS.length; b++) {
       var B = UPL.BLOCKS[b], label = B[0], tripR = B[1], depotR = B[2], mdR = B[3],
-          r0 = B[4], r1 = B[5], key = B[6], col, no, t, times, filled, a, z, i;
-      for (col = UPL.FIRST_COL; col <= UPL.LAST_COL; col++) {
-        no = cells[col + "," + tripR];
-        if (typeof no !== "number" || !isFinite(no)) continue;
-        no = Math.trunc(no);
-
-        times = []; filled = [];
-        for (var rr = r0; rr <= r1; rr++) {
-          t = toSecs(cells[col + "," + rr]);
-          times.push(t);
-          if (t !== null) filled.push(times.length - 1);
-        }
-        if (filled.length < UPL.MIN_CELLS) {
-          st.dropped.push([label, no, filled.length]);
-          continue;
-        }
-        a = filled[0]; z = filled[filled.length - 1];
-        if (a !== 0 || z !== times.length - 1) st.partial++;
-
-        /* Forward-fill interior gaps, then force non-decreasing so a train can
-           never jump backwards on screen. */
-        var repaired = false;
-        for (i = a + 1; i <= z; i++) {
-          if (times[i] === null) { times[i] = times[i - 1]; repaired = true; }
-          else if (times[i] < times[i - 1]) { times[i] = times[i - 1]; repaired = true; }
-        }
-        if (repaired) st.repaired++;
-
-        /* Two adjacent calls at the same instant are a zero-second link. They
-           are legal -- the real workbook has two, both a station with no booked
-           time that the fill above carries forward -- so they are counted for
-           review and left exactly as booked, never nudged a second apart.
-           Counted after the fill, because that is the shape the board will
-           actually draw. */
-        for (i = a + 1; i <= z; i++) {
-          if (times[i] === times[i - 1]) st.zero++;
-        }
-
-        var rec = { n: no, a: a, b: z, t: times };
-        var depot = cells[col + "," + depotR];
-        if (typeof depot === "string" && depot.trim() && depot.trim() !== "DEPOT") rec.d = depot.trim();
-        var md = cells[col + "," + mdR];
-        if (typeof md === "string" && (md.trim() === "M" || md.trim() === "D")) rec.m = md.trim();
-        if ((no % 2 === 0) === (key === "dn")) { rec.x = 1; st.parity.push([label, no]); }
-        out[key].push(rec);
-      }
+          r0 = B[4], r1 = B[5], key = B[6];
+      out[key] = buildBlock(cells, { tripR: tripR, depotR: depotR, mdR: mdR, r0: r0, r1: r1,
+        firstCol: UPL.FIRST_COL, label: label, key: key }, st);
     }
     out._stats = st;
     return out;
@@ -411,6 +512,8 @@ window.L7_UPLOAD = (function () {
     zipText: zipText,
     readWorkbook: readWorkbook,
     buildFromCells: buildFromCells,
+    corridorRuns: corridorRuns,
+    findFirstTripCol: findFirstTripCol,
     cellsFrom: cellsFrom,
     windowOf: windowOf,
     activeAt: activeAt,

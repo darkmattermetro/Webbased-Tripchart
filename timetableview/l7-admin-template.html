@@ -1123,6 +1123,11 @@ window.L7_BASE = "/*__L7_BASE__*/";
     for (i = 0; i < cur.length; i++) if (!set[cur[i]]) missing.push(cur[i]);
     return { missing: missing, extra: extra };
   }
+  function colLetters(n) {
+    var s = "";
+    while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+    return s;
+  }
   function buildFrame(from, to) {
     var seen = {}, frame = [], i, j;
     for (i = 0; i < to.length; i++) {
@@ -1340,7 +1345,7 @@ window.L7_BASE = "/*__L7_BASE__*/";
     todo.forEach(function (r) {
       var res;
       try {
-        var d = U.buildFromCells(r.sh.cells);
+        var d = U.buildFromCells(r.sh.cells, { corridor: DATA.meta.corridor });
         var w = U.windowOf(d);
         if (!w) throw new Error("no trip had enough usable stop times to be a working timetable");
         res = { ok: true, d: d, w: w, r: r };
@@ -1508,6 +1513,14 @@ window.L7_BASE = "/*__L7_BASE__*/";
       };
       add("CORRIDOR: " + d.stops.slice(0, 4).join(" \u2192 ") + " \u2026 \u2192 "
         + d.stops[d.stops.length - 1] + " (" + d.stops.length + " slots)", true);
+      if (d.anchor && (d.anchor.col !== 1 || d.anchor.r0 !== 9 || (d.anchor.up && d.anchor.up !== 68))) {
+        add("GRID RE-ANCHORED: the " + d.anchor.len + "-slot station list was found in column "
+          + colLetters(d.anchor.col) + " rows " + d.anchor.r0 + "-" + (d.anchor.r0 + d.anchor.len - 1)
+          + (d.anchor.up ? ", UP block rows " + d.anchor.up + "-" + (d.anchor.up + d.anchor.len - 1)
+                         : ", no UP block found")
+          + ". This sheet is shifted from the template layout by a few rows/columns; the whole "
+          + "block was re-anchored to the corridor and the trip rows found relative to it.", true);
+      }
       if (diff) {
         var sl = slotDiff(d.stops, STOPS);
         add("STATION LIST DIFFERS from the " + STOPS.length + " slots now in the file. "
