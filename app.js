@@ -177,7 +177,7 @@ function loadTimetableFrame(id, url) {
 }
 // Bump this whenever the built pages under timetableview/ are regenerated, so
 // browsers fetch the new copy instead of a cached one.
-const L7_TT_VERSION = '20261009f';
+const L7_TT_VERSION = '20261009g';
 function l7TtUrl(path) { return path + '?v=' + L7_TT_VERSION; }
 function showTimetable() {
     loadTimetableFrame('ttViewerFrame', l7TtUrl('timetableview/line7-timetable-timesync.html'));

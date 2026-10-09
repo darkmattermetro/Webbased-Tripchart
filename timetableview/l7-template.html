@@ -22,9 +22,8 @@
       <b>Not live train status.</b>
     </div>
     <div class="spacer"></div>
-    <div class="readout tbl" title="Which timetable is running is decided by the administration
-      console and baked into this file. There is deliberately no selector here: the end user sees
-      the decision and cannot change it.">
+    <div class="readout tbl" title="The administration console sets the default service for each
+      date. The service tabs below let you view any service type in this build.">
       <div class="k">TIMETABLE IN FORCE</div>
       <div class="v sm"><span id="tblName">--</span> <span class="how auto" id="tblHow">--</span></div>
       <div class="k" style="margin-top:2px">WEF <span id="wef">--</span>
@@ -43,9 +42,15 @@
   </div>
   <div class="hrow" style="border-top:1px solid var(--border)">
     <div class="sel">
-      <span class="lbl">TIMETABLE</span>
+      <span class="lbl">VIEW</span>
       <span class="fixed" id="selFixed">--</span>
-      <span class="lbl2">SET BY ADMINISTRATION &mdash; NOT SELECTABLE HERE</span>
+      <span class="tabs" id="tblTabs" role="tablist" aria-label="Service type">
+        <button type="button" class="tab" data-tbl="auto" role="tab"><i class="dot"></i>AUTO</button>
+        <button type="button" class="tab" data-tbl="weekday" role="tab"><i class="dot"></i>WEEKDAY</button>
+        <button type="button" class="tab" data-tbl="saturday" role="tab"><i class="dot"></i>SATURDAY</button>
+        <button type="button" class="tab" data-tbl="sunday" role="tab"><i class="dot"></i>SUNDAY</button>
+        <button type="button" class="tab" data-tbl="special" role="tab"><i class="dot"></i>SPECIAL</button>
+      </span>
     </div>
     <div class="spacer"></div>
     <div class="ctrls">
@@ -332,6 +337,13 @@ window.__L7start = function (candidateData, candidateMeta) {
      reads it -- there is no control on this page that can change it. */
   var STRICT = !!CONF.strict;
 
+  /* Which service type the viewer is looking at. null means "follow the date
+     programme" (the AUTO tab); any other value is a table id the viewer picked
+     from the service tabs. The administration still owns the default -- this
+     only changes which service type this client displays, and a pick with no
+     data still falls back / refuses exactly as the date rule does. */
+  var MANUAL = null;
+
   /* ---------------- formatting ---------------- */
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
   /* A trip's times are forward-filled at build time, so a null inside a trip's
@@ -423,15 +435,17 @@ window.__L7start = function (candidateData, candidateMeta) {
 
 
   /* ---------------- which timetable is in force ----------------
-     The end user has no say in this. The administration console writes the
-     date programme into the file's metadata block at export time, and the two
-     rules below are the whole decision:
+     The administration console writes the date programme into the file's
+     metadata block at export time, and the two rules below are the whole
+     automatic decision:
 
        1. a programmed date matching today  -> DATE OVERRIDE
        2. otherwise the day of the week     -> AUTO   (SPECIAL is never auto)
 
-     Nothing is read from the URL, the query string or local storage, so there
-     is no way for a viewer to redirect the board onto a different timetable. */
+     The service tabs let a viewer pin the board onto a specific service type;
+     that pick never rewrites this programme, so AUTO keeps following it once
+     the pick is cleared. Nothing is read from the URL, the query string or
+     local storage, and a pick is never persisted across a reload. */
   var PROGRAM = (function () {
     var a = CONF.program, out = [], i;
     if (Object.prototype.toString.call(a) !== "[object Array]") return out;
@@ -823,7 +837,8 @@ window.__L7start = function (candidateData, candidateMeta) {
   function renderNotice(res, loaded, inWin) {
     var fb = !!res.fallback, refused = !!res.refused;
     var key = !loaded ? (refused ? "R" : "L") + res.id
-            : fb ? "F" + res.fallback + (inWin ? "1" : "0") + (res.why === "DATE OVERRIDE" ? "P" : "A")
+            : fb ? "F" + res.fallback + (inWin ? "1" : "0") +
+                   (res.why === "DATE OVERRIDE" ? "P" : res.why === "MANUAL" ? "M" : "A")
             : inWin ? "" : "W";
     if (res.leapSkip) key += "Y";       // the skipped-date notice is its own state
     if (key === prevNl) return;
@@ -880,8 +895,9 @@ window.__L7start = function (candidateData, candidateMeta) {
            has no way to correct. */
         var lead = res.why === "DATE OVERRIDE"
           ? "The administration has programmed this date to "
+          : res.why === "MANUAL" ? "You selected "
           : "Today resolves to ";
-        var after = res.why === "DATE OVERRIDE"
+        var after = (res.why === "DATE OVERRIDE" || res.why === "MANUAL")
           ? ", but the source "
           : " in the automatic rule, but the source ";
         para([textNode(lead), strong(asked), textNode(after + "workbook contains no " +
@@ -941,7 +957,11 @@ window.__L7start = function (candidateData, candidateMeta) {
 
   /* ---------------- frame ---------------- */
   function render(S, now) {
-    var want = resolveTable(now);
+    /* A tab pick overrides the date rule for which table to display; the date
+       still drives the service clock and the "today resolves to" reporting. */
+    var want = MANUAL
+      ? { id: MANUAL, how: "MANUAL", leapSkip: null }
+      : resolveTable(now);
     var res = pickTable(want);
     res.how = res.refused ? "REFUSED" : res.fallback ? "FALLBACK" : want.how;
     res.asked = want.id;
@@ -1010,12 +1030,14 @@ window.__L7start = function (candidateData, candidateMeta) {
       prevForce = fs;
     }
     selFixed(res);
+    syncTabs();
     if (res.how !== prevHow) {
       var h = document.getElementById("tblHow");
       h.textContent = res.how;
       h.className = "how " + (res.how === "AUTO" ? "auto"
         : res.how === "FALLBACK" ? "fb"
-        : res.how === "REFUSED" ? "bad" : "date");
+        : res.how === "REFUSED" ? "bad"
+        : res.how === "MANUAL" ? "man" : "date");
       prevHow = res.how;
     }
     var cn = ndn + "/" + nup;
@@ -1101,7 +1123,9 @@ window.__L7start = function (candidateData, candidateMeta) {
     } else if (res.fallback) {
       txt = TABLES[res.id].label + "  SHOWN FOR " + TABLES[res.fallback].label;
     } else {
-      txt = TABLES[res.id].label + (res.how === "DATE OVERRIDE" ? "  (PROGRAMMED)" : "");
+      txt = TABLES[res.id].label
+        + (res.how === "DATE OVERRIDE" ? "  (PROGRAMMED)" : "")
+        + (res.how === "MANUAL" ? "  (SELECTED)" : "");
     }
     if (txt === prevFixed) return;
     e.textContent = txt;
@@ -1116,9 +1140,23 @@ window.__L7start = function (candidateData, candidateMeta) {
     prevFixed = txt;
   }
   function syncSel(res) {
-    // display only -- there is nothing here the viewer can press. render()
-    // owns this text, so that the two header readouts can never disagree.
+    // render() owns this text so the two header readouts can never disagree.
     if (res) selFixed(res);
+  }
+  /* The service tabs carry one highlight. AUTO means "follow the programmed
+     date"; any other id is a manual view override, which the banner and the
+     "SHOWN FOR"/"SELECTED" readouts keep honest when it falls back. */
+  var prevTab = null;
+  function syncTabs() {
+    var active = MANUAL || "auto";
+    if (active === prevTab) return;
+    prevTab = active;
+    var host = document.getElementById("tblTabs");
+    if (!host) return;
+    var btns = host.getElementsByTagName("button");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("on", btns[i].getAttribute("data-tbl") === active);
+    }
   }
   function syncBtns() {
     document.getElementById("bNow").className = FOLLOW ? "on" : "";
@@ -1149,11 +1187,24 @@ window.__L7start = function (candidateData, candidateMeta) {
     document.body.classList.toggle("pnl");
   });
 
+  /* Service tabs: clicking a type pins the board to it; AUTO returns to the
+     date programme. Selection that lands on a table with no data falls back
+     (or refuses) exactly as a programmed date would, and the banner says so. */
+  document.getElementById("tblTabs").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("button[data-tbl]") : null;
+    if (!b) return;
+    var id = b.getAttribute("data-tbl");
+    MANUAL = (id === "auto") ? null : id;
+    syncTabs();
+    paint();
+  });
+
   /* ---------------- notice panel buttons ---------------- */
   document.getElementById("nlBtns").addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest("button") : null;
     if (!b) return;
-    // time navigation only -- a viewer cannot switch timetable from here
+    // these buttons only navigate time; the service tabs are the only
+    // control that switches the timetable
     if (b.hasAttribute("data-jump")) { setOffset(+b.getAttribute("data-jump") - serviceSec(new Date())); paint(); }
   });
 
@@ -1312,6 +1363,25 @@ window.__L7start = function (candidateData, candidateMeta) {
 
   document.getElementById("brSub").textContent = (CONF.corridor || "DMRC CORRIDOR MIMIC") +
     "  \u00b7  " + STOPS.length + " STATION SLOTS  \u00b7  REPLAYED FROM SHEET DATA";
+  /* Service tabs: mark which service types actually carry data in this build
+     and set the starting highlight. AUTO always applies; a type with no data
+     still selects, but the board labels the fallback rather than pretend. */
+  (function () {
+    var host = document.getElementById("tblTabs");
+    if (!host) return;
+    var btns = host.getElementsByTagName("button");
+    for (var i = 0; i < btns.length; i++) {
+      var id = btns[i].getAttribute("data-tbl");
+      var tb = TABLES[id] || null;
+      if (id === "auto" || (tb && tb.loaded)) btns[i].className += " has";
+      btns[i].title = id === "auto"
+        ? "Follow the programmed date"
+        : tb && tb.loaded
+          ? "View the " + tb.label + " timetable"
+          : tb.label + " has no data in this build; selecting it falls back";
+    }
+    syncTabs();
+  })();
   syncBtns();
   paint();
   requestAnimationFrame(frame);
@@ -1349,6 +1419,14 @@ window.__L7start = function (candidateData, candidateMeta) {
        editing metadata and rebuilding. The page exposes no UI that calls it. */
     setProgram: function (a) {
       PROGRAM = (a || []).slice();
+      paint();
+    },
+    /* Service-tab hooks for the same reason as setProgram: a test pins the
+       view exactly as a tab click would. "auto" clears the override. */
+    view: function () { return MANUAL || "auto"; },
+    setView: function (id) {
+      MANUAL = (id === "auto" || id == null) ? null : id;
+      syncTabs();
       paint();
     },
     at: function (sec, date) {

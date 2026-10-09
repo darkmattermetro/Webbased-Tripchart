@@ -74,6 +74,7 @@ background:rgba(245,158,11,.08);padding:5px 9px;border-radius:2px;line-height:1.
 .how{font-size:8.5px;letter-spacing:.13em;padding:1px 5px;border-radius:2px;display:inline-block}
 .how.auto{color:var(--dim);border:1px solid var(--border)}
 .how.date{color:var(--dn);border:1px solid rgba(250,204,21,.55)}
+.how.man{color:var(--bright);border:1px solid #475569}
 .how.fb{color:#fb923c;border:1px solid rgba(251,146,60,.55)}
 .how.ok{color:var(--green);border:1px solid rgba(34,197,94,.5)}
 .how.bad{color:var(--red);border:1px solid rgba(239,68,68,.5)}
@@ -90,6 +91,10 @@ background:#0a1220;color:var(--bright);font-size:11px;letter-spacing:.12em;
 .sel button .dot{position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--dim)}
 .sel button.has .dot{background:var(--green);box-shadow:0 0 6px var(--green)}
 .sel button.on .dot{background:var(--dn)}
+/* service tabs: click a service type to view it; AUTO follows the programme. */
+.sel .tabs{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.sel .tab{padding:5px 9px;font-size:10px;letter-spacing:.1em}
+.sel .tab.on{background:#3a2c07;border-color:var(--dn);color:var(--dn)}
 .ctrls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 #btnPanel{display:none}
 /* ---------------- board + sections ---------------- */

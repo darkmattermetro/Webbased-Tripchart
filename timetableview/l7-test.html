@@ -64,9 +64,9 @@ iframe{border:0}
    Nothing here is part of a shipped viewer; this file is a development tool and
    is never inlined.
 
-   The suite is organised around a 26-item regression checklist. Each assertion is
+   The suite is organised around a 28-item regression checklist. Each assertion is
    tagged with the checklist item it belongs to, so the top of the page reports
-   "N / 26 checked" rather than only a raw assertion count. A checklist item is
+   "N / 28 checked" rather than only a raw assertion count. A checklist item is
    checked only when every assertion under it passes; one failure unchecks it.
    Skips are reported but do not by themselves uncheck an item. */
 
@@ -74,7 +74,7 @@ var R = { pass: 0, fail: 0, skip: 0, rows: [] };
 var VIEWER = "line7-timetable-timesync.html";
 var ADMIN  = "line7-timetable-admin.html";
 
-/* ---------------- the 26-item checklist ---------------- */
+/* ---------------- the 28-item checklist ---------------- */
 var CHECKS = [
   ["Data validation", "Missing L7_DATA or missing required properties"],
   ["Data validation", "Null or non-finite departure and terminal times"],
@@ -106,7 +106,8 @@ var CHECKS = [
   ["Performance and usability", "Keyboard controls and focus behavior"],
   ["Performance and usability", "No uncaught console errors during playback"],
   ["Time engine", "Service clock across midnight and the after-midnight tail"],
-  ["Duty roster", "Duty number or X shown above each train for the displayed time"]
+  ["Duty roster", "Duty number or X shown above each train for the displayed time"],
+  ["Service tabs", "AUTO and weekday / Saturday / Sunday / Special view selection"]
 ];
 var NCHECK = CHECKS.length;
 
@@ -1152,6 +1153,53 @@ T.duty = async function (W) {
      !!W.document.querySelector("#sections .train .duty"), "no .duty node found");
 };
 
+/* ---------------- service tabs ---------------- */
+T.tabs = async function (W) {
+  C(28);
+  var g = "H. service tabs";
+  var L = W.__L7, d = W.document;
+  var tab = function (id) { return d.querySelector("#tblTabs [data-tbl='" + id + "']"); };
+  var clickTab = function (id) {
+    tab(id).dispatchEvent(new W.MouseEvent("click", { bubbles: true }));
+  };
+
+  var btns = Array.prototype.slice.call(d.querySelectorAll("#tblTabs .tab"));
+  eq(g, "four service tabs plus AUTO", btns.length, 5);
+  eq(g, "AUTO is the initial highlight", tab("auto").classList.contains("on"), true);
+  eq(g, "weekday carries the loaded marker", tab("weekday").classList.contains("has"), true);
+  eq(g, "saturday has no loaded marker", tab("saturday").classList.contains("has"), false);
+
+  /* Pinning the loaded table is a clean pick: the readouts say SELECTED. */
+  clickTab("weekday");
+  eq(g, "view() follows the click", L.view(), "weekday");
+  eq(g, "the weekday tab is highlighted", tab("weekday").classList.contains("on"), true);
+  eq(g, "AUTO no longer highlighted", tab("auto").classList.contains("on"), false);
+  ok(g, "the readout marks the pick as SELECTED",
+     (d.getElementById("selFixed").textContent || "").indexOf("SELECTED") !== -1,
+     d.getElementById("selFixed").textContent || "(readout empty)");
+  eq(g, "the how readout says MANUAL", d.getElementById("tblHow").textContent, "MANUAL");
+
+  /* Pinning an unloaded type is the same honest fallback as a programmed date:
+     the board shows weekday and the banner explains that the pick has no data. */
+  clickTab("saturday");
+  eq(g, "view() reports saturday", L.view(), "saturday");
+  ok(g, "the readout says SHOWN FOR",
+     (d.getElementById("selFixed").textContent || "").indexOf("SHOWN FOR") !== -1,
+     d.getElementById("selFixed").textContent || "(readout empty)");
+  eq(g, "the how readout says FALLBACK", d.getElementById("tblHow").textContent, "FALLBACK");
+  ok(g, "the fallback banner is open",
+     !!d.getElementById("nlTitle") &&
+       d.getElementById("nlTitle").textContent.indexOf("NOT LOADED") !== -1,
+     d.getElementById("nlTitle").textContent || "(banner closed)");
+  ok(g, "weekday services are still drawn", L.secs().length > 0, "no sections rebuilt");
+
+  /* AUTO folds the override away and the board follows the date rule again. */
+  clickTab("auto");
+  eq(g, "AUTO clears the override", L.view(), "auto");
+  eq(g, "AUTO is highlighted again", tab("auto").classList.contains("on"), true);
+  eq(g, "saturday no longer highlighted", tab("saturday").classList.contains("on"), false);
+};
+
 /* ---------------- main ---------------- */
 (async function main() {
   var srcViewer = null, srcAdmin = null, why = "";
@@ -1185,6 +1233,7 @@ T.duty = async function (W) {
   await T.playback(W);
   await T.widths(f, W);
   await T.duty(W);
+  await T.tabs(W);
   await T.rebuild(f, W);
   if (f.parentNode) f.parentNode.removeChild(f);
 

@@ -30,7 +30,7 @@ whenever this folder is rebuilt so browsers fetch the new copy.
 | `l7-data.js`, `l7-meta.js` | Generated: the `window.L7_DATA` / `window.L7_META` payloads. |
 | `line7-timetable-timesync.html` | **Generated** deployable viewer. |
 | `line7-timetable-admin.html` | **Generated** deployable admin console. |
-| `l7-test.html` | Browser regression suite (27 checks). Drives the generated files in hidden iframes. |
+| `l7-test.html` | Browser regression suite (28 checks). Drives the generated files in hidden iframes. |
 | `l7-test-results.md` | Latest recorded suite result. |
 
 ## Build
@@ -95,6 +95,22 @@ published through that feature show up without a rebuild.
   is unreachable the board simply draws no chip, exactly as before this feature.
 - The join is on the rake number, so it does not depend on the two datasets sharing
   station names.
+
+## Service tabs (viewer)
+
+The header shows five tabs: **AUTO**, **WEEKDAY**, **SATURDAY**, **SUNDAY** and
+**SPECIAL**. **AUTO** (the default) follows the administration's date programme —
+the same rule that picks the timetable when nobody touches a tab. Clicking a
+service type pins the board onto that type for the session: the pick never rewrites
+the date programme, nothing is read from the URL or local storage, and a reload
+starts on **AUTO** again.
+
+A green dot marks service types that actually carry data in this build. Picking a
+type with no data is handled exactly like a programmed date landing on an empty
+table: the board draws the fallback services (or refuses in strict mode) and labels
+the readouts `FALLBACK` / `SHOWN FOR` / `NOT LOADED`, for all the same reasons a
+viewer must never mistake substitute service for the requested type. Covered by
+check 28.
 
 ## Notes
 

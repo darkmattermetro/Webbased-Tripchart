@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**27 / 27 checks passed** — 447 assertions pass, 0 fail, 0 skip.
+**28 / 28 checks passed** — 464 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -39,6 +39,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 25 | Performance and usability | No uncaught console errors during playback | PASS |
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
+| 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
 
 ## Fixes covered by the suite
 
@@ -130,6 +131,19 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   disabled, so the board draws exactly as before and no chip appears. Covered by
   check 27.
 
+### Service tabs (this pass)
+
+- **View by service type.** The header now carries **AUTO · WEEKDAY · SATURDAY ·
+  SUNDAY · SPECIAL** tabs. **AUTO** is the default and folds away to the date
+  programme; picking a service type overrides only that client's view for the
+  session — it never rewrites the programme and is not persisted or read from the
+  URL. A green dot marks types with data in the build.
+- **Same honesty as a programmed date.** Picking an unloaded type falls back (or
+  refuses in strict mode) and labels it `FALLBACK` / `SHOWN FOR` / `NOT LOADED`,
+  so substitute service is always flagged, never silently presented.
+  `window.__L7.view()` / `setView(id)` expose the same state the tabs set. Covered
+  by check 28.
+
 ## How to run
 
 ```
@@ -137,7 +151,7 @@ python -m http.server 8765 --bind 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8765/timetableview/l7-test.html`. The page drives the real built files
-in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/27
+in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/28
 checks" summary. `window.__TEST_RESULT` holds the machine-readable result
 (`pass`, `fail`, `skip`, `checked`, `total`, `rows[]`, `checklist[]`).
 
