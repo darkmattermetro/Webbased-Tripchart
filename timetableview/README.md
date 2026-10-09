@@ -30,7 +30,7 @@ whenever this folder is rebuilt so browsers fetch the new copy.
 | `l7-data.js`, `l7-meta.js` | Generated: the `window.L7_DATA` / `window.L7_META` payloads. |
 | `line7-timetable-timesync.html` | **Generated** deployable viewer. |
 | `line7-timetable-admin.html` | **Generated** deployable admin console. |
-| `l7-test.html` | Browser regression suite (26 checks). Drives the generated files in hidden iframes. |
+| `l7-test.html` | Browser regression suite (27 checks). Drives the generated files in hidden iframes. |
 | `l7-test-results.md` | Latest recorded suite result. |
 
 ## Build
@@ -76,6 +76,23 @@ Authentication caveat: the app uses the Supabase **anon** key with its own in-pa
 login, so Postgres RLS cannot tell admins from visitors and the shipped policies are
 permissive (writes are gated by the app). Harden later by moving to Supabase Auth and
 tightening the `l7_write` policy, as described in the SQL file.
+
+## Duty display (optional)
+
+Each train on the board can show the crew (duty) number working that rake at the
+displayed time, in a small chip just above the train number. This reads the app's
+existing Supabase `trip_data` table (`Rake Num`, `Duty No`, `Start Time`, `End Time`,
+`day_type`), where the Duty Finder lives — so it needs no new table, and duties
+published through that feature show up without a rebuild.
+
+- A rake is handed between crews during the day, so the duty shown is the one whose
+  booked window starts on or before the second the board is displaying, for the day
+  type currently selected (`Weekday`/`Saturday`/`Sunday`/`Special`).
+- The roster is fetched over http(s) only, paged past PostgREST's response cap, and
+  independently of the timetable fetch. From `file://`, offline, or if `trip_data`
+  is unreachable the board simply draws no chip, exactly as before this feature.
+- The join is on the rake number, so it does not depend on the two datasets sharing
+  station names.
 
 ## Notes
 

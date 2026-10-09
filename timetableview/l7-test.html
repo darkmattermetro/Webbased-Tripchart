@@ -105,7 +105,8 @@ var CHECKS = [
   ["Performance and usability", "Repeated resize and table changes"],
   ["Performance and usability", "Keyboard controls and focus behavior"],
   ["Performance and usability", "No uncaught console errors during playback"],
-  ["Time engine", "Service clock across midnight and the after-midnight tail"]
+  ["Time engine", "Service clock across midnight and the after-midnight tail"],
+  ["Duty roster", "Duty number shown above each train for the displayed time"]
 ];
 var NCHECK = CHECKS.length;
 
@@ -1112,6 +1113,41 @@ function render() {
   console.log("L7 TEST: " + checked + "/" + NCHECK + " checks, " + v);
 }
 
+/* ---------------- duty roster ---------------- */
+T.duty = async function (W) {
+  C(27);
+  var g = "G. duty roster";
+  /* All day types carry the same two windows so the result does not depend on
+     which table the board happens to be showing when this check runs. */
+  var roster = {};
+  ["Weekday", "Saturday", "Sunday", "Special"].forEach(function (day) {
+    roster[day] = {
+      "708": [ { s: 5 * 3600, e: 8 * 3600, d: "201" },
+               { s: 8 * 3600, e: 10 * 3600, d: "224" } ],
+      "701": [ { s: 5 * 3600, e: 9 * 3600, d: "203" } ]
+    };
+  });
+  W.__L7_DUTY = roster;
+
+  var S = 6 * 3600 + 30 * 60;
+  W.__L7.at(S, new Date(2026, 9, 9, 6, 30, 0));
+  var chips = Array.prototype.slice.call(W.document.querySelectorAll("#sections .train"))
+    .filter(function (el) { return el.style.display === "block"; })
+    .map(function (el) {
+      return { no: el.getAttribute("data-no"), d: el.querySelector(".duty").textContent };
+    });
+  var bad = chips.filter(function (c) { return c.d !== W.__L7.dutyFor(c.no, S); });
+  ok(g, "every drawn chip matches the roster for the displayed time",
+     chips.length > 0 && bad.length === 0,
+     bad.length ? JSON.stringify(bad.slice(0, 3)) : (chips.length ? "" : "no trains drawn"));
+  eq(g, "rake 708 at 06:30", W.__L7.dutyFor(708, S), "201");
+  eq(g, "rake 708 at 08:30", W.__L7.dutyFor(708, 8 * 3600 + 1800), "224");
+  eq(g, "before the first window is blank", W.__L7.dutyFor(708, 4 * 3600), "");
+  eq(g, "unknown rake is blank", W.__L7.dutyFor(999, S), "");
+  ok(g, "a duty node exists on a train",
+     !!W.document.querySelector("#sections .train .duty"), "no .duty node found");
+};
+
 /* ---------------- main ---------------- */
 (async function main() {
   var srcViewer = null, srcAdmin = null, why = "";
@@ -1144,6 +1180,7 @@ function render() {
   await T.keyboard(W);
   await T.playback(W);
   await T.widths(f, W);
+  await T.duty(W);
   await T.rebuild(f, W);
   if (f.parentNode) f.parentNode.removeChild(f);
 

@@ -112,6 +112,11 @@
 /*__L7_SUPA__*/
 </script>
 <script>
+/* "HH:MM" (hours may run past 24 on a service day) -> seconds since midnight. */
+function parseHM(s) {
+  var m = /^(\d{1,3}):(\d{2})/.exec(String(s == null ? "" : s).trim());
+  return m ? (+m[1]) * 3600 + (+m[2]) * 60 : null;
+}
 window.__L7start = function (candidateData, candidateMeta) {
   "use strict";
 
@@ -627,6 +632,8 @@ window.__L7start = function (candidateData, candidateMeta) {
     var e = el("div", "train " + dir);
     if (flagged) e.className += " flag";
     e.setAttribute("data-no", no);
+    e.dutyEl = el("span", "duty", e);        // crew number, drawn above
+    e.dutyEl.style.display = "none";
     el("span", "", e).textContent = no;
     e.leadEl = el("i", "lead", e);
     e.contEl = el("i", "cont", e);
@@ -656,6 +663,29 @@ window.__L7start = function (candidateData, candidateMeta) {
         TRIPS.push(o);
       });
     });
+  }
+
+  /* ---------------- duty roster (live, optional) ----------------
+     The number on a train is a rake number, and the duty roster keys on the same
+     value ("Rake Num" in trip_data). A rake is handed between crews through the
+     day, so the duty shown is the crew whose booked window starts on or before
+     the second the board is displaying -- the one on the rake at this time. The
+     roster arrives online; until it does, __L7_DUTY is null and no chip is
+     drawn, which is also the offline behaviour. */
+  var DAYTYPE = { weekday: "Weekday", saturday: "Saturday",
+                  sunday: "Sunday", special: "Special" };
+  function dutyFor(no, S) {
+    var all = window.__L7_DUTY;
+    if (!all || S == null) return "";
+    var day = all[DAYTYPE[TBL_ID]];
+    if (!day) return "";
+    var segs = day[String(no)];
+    if (!segs || !segs.length) return "";
+    var best = null;
+    for (var i = 0; i < segs.length; i++) {
+      if (segs[i].s <= S) best = segs[i]; else break;
+    }
+    return best ? (best.d || "") : "";
   }
 
   /* ---------------- playback state ---------------- */
@@ -740,6 +770,7 @@ window.__L7start = function (candidateData, candidateMeta) {
     var k = kOf(o);
     var secs = sectionsFor(k);
     var n = secs.length < 2 ? secs.length : 2;
+    var duty = dutyFor(o.no, o.lastS);
     for (var i = 0; i < n; i++) {
       var s = secs[i], e = o.els[i];
       var p = Math.min(Math.max(k, s.lo), s.hi);
@@ -751,6 +782,9 @@ window.__L7start = function (candidateData, candidateMeta) {
       else if (k > s.hi) { cls += " cont-down"; arrow = "\u25BC"; }
       if (e.className !== cls) e.className = cls;
       if (e.contEl.textContent !== arrow) e.contEl.textContent = arrow;
+      if (e.dutyEl.textContent !== duty) e.dutyEl.textContent = duty;
+      var dd = duty ? "block" : "none";
+      if (e.dutyEl.style.display !== dd) e.dutyEl.style.display = dd;
       if (e.style.display !== "block") e.style.display = "block";
     }
     for (var j = n; j < o.els.length; j++) {
@@ -1295,6 +1329,8 @@ window.__L7start = function (candidateData, candidateMeta) {
     strict: function () { return STRICT; },
     setStrict: function (v) { STRICT = !!v; paint(); },
     last: function () { return LAST_RES; },
+    dutyFor: dutyFor,
+    dutyMap: function () { return window.__L7_DUTY || null; },
     /* test hook only, for driving the board onto a programmed date without
        editing metadata and rebuilding. The page exposes no UI that calls it. */
     setProgram: function (a) {
@@ -1322,22 +1358,74 @@ window.__L7start = function (candidateData, candidateMeta) {
    never worse off for trying. */
 (function () {
   var cfg = window.L7_SUPA;
-  function boot(d, m) { window.__L7start(d, m); }
   var offline = !!window.__L7_NO_SYNC;
   try { offline = offline || location.protocol === "file:"; } catch (e) {}
-  if (!cfg || !cfg.url || !window.fetch || offline) { boot(); return; }
+  var base = (cfg && cfg.url) ? String(cfg.url).replace(/\/+$/, "") : "";
+  var H = { apikey: (cfg && cfg.anonKey) || "",
+            Authorization: "Bearer " + ((cfg && cfg.anonKey) || "") };
+
+  /* Duty roster: optional, online, and independent of the timetable fetch. It
+     fills window.__L7_DUTY = { Weekday: { "708": [{s,e,d}, ...] } }; the board
+     reads it while drawing and simply shows no chip until it arrives. */
+  function loadDuty() {
+    if (!base || !window.fetch) return;
+    /* PostgREST caps a single response (1000 rows here) and trip_data is bigger
+       than that, so page by the unique id until the table is exhausted. Ordering
+       by a stable key is what makes offset paging safe. */
+    var page = 1000, offset = 0, all = [];
+    function finish() {
+      var map = {}, i, row, day, rake, s, e;
+      for (i = 0; i < all.length; i++) {
+        row = all[i];
+        day = row["day_type"];
+        rake = String(row["Rake Num"] == null ? "" : row["Rake Num"]).trim();
+        s = parseHM(row["Start Time"]);
+        if (!day || !rake || s == null) continue;
+        e = parseHM(row["End Time"]);
+        (map[day] = map[day] || {});
+        (map[day][rake] = map[day][rake] || []).push(
+          { s: s, e: e == null ? s : e,
+            d: String(row["Duty No"] == null ? "" : row["Duty No"]).trim() });
+      }
+      var days = Object.keys(map), k;
+      for (i = 0; i < days.length; i++) {
+        k = Object.keys(map[days[i]]);
+        for (var j = 0; j < k.length; j++) {
+          map[days[i]][k[j]].sort(function (a, b) { return a.s - b.s; });
+        }
+      }
+      window.__L7_DUTY = map;
+    }
+    function get() {
+      window.fetch(base + "/rest/v1/trip_data?select=day_type,Rake%20Num,Duty%20No," +
+                   "Start%20Time,End%20Time&order=id.asc&limit=" + page + "&offset=" + offset,
+                   { headers: H })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (rows) {
+          if (!rows || !rows.length) return finish();
+          all = all.concat(rows);
+          if (rows.length < page) return finish();
+          offset += page;
+          get();
+        })
+        .catch(function () { finish(); });
+    }
+    get();
+  }
+  window.__L7_loadDuty = loadDuty;
+
+  function boot(d, m) { window.__L7start(d, m); loadDuty(); }
+
+  if (!base || !window.fetch || offline) { boot(); return; }
   var done = false;
   /* Cap the wait: if Supabase does not answer quickly, show the baked-in board
      rather than leave the operator staring at a blank page. */
   var timer = setTimeout(function () { if (!done) { done = true; boot(); } }, 1500);
-  var url = String(cfg.url).replace(/\/+$/, "") + "/rest/v1/" +
+  var url = base + "/rest/v1/" +
             encodeURIComponent(cfg.table || "l7_timetable") +
             "?is_current=eq.true&select=data,meta&limit=1";
   try {
-    fetch(url, { headers: {
-        apikey: cfg.anonKey || "",
-        Authorization: "Bearer " + (cfg.anonKey || "")
-      } })
+    fetch(url, { headers: H })
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (rows) {
         if (done) return;

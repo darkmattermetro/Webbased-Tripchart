@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**26 / 26 checks passed** — 439 assertions pass, 0 fail, 0 skip.
+**27 / 27 checks passed** — 445 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -38,6 +38,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 24 | Performance and usability | Keyboard controls and focus behavior | PASS |
 | 25 | Performance and usability | No uncaught console errors during playback | PASS |
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
+| 27 | Duty roster | Duty number shown above each train for the displayed time | PASS |
 
 ## Fixes covered by the suite
 
@@ -110,6 +111,23 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   (`zero links : 2`) for review and never silently moves a call. Covered by
   check 16.
 
+### Duty display (this pass)
+
+- **Duty above the train.** Each drawn train carries a small chip above its
+  number showing the crew working that rake at the displayed time. The lookup
+  (`__L7.dutyFor(rake, sec)`) joins the board's rake number to the app's
+  Supabase `trip_data` on `Rake Num` and takes the duty whose `Start Time` is the
+  latest on or before the displayed second, for the active day type. Before the
+  first window — or for a rake with no roster entry — it returns blank.
+- **Full roster despite the response cap.** `trip_data` is 1847 rows against
+  PostgREST's 1000-row cap, so the viewer pages by the unique `id`
+  (`limit`/`offset`) until the table is exhausted; all four day types load.
+  Confirmed live: 544 + 498 + 391 + 414 segments collected, and rake 708 maps to
+  `201 → 224 → 219 → 412 → 230 → 908 → 255` across the day.
+- **Offline-safe.** The roster fetch is skipped from `file://` and when sync is
+  disabled, so the board draws exactly as before and no chip appears. Covered by
+  check 27.
+
 ## How to run
 
 ```
@@ -117,7 +135,7 @@ python -m http.server 8765 --bind 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8765/timetableview/l7-test.html`. The page drives the real built files
-in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/26
+in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/27
 checks" summary. `window.__TEST_RESULT` holds the machine-readable result
 (`pass`, `fail`, `skip`, `checked`, `total`, `rows[]`, `checklist[]`).
 
