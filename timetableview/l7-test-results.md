@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**29 / 29 checks passed** — 493 assertions pass, 0 fail, 0 skip.
+**29 / 29 checks passed** — 501 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -40,7 +40,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
 | 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
-| 29 | Admin and export | Upload re-map, shifted grids, and tolerant WEF dates | PASS |
+| 29 | Admin and export | Upload re-map, shifted grids, anchor tolerance, and tolerant WEF dates | PASS |
 
 ## Fixes covered by the suite
 
@@ -174,12 +174,25 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   Saturday / Sunday books share one corridor — same names, same order, same count —
   but the grid may sit a few rows or columns further into the page than the
   workbook the viewer was built from. `buildFromCells()` now anchors on the known
-  station list wherever it appears, re-locates the whole DN/UP block relative to
-  it, and falls back to the fixed template layout when no anchor matches. A sheet
-  that re-anchors to the *same* corridor list applies alongside the load weekday
-  table with no station-list conflict, and its card prints a "GRID RE-ANCHORED"
-  note naming the column and rows it was found at. Covered by check 29 (8 new
-  assertions).
+  station list wherever it appears and re-locates the whole DN/UP block relative
+  to it. The trip-number row is **searched for** in the 30 rows above each grid
+  (voted by the widest run of trip numbers, then verified against usable stop
+  times), so a taller/shorter block head is irrelevant. A sheet that re-anchors
+  to the *same* corridor list applies alongside the loaded weekday table with no
+  station-list conflict, and its card prints a "GRID RE-ANCHORED" note naming the
+  column, rows and found trip rows. Covered by check 29.
+- **Tolerant anchor matching.** The station list is located verbatim; otherwise a
+  normalised pass (case, stray spaces) — a cosmetic-only match reuses the
+  corridor names so the sheet still applies cleanly — or as a strict prefix of
+  at least 20 slots (a sheet that omits the closing MKPR ring row); a shorter
+  grid keeps its own (shorter) list and flows through the normal corridor
+  diff / RE-MAP decision instead of aborting extraction. Scan bounds widened to
+  columns 1-24, rows 1-1200.
+- **Extraction failures explain themselves.** When no trip can be built, the
+  report card now says whether the station list was found (and where / which
+  match mode), whether a DN trip-number row could be located, and how many
+  DN/UP trips were read, instead of the bare error line. Covered by check 29 (8
+  new assertions).
 
 ## How to run
 

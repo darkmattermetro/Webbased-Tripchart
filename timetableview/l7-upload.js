@@ -286,34 +286,57 @@ window.L7_UPLOAD = (function () {
        no anchor matches, parse the fixed template layout exactly as before. */
     if (opts.corridor && opts.corridor.length) {
       var runs = corridorRuns(cells, opts.corridor);
-      if (runs.length && runs[0].len === opts.corridor.length) return buildAnchored(cells, runs);
+      if (runs.length && runs[0].len >= ANCHOR_MIN) return buildAnchored(cells, runs, opts.corridor);
     }
     return buildLegacy(cells);
   }
 
+  var ANCHOR_MIN = 20;
+
+  function normSt(s) {
+    return String(s).replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
   /* corridorRuns(): every contiguous spot where the reference station list
-     appears verbatim (same names, same order, same count). The DN block and the
-     UP block are each one run; both re-anchor to it. */
+     appears in a column, starting at the slot column's top. The DN block and the
+     UP block are each one run. Matches are accepted three ways:
+       - verbatim (same text, same order, same count);
+       - normalized (stray spaces, different case) -- the sheet's own names are
+         still reported, but the corridor names win if the whole run only
+         differs cosmetically;
+       - as a strict prefix of the corridor with >= ANCHOR_MIN slots (a sheet
+         that omits the closing MKPR ring row).
+     A run is recorded with the number of slots it actually matched; parseAnchored
+     indexes the grid to that length, so a shorter list still drives the corridor
+     diff / RE-MAP flow in the admin rather than being mis-read. */
   function corridorRuns(cells, ref, maxCol, maxRow) {
     var out = [];
-    maxCol = maxCol || 12; maxRow = maxRow || 500;
+    maxCol = maxCol || 24; maxRow = maxRow || 1200;
+    var refN = ref.map(normSt);
     var col, r, s, i, j;
     for (col = 1; col <= maxCol; col++) {
-      var txt = [], rows = [];
+      var txt = [], rows = [], txtN = [];
       for (r = 1; r <= maxRow; r++) {
         s = cells[col + "," + r];
-        if (typeof s === "string" && s.trim()) { txt.push(s.trim()); rows.push(r); }
-      }
-      if (txt.length < ref.length) continue;
-      for (i = 0; i + ref.length <= txt.length; i++) {
-        var hit = true;
-        for (j = 0; j < ref.length; j++) {
-          if (ref[j] !== txt[i + j]) { hit = false; break; }
+        if (typeof s === "string" && s.trim()) {
+          txt.push(s.trim()); rows.push(r); txtN.push(normSt(s));
         }
-        if (hit) {
-          out.push({ col: col, r0: rows[i], len: ref.length,
-                     stops: txt.slice(i, i + ref.length) });
-          i += ref.length - 1;
+      }
+      if (txt.length < ANCHOR_MIN) continue;
+      for (i = 0; i + ANCHOR_MIN <= txt.length; i++) {
+        var k = 0, rawHits = 0;
+        for (j = 0; j < ref.length; j++) {
+          var rawHit = txt[i + j] === ref[j];
+          if (!rawHit && txtN[i + j] !== refN[j]) break;
+          k++;
+          if (rawHit) rawHits++;
+        }
+        if (k >= ANCHOR_MIN) {
+          out.push({ col: col, r0: rows[i], len: k,
+                     exact: k === ref.length && rawHits === k,
+                     full: k === ref.length,
+                     stops: txt.slice(i, i + k) });
+          i += k - 1;
         }
       }
     }
@@ -387,33 +410,84 @@ window.L7_UPLOAD = (function () {
     return out;
   }
 
+  /* Locate the head of a direction block that sits above a found station grid.
+     The template puts the trip numbers 6-8 rows above the grid with the depot
+     and midday rows in between, but a shifted sheet may have a taller/shorter
+     head. Instead of assuming the offset, vote on the row in
+     [gridTop-30, gridTop-1] where the most candidate trip columns hold a plain
+     integer, then require (a) a numeric trip number there and (b) at least one
+     column whose grid cells hold >= MIN_CELLS usable times. Returns
+     { tripRow, firstCol } or null when no block head can be found. */
+  function findBlockHead(cells, sc, r0, r1) {
+    var maxCol = Math.min(sc + 1 + 90, UPL.LAST_COL);
+    var rowsCount = {}, firstSeen = {}, c, r, v;
+    for (c = sc + 1; c <= maxCol; c++) {
+      var rowNum = 0;
+      for (r = r0 - 30; r <= r0 - 1; r++) {
+        v = cells[c + "," + r];
+        if (typeof v === "number" && isFinite(v) && Math.abs(v - Math.round(v)) < 1e-9
+            && v >= 1 && v <= 9999) rowNum = r;
+      }
+      if (rowNum) {
+        rowsCount[rowNum] = (rowsCount[rowNum] || 0) + 1;
+        if (!(rowNum in firstSeen)) firstSeen[rowNum] = c;
+      }
+    }
+    var cands = Object.keys(rowsCount).map(Number).sort(function (a, b) {
+      return (rowsCount[b] - rowsCount[a]) || (b - a);
+    });
+    for (var i = 0; i < cands.length; i++) {
+      var tr = cands[i], fc = findFirstTripCol(cells, sc, tr);
+      if (!fc) continue;
+      for (c = fc; c <= maxCol; c++) {
+        var no = cells[c + "," + tr];
+        if (typeof no !== "number" || !isFinite(no)) continue;
+        var n = 0;
+        for (r = r0; r <= r1; r++) {
+          if (toSecs(cells[c + "," + r]) !== null) n++;
+        }
+        if (n >= UPL.MIN_CELLS) return { tripRow: tr, firstCol: c };
+      }
+    }
+    return null;
+  }
+
   /* Anchor-based parse: the station list tells us where the grid lives, and
-     every block row is re-located relative to it. The template keeps these
-     offsets: trip numbers 8 rows above the DN grid (6 above UP), depot 2 and
-     md 1 rows above either grid start. The first trip column is found by
-     scanning for the numeric trip number, so a differently-sized spacer column
-     does not matter either. */
-  function buildAnchored(cells, runs) {
-    var dn = runs[0], up = null, k, dnTrip, upTrip = 0, up0 = 0;
+     the block head (trip-number row, first trip column) is SEARCHED for in the
+     rows above each grid rather than assumed from the template. The depot and
+     midday rows sit one and two rows above either grid start ("basic structure
+     remains"), and are only used for the optional D/M flags. */
+  function buildAnchored(cells, runs, ref) {
+    var dn = runs[0], up = null, k;
     for (k = 1; k < runs.length; k++) {
       if (runs[k].r0 > dn.r0) { up = runs[k]; break; }
     }
-    var dn0 = dn.r0, dn1 = dn0 + dn.stops.length - 1;
-    dnTrip = findFirstTripCol(cells, dn.col, dn0 - 8);
-    if (up) {
-      up0 = up.r0;
-      upTrip = findFirstTripCol(cells, up.col, up0 - 6);
-    }
     var st = freshStats();
+    var dn0 = dn.r0, dn1 = dn0 + dn.stops.length - 1;
+    var dnHead = findBlockHead(cells, dn.col, dn0, dn1);
     var out = {
-      stops: dn.stops.slice(),
+      stops: (dn.full && !dn.exact) ? ref.slice() : dn.stops.slice(),
       ring: dn.stops.length > 1 && dn.stops[0] === dn.stops[dn.stops.length - 1],
-      dn: dnTrip ? buildBlock(cells, { tripR: dn0 - 8, depotR: dn0 - 2, mdR: dn0 - 1,
-        r0: dn0, r1: dn1, firstCol: dnTrip, label: "DN", key: "dn" }, st) : [],
-      up: (up && upTrip) ? buildBlock(cells, { tripR: up0 - 6, depotR: up0 - 2, mdR: up0 - 1,
-        r0: up0, r1: up0 + up.stops.length - 1, firstCol: upTrip, label: "UP", key: "up" }, st) : [],
-      anchor: { col: dn.col, r0: dn0, len: dn.stops.length, up: (up && upTrip) ? up0 : 0 }
+      dn: [], up: [],
+      anchor: { col: dn.col, r0: dn0, len: dn.stops.length, up: 0,
+                match: dn.exact ? "exact" : (dn.full ? "normalized" : "prefix"),
+                dnTripRow: 0, upTripRow: 0 }
     };
+    if (dnHead) {
+      out.anchor.dnTripRow = dnHead.tripRow;
+      out.dn = buildBlock(cells, { tripR: dnHead.tripRow, depotR: dn0 - 2, mdR: dn0 - 1,
+        r0: dn0, r1: dn1, firstCol: dnHead.firstCol, label: "DN", key: "dn" }, st);
+    }
+    if (up) {
+      var up0 = up.r0, up1 = up0 + up.stops.length - 1;
+      var upHead = findBlockHead(cells, up.col, up0, up1);
+      if (upHead) {
+        out.anchor.up = up0;
+        out.anchor.upTripRow = upHead.tripRow;
+        out.up = buildBlock(cells, { tripR: upHead.tripRow, depotR: up0 - 2, mdR: up0 - 1,
+          r0: up0, r1: up1, firstCol: upHead.firstCol, label: "UP", key: "up" }, st);
+      }
+    }
     out._stats = st;
     return out;
   }
@@ -514,6 +588,8 @@ window.L7_UPLOAD = (function () {
     buildFromCells: buildFromCells,
     corridorRuns: corridorRuns,
     findFirstTripCol: findFirstTripCol,
+    findBlockHead: findBlockHead,
+    normSt: normSt,
     cellsFrom: cellsFrom,
     windowOf: windowOf,
     activeAt: activeAt,

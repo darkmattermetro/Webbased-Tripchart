@@ -1066,6 +1066,63 @@ T.admin = async function (WA) {
   eq(g, "column-shifted trips are read",
      sh2.dn.length + ":" + sh2.dn[0].n + ":" + sh2.dn[1].t[0], "2:311:25200");
 
+  /* A block head that is NOT the template offset (trip numbers 6 rows above
+     the grid instead of 8) must still be found by the row search. */
+  var cH = {}, tcH;
+  corridor0.forEach(function (s, i) { cH["1," + (9 + i)] = s; });
+  for (tcH = 0; tcH < 2; tcH++) {
+    var chw = 3 + tcH;
+    cH[chw + ",3"] = 41 + tcH;
+    cH[chw + ",7"] = "DEPOT";
+    cH[chw + ",8"] = "M";
+    for (qi = 0; qi < ttS.length; qi++) cH[chw + "," + (9 + qi)] = (ttS[qi] + 600 * tcH) / 86400;
+  }
+  var sh3 = U.buildFromCells(cH, { corridor: corridor0 });
+  ok(g, "a nonstandard trip-number row is found by search",
+     !!(sh3.anchor && sh3.anchor.dnTripRow === 3), JSON.stringify(sh3.anchor));
+  eq(g, "trips still parse with the found trip row",
+     sh3.dn.length + ":" + sh3.dn[0].n + ":" + sh3.dn[1].t[0], "2:41:22200");
+
+  /* Station names that differ only cosmetically (case, stray spaces) still
+     anchor; the corridor names win so the sheet applies cleanly. */
+  var cN = {}, tcN;
+  corridor0.forEach(function (s, i) {
+    cN["2," + (9 + i)] = (i % 3 === 0 ? "  " : "") + s.toLowerCase().replace(" ", "  ") + "  ";
+  });
+  for (tcN = 0; tcN < 2; tcN++) {
+    var cnw = 4 + tcN;
+    cN[cnw + ",1"] = 51 + tcN;
+    cN[cnw + ",7"] = "DEPOT";
+    cN[cnw + ",8"] = "D";
+    for (qi = 0; qi < ttS.length; qi++) cN[cnw + "," + (9 + qi)] = (ttS[qi] + 900 * tcN) / 86400;
+  }
+  var sh4 = U.buildFromCells(cN, { corridor: corridor0 });
+  ok(g, "cosmetically different names still anchor (normalized)",
+     !!(sh4.anchor && sh4.anchor.col === 2 && sh4.anchor.match === "normalized"),
+     JSON.stringify(sh4.anchor));
+  eq(g, "the corridor names win for a normalized-only match",
+     sh4.stops.join("|"), corridor0.join("|"));
+  eq(g, "normalized-match trips parse", sh4.dn.length + ":" + sh4.dn[1].n, "2:52");
+
+  /* A 43-slot list (the closing MKPR ring row omitted) is a strict prefix of
+     the corridor: it anchors, and the shorter list drives the corridor diff /
+     RE-MAP flow instead of aborting extraction. */
+  var cP = {}, tcP, pref43 = corridor0.slice(0, 43);
+  pref43.forEach(function (s, i) { cP["1," + (9 + i)] = s; });
+  for (tcP = 0; tcP < 2; tcP++) {
+    var cpw = 3 + tcP;
+    cP[cpw + ",1"] = 61 + tcP;
+    cP[cpw + ",7"] = "DEPOT";
+    cP[cpw + ",8"] = "M";
+    for (qi = 0; qi < ttS.length; qi++) cP[cpw + "," + (9 + qi)] = (ttS[qi] + 300 * tcP) / 86400;
+  }
+  var sh5 = U.buildFromCells(cP, { corridor: corridor0 });
+  ok(g, "a 43-slot prefix list anchors as a shorter grid",
+     !!(sh5.anchor && sh5.anchor.len === 43), JSON.stringify(sh5.anchor));
+  eq(g, "the shorter list is kept (open, no ring row)",
+     sh5.stops.length + ":" + sh5.ring, "43:false");
+  eq(g, "prefix-grid trips parse", sh5.dn.length + ":" + sh5.dn[1].n, "2:62");
+
   /* C13: the admin refuses to create two rules of the SAME specificity on one
      day, while allowing an exact date and an annual recurrence to share one --
      they are different rules and the exact one is the more specific. */

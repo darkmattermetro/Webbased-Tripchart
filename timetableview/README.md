@@ -142,12 +142,19 @@ The admin console now makes "add the Saturday book next to the weekday book" eas
   but the grid can sit a few rows or columns further into the page than the
   workbook this viewer was built from. The upload engine now anchors on the known
   station list wherever it appears and re-locates the whole DN/UP block relative
-  to it (trip rows, depot row, midday marker, first trip column), falling back to
-  the fixed template layout when nothing matches. A shifted sheet that re-anchors
-  onto the *same* corridor applies alongside the loaded weekday table with no
-  station-list conflict, and its card prints a **GRID RE-ANCHORED** line naming
-  the column and rows it was found at (shown only when the position differs from
-  the template). Covered by check 29.
+  to it, and the trip-number row is **searched for** in the rows above the grid
+  rather than assumed from the template — so a taller or shorter block header is
+  fine too. The corridor is matched verbatim, or case/space-insensitively (a
+  cosmetic-only match reuses the corridor names so the sheet applies cleanly), or
+  as a strict prefix of ≥ 20 slots when the sheet omits the closing MKPR ring
+  row (the shorter list then flows through the normal corridor diff / RE-MAP
+  decision). A shifted sheet that re-anchors onto the *same* corridor applies
+  alongside the loaded weekday table with no station-list conflict, and its card
+  prints a **GRID RE-ANCHORED** line naming the column, rows and trip-number rows
+  (only when the position differs from the template). If extraction still fails
+  for a sheet, its card explains **why**: whether the station list was found, at
+  which column/rows, whether a trip-number row was located, and how many DN/UP
+  trips were read. Covered by check 29.
 
 ## Notes
 

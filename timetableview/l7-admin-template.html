@@ -1343,15 +1343,15 @@ window.L7_BASE = "/*__L7_BASE__*/";
     }
     UP.results = {};
     todo.forEach(function (r) {
-      var res;
+      var res, d = null, w = null, err = null;
       try {
-        var d = U.buildFromCells(r.sh.cells, { corridor: DATA.meta.corridor });
-        var w = U.windowOf(d);
-        if (!w) throw new Error("no trip had enough usable stop times to be a working timetable");
-        res = { ok: true, d: d, w: w, r: r };
+        d = U.buildFromCells(r.sh.cells, { corridor: DATA.meta.corridor });
+        w = U.windowOf(d);
+        if (!w) err = "no trip had enough usable stop times to be a working timetable";
       } catch (e) {
-        res = { ok: false, err: e.message, r: r };
+        err = e.message;
       }
+      res = err ? { ok: false, err: err, d: d, r: r } : { ok: true, d: d, w: w, r: r };
       UP.results[r.i] = res;
     });
     renderReport();
@@ -1463,6 +1463,25 @@ window.L7_BASE = "/*__L7_BASE__*/";
       if (!res.ok) {
         var wf = el("div", "warns", card);
         el("div", "", wf).textContent = "EXTRACTION FAILED: " + res.err;
+        var d = res.d;
+        if (d) {
+          var why = el("div", "", wf);
+          if (d.anchor) {
+            why.textContent = "STATION LIST FOUND in column " + colLetters(d.anchor.col)
+              + " rows " + d.anchor.r0 + "-" + (d.anchor.r0 + d.anchor.len - 1)
+              + " (" + d.anchor.len + " slot" + (d.anchor.len === 1 ? "" : "s")
+              + " matched the corridor, " + d.anchor.match + " match)"
+              + (d.anchor.dnTripRow ? ", DN trip-number row " + d.anchor.dnTripRow
+                : ", but NO DN trip-number row was found in the 30 rows above the grid")
+              + (d.anchor.upTripRow ? ", UP trip-number row " + d.anchor.upTripRow : "")
+              + ". Trips read: " + d.dn.length + " DN + " + d.up.length + " UP.";
+          } else {
+            why.textContent = "The station list was NOT found in any of columns 1-24 (rows 1-1200). "
+              + "The sheet's station column must hold the Line 7 corridor -- same names, same "
+              + "order, at least 20 in sequence (spaces/case are ignored). "
+              + "Trips read: " + d.dn.length + " DN + " + d.up.length + " UP.";
+          }
+        }
         return;
       }
       anyOk = true;
@@ -1513,13 +1532,16 @@ window.L7_BASE = "/*__L7_BASE__*/";
       };
       add("CORRIDOR: " + d.stops.slice(0, 4).join(" \u2192 ") + " \u2026 \u2192 "
         + d.stops[d.stops.length - 1] + " (" + d.stops.length + " slots)", true);
-      if (d.anchor && (d.anchor.col !== 1 || d.anchor.r0 !== 9 || (d.anchor.up && d.anchor.up !== 68))) {
+      if (d.anchor && (d.anchor.col !== 1 || d.anchor.r0 !== 9 || (d.anchor.up && d.anchor.up !== 68)
+          || d.anchor.dnTripRow !== 1 || d.anchor.match !== "exact")) {
         add("GRID RE-ANCHORED: the " + d.anchor.len + "-slot station list was found in column "
           + colLetters(d.anchor.col) + " rows " + d.anchor.r0 + "-" + (d.anchor.r0 + d.anchor.len - 1)
+          + " (" + d.anchor.match + " match, DN trip-number row " + d.anchor.dnTripRow
           + (d.anchor.up ? ", UP block rows " + d.anchor.up + "-" + (d.anchor.up + d.anchor.len - 1)
                          : ", no UP block found")
-          + ". This sheet is shifted from the template layout by a few rows/columns; the whole "
-          + "block was re-anchored to the corridor and the trip rows found relative to it.", true);
+          + "). This sheet is shifted from the template layout (rows, columns or block head); "
+          + "the grid and the rows above it were re-located by the station list and the "
+          + "trip-number search.", true);
       }
       if (diff) {
         var sl = slotDiff(d.stops, STOPS);
