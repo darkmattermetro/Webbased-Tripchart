@@ -86,8 +86,10 @@ existing Supabase `trip_data` table (`Rake Num`, `Duty No`, `Start Time`, `End T
 published through that feature show up without a rebuild.
 
 - A rake is handed between crews during the day, so the duty shown is the one whose
-  booked window starts on or before the second the board is displaying, for the day
-  type currently selected (`Weekday`/`Saturday`/`Sunday`/`Special`).
+  booked window (`Start Time`–`End Time`) contains the second the board is displaying,
+  for the day type currently selected (`Weekday`/`Saturday`/`Sunday`/`Special`). When
+  the roster is loaded but no duty covers that time the chip reads **X** (amber).
+  Hovering a train adds a `duty` line with the number and its window, or `X`.
 - The roster is fetched over http(s) only, paged past PostgREST's response cap, and
   independently of the timetable fetch. From `file://`, offline, or if `trip_data`
   is unreachable the board simply draws no chip, exactly as before this feature.

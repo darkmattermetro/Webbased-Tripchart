@@ -4,7 +4,7 @@ Run: 2026-10-09 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**27 / 27 checks passed** — 445 assertions pass, 0 fail, 0 skip.
+**27 / 27 checks passed** — 447 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -38,7 +38,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 24 | Performance and usability | Keyboard controls and focus behavior | PASS |
 | 25 | Performance and usability | No uncaught console errors during playback | PASS |
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
-| 27 | Duty roster | Duty number shown above each train for the displayed time | PASS |
+| 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
 
 ## Fixes covered by the suite
 
@@ -116,9 +116,11 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 - **Duty above the train.** Each drawn train carries a small chip above its
   number showing the crew working that rake at the displayed time. The lookup
   (`__L7.dutyFor(rake, sec)`) joins the board's rake number to the app's
-  Supabase `trip_data` on `Rake Num` and takes the duty whose `Start Time` is the
-  latest on or before the displayed second, for the active day type. Before the
-  first window — or for a rake with no roster entry — it returns blank.
+  Supabase `trip_data` on `Rake Num` and takes the duty whose `Start Time`–`End
+  Time` window contains the displayed second, for the active day type. When the
+  roster is loaded but no window covers that time — a gap between duties, an
+  unknown rake, or before the first window — the chip reads **X** (amber); a
+  train tooltip adds a `duty` line with the number and its window, or `X`.
 - **Full roster despite the response cap.** `trip_data` is 1847 rows against
   PostgREST's 1000-row cap, so the viewer pages by the unique `id`
   (`limit`/`offset`) until the table is exhausted; all four day types load.

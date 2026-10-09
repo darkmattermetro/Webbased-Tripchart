@@ -213,6 +213,8 @@ background:rgba(4,8,14,.9);border:1px solid currentColor;
 }
 .train.dn .duty{color:var(--dn-lt)}
 .train.up .duty{color:var(--up-lt)}
+/* no crew assigned to this rake at this time */
+.train .duty.none{color:var(--amber)}
 .train.cont-up,.train.cont-down{opacity:.58}
 .cont{position:absolute;left:50%;margin-left:-5px;font-size:10px;line-height:1;font-style:normal;
     display:none;color:rgba(138,180,248,.95);pointer-events:none}

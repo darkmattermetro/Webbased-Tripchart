@@ -674,19 +674,24 @@ window.__L7start = function (candidateData, candidateMeta) {
      drawn, which is also the offline behaviour. */
   var DAYTYPE = { weekday: "Weekday", saturday: "Saturday",
                   sunday: "Sunday", special: "Special" };
-  function dutyFor(no, S) {
+  /* Returns { d, s, e }: d is the duty number, or "X" when the roster is loaded
+     but no duty covers this rake at this second, or "" when the roster itself is
+     not available (offline / still fetching), in which case nothing is drawn. */
+  function dutyInfo(no, S) {
     var all = window.__L7_DUTY;
-    if (!all || S == null) return "";
+    if (!all || S == null) return { d: "" };
     var day = all[DAYTYPE[TBL_ID]];
-    if (!day) return "";
+    if (!day) return { d: "X" };
     var segs = day[String(no)];
-    if (!segs || !segs.length) return "";
-    var best = null;
+    if (!segs || !segs.length) return { d: "X" };
     for (var i = 0; i < segs.length; i++) {
-      if (segs[i].s <= S) best = segs[i]; else break;
+      if (segs[i].s <= S && S <= segs[i].e) {
+        return { d: segs[i].d || "X", s: segs[i].s, e: segs[i].e };
+      }
     }
-    return best ? (best.d || "") : "";
+    return { d: "X" };
   }
+  function dutyFor(no, S) { return dutyInfo(no, S).d; }
 
   /* ---------------- playback state ---------------- */
   var WRAP = false, OFFSET = 0;
@@ -783,6 +788,8 @@ window.__L7start = function (candidateData, candidateMeta) {
       if (e.className !== cls) e.className = cls;
       if (e.contEl.textContent !== arrow) e.contEl.textContent = arrow;
       if (e.dutyEl.textContent !== duty) e.dutyEl.textContent = duty;
+      var dcls = duty === "X" ? "duty none" : "duty";
+      if (e.dutyEl.className !== dcls) e.dutyEl.className = dcls;
       var dd = duty ? "block" : "none";
       if (e.dutyEl.style.display !== dd) e.dutyEl.style.display = dd;
       if (e.style.display !== "block") e.style.display = "block";
@@ -1201,9 +1208,16 @@ window.__L7start = function (candidateData, candidateMeta) {
     if (o.flagged) { spec2.push(textNode(" "), wSpan("[PARITY FLAG]")); }
     spec2.push(rule());
     for (var ri = 0; ri < rows.length; ri++) spec2.push(rows[ri]);
+    var di = dutyInfo(o.no, o.lastS);
+    var dtx = di.d === "" ? "n/a" : di.d;
+    if (di.d && di.d !== "X" && di.s != null) {
+      dtx += " \u00a0(" + hms(di.s) + " \u2192 " + hms(di.e) + ")";
+    }
     spec2.push(rule(), kSpan("scheduled"), textNode(" " + hms(o.t0) + " \u2192 " + hms(o.t1)),
       lineBreak(), kSpan("depot"), textNode(" " + (o.depot || "-") + " \u00a0"),
-      kSpan("day type"), textNode(" " + (o.md || "-")), lineBreak(), kSpan("state"));
+      kSpan("day type"), textNode(" " + (o.md || "-")),
+      lineBreak(), kSpan("duty"), textNode(" " + dtx),
+      lineBreak(), kSpan("state"));
     if (o.dwell) spec2.push(textNode(" "), wSpan("DWELLING"));
     else spec2.push(textNode(" IN SECTION"));
     spec2.push(lineBreak(), kSpan("position from timetable, not reported by the train"));

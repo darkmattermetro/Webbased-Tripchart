@@ -106,7 +106,7 @@ var CHECKS = [
   ["Performance and usability", "Keyboard controls and focus behavior"],
   ["Performance and usability", "No uncaught console errors during playback"],
   ["Time engine", "Service clock across midnight and the after-midnight tail"],
-  ["Duty roster", "Duty number shown above each train for the displayed time"]
+  ["Duty roster", "Duty number or X shown above each train for the displayed time"]
 ];
 var NCHECK = CHECKS.length;
 
@@ -1142,8 +1142,12 @@ T.duty = async function (W) {
      bad.length ? JSON.stringify(bad.slice(0, 3)) : (chips.length ? "" : "no trains drawn"));
   eq(g, "rake 708 at 06:30", W.__L7.dutyFor(708, S), "201");
   eq(g, "rake 708 at 08:30", W.__L7.dutyFor(708, 8 * 3600 + 1800), "224");
-  eq(g, "before the first window is blank", W.__L7.dutyFor(708, 4 * 3600), "");
-  eq(g, "unknown rake is blank", W.__L7.dutyFor(999, S), "");
+  eq(g, "between windows is X", W.__L7.dutyFor(708, 11 * 3600), "X");
+  eq(g, "before the first window is X", W.__L7.dutyFor(708, 4 * 3600), "X");
+  eq(g, "unknown rake is X", W.__L7.dutyFor(999, S), "X");
+  var xChips = chips.filter(function (c) { return c.d === "X"; });
+  ok(g, "an unassigned rake is drawn as X", xChips.length > 0,
+     "no X chips among " + chips.length);
   ok(g, "a duty node exists on a train",
      !!W.document.querySelector("#sections .train .duty"), "no .duty node found");
 };
