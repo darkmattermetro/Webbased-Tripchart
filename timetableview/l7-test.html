@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DMRC Line 7 - viewer test suite</title>
+<style>
+:root{--bg:#05090f;--text:#8ab4f8;--bright:#dbeafe;--panel:#0f172a;--border:#1e293b;
+      --ok:#22c55e;--bad:#ef4444;--skip:#f59e0b;--dim:#64748b}
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:var(--bg);color:var(--text);
+     font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+h1{font-size:14px;letter-spacing:.2em;color:var(--bright);margin:0 0 4px}
+.sub{color:var(--dim);font-size:10.5px;letter-spacing:.1em;margin:0 0 18px}
+.tot{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}
+.tot div{border:1px solid var(--border);background:var(--panel);padding:8px 14px;font-size:11px}
+.tot b{font-size:17px;font-weight:400;display:block;letter-spacing:.05em}
+.tot .p b{color:var(--ok)}.tot .f b{color:var(--bad)}.tot .s b{color:var(--skip)}
+h2{font-size:11px;letter-spacing:.18em;color:var(--bright);margin:20px 0 6px;
+   border-bottom:1px solid var(--border);padding-bottom:5px}
+table{width:100%;border-collapse:collapse;margin:0 0 6px}
+td{padding:3px 8px;border-bottom:1px solid #101a2b;vertical-align:top;font-size:11px}
+td.s{width:52px;letter-spacing:.1em}
+td.n{width:290px;color:var(--bright)}
+td.d{color:var(--dim);font-size:10.5px}
+.PASS{color:var(--ok)}.FAIL{color:var(--bad)}.SKIP{color:var(--skip)}
+#host{position:fixed;left:-99999px;top:0;width:1280px;height:900px;border:0}
+#host iframe{position:absolute;left:0;top:0}
+iframe{border:0}
+.note{color:var(--dim);font-size:10.5px;margin:6px 0 0}
+/* checklist */
+#cl{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:6px;margin:0 0 8px}
+.cl{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border);background:var(--panel);
+    padding:6px 9px;font-size:11px}
+.cl .box{width:15px;height:15px;flex:none;border:1px solid var(--dim);display:flex;
+         align-items:center;justify-content:center;font-size:11px;margin-top:1px}
+.cl.PASS .box{border-color:var(--ok);color:var(--ok)}
+.cl.FAIL .box{border-color:var(--bad);color:var(--bad)}
+.cl.SKIP .box{border-color:var(--skip);color:var(--skip)}
+.cl.MISSING .box{border-color:var(--dim);color:var(--dim)}
+.cl .t{flex:1}
+.cl .cat{display:block;color:var(--dim);font-size:9.5px;letter-spacing:.08em}
+.cl .no{color:var(--dim)}
+#clsum{border-left:3px solid var(--border);padding:2px 0 2px 10px;margin:0 0 16px;
+       font-size:12px;color:var(--bright)}
+</style>
+</head>
+<body>
+<h1>DMRC LINE 7 - VIEWER TEST SUITE</h1>
+<p class="sub">plain html + script, no build step &middot; drives the real viewer in an iframe
+&middot; 26-check regression plan</p>
+<div class="tot">
+  <div class="p">PASS<b id="nP">0</b></div>
+  <div class="f">FAIL<b id="nF">0</b></div>
+  <div class="s">SKIP<b id="nS">0</b></div>
+  <div>TOTAL<b id="nT">0</b></div>
+</div>
+<div id="clsum">checklist --</div>
+<div id="cl"></div>
+<div id="out"></div>
+<div id="host"></div>
+<script>
+"use strict";
+/* Exercises the real line7-timetable-timesync.html and line7-timetable-admin.html.
+   Nothing here is part of a shipped viewer; this file is a development tool and
+   is never inlined.
+
+   The suite is organised around a 26-item regression checklist. Each assertion is
+   tagged with the checklist item it belongs to, so the top of the page reports
+   "N / 26 checked" rather than only a raw assertion count. A checklist item is
+   checked only when every assertion under it passes; one failure unchecks it.
+   Skips are reported but do not by themselves uncheck an item. */
+
+var R = { pass: 0, fail: 0, skip: 0, rows: [] };
+var VIEWER = "line7-timetable-timesync.html";
+var ADMIN  = "line7-timetable-admin.html";
+
+/* ---------------- the 26-item checklist ---------------- */
+var CHECKS = [
+  ["Data validation", "Missing L7_DATA or missing required properties"],
+  ["Data validation", "Null or non-finite departure and terminal times"],
+  ["Data validation", "Descending station times and duplicate trip IDs"],
+  ["Data validation", "Invalid station indices and malformed service windows"],
+  ["Data validation", "Loaded table with empty or incomplete direction arrays"],
+
+  ["Time engine", "Exactly at trip departure and arrival"],
+  ["Time engine", "Exactly at a station arrival/departure boundary"],
+  ["Time engine", "Dwell intervals immediately below, at, and above 300 seconds"],
+  ["Time engine", "Forward and backward time jumps"],
+  ["Time engine", "Wrap disabled, first wrap, and repeated wraps"],
+
+  ["Date programming", "Weekday, Saturday, and Sunday selection"],
+  ["Date programming", "Exact-date override versus annual recurrence"],
+  ["Date programming", "Duplicate dates and unloaded target tables"],
+  ["Date programming", "Leap day and device timezone changes"],
+  ["Date programming", "No valid timetable available"],
+
+  ["Admin and export", "Corrupt and unsupported workbook uploads"],
+  ["Admin and export", "Failed upload leaves previous valid data unchanged"],
+  ["Admin and export", "Special characters in station names and metadata"],
+  ["Admin and export", "Export with every expected placeholder replaced"],
+  ["Admin and export", "Open exported HTML independently and verify its data guard"],
+
+  ["Performance and usability", "Largest expected timetable at desktop and mobile widths"],
+  ["Performance and usability", "Hidden tab and return to foreground"],
+  ["Performance and usability", "Repeated resize and table changes"],
+  ["Performance and usability", "Keyboard controls and focus behavior"],
+  ["Performance and usability", "No uncaught console errors during playback"],
+  ["Time engine", "Service clock across midnight and the after-midnight tail"]
+];
+var NCHECK = CHECKS.length;
+
+/* ---------------- assertion plumbing ---------------- */
+var CUR = 0;
+function C(n) { CUR = n; }
+function rec(g, n, st, d) {
+  R.rows.push({ check: CUR, g: g, n: n, st: st, d: d || "" });
+  if (st === "PASS") R.pass++;
+  else if (st === "FAIL") R.fail++;
+  else R.skip++;
+}
+function ok(g, n, cond, d) { rec(g, n, cond ? "PASS" : "FAIL", d); }
+function eq(g, n, got, want, d) {
+  var c = String(got) === String(want);
+  rec(g, n, c ? "PASS" : "FAIL",
+      c ? d : "got " + JSON.stringify(got) + ", want " + JSON.stringify(want) + (d ? " - " + d : ""));
+}
+function skip(g, n, why) { rec(g, n, "SKIP", why); }
+function near(a, b, eps) { return Math.abs(a - b) <= (eps === undefined ? 1e-9 : eps); }
+
+/* Run fn, returning {ok, err}. `frag` (optional) must appear in the message. */
+function throwsSync(fn, frag) {
+  try { fn(); return { ok: false, err: "(did not throw)" }; }
+  catch (e) {
+    var m = String(e && e.message || e);
+    return { ok: !frag || m.indexOf(frag) > -1, err: m };
+  }
+}
+function rejects(asyncFn, frag) {
+  return Promise.resolve().then(asyncFn).then(
+    function () { return { ok: false, err: "(resolved, did not reject)" }; },
+    function (e) {
+      var m = String(e && e.message || e);
+      return { ok: !frag || m.indexOf(frag) > -1, err: m };
+    });
+}
+
+/* ---------------- harness ---------------- */
+var host = document.getElementById("host");
+
+function loadDoc(src, w) {
+  return new Promise(function (res, rej) {
+    var f = document.createElement("iframe");
+    f.width = w || 1280; f.height = 900;
+    f.srcdoc = src;
+    f.onload = function () { res(f); };
+    f.onerror = function () { rej(new Error("iframe failed")); };
+    host.appendChild(f);
+  });
+}
+function loadSrc(url, w) {
+  return new Promise(function (res, rej) {
+    var f = document.createElement("iframe");
+    f.width = w || 1280; f.height = 900;
+    f.src = url;
+    f.onload = function () { res(f); };
+    f.onerror = function () { rej(new Error("iframe failed to load " + url)); };
+    host.appendChild(f);
+  });
+}
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+async function until(fn, ms) {
+  var t0 = Date.now();
+  while (Date.now() - t0 < (ms || 4000)) {
+    try { if (fn()) return true; } catch (e) { }
+    await sleep(25);
+  }
+  return false;
+}
+async function fetchText(url) {
+  var r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return await r.text();
+}
+
+/* An error collector plus an event-listener recorder is injected ahead of the
+   viewer's own scripts, so a throw during boot is recorded rather than only
+   visible in devtools, and the suite can see whether the page subscribes to
+   visibility changes. */
+var CATCH =
+  '<script>window.__ERRS=[];window.__CERR=[];window.__EVT=[];' +
+  'window.onerror=function(m){window.__ERRS.push(String(m));return true;};' +
+  '(function(){var o=console.error;console.error=function(){' +
+  'try{window.__CERR.push(Array.prototype.join.call(arguments," "));}catch(e){}' +
+  'return o.apply(console,arguments);};})();' +
+  '(function(){function wrap(t){var o=t.addEventListener;' +
+  't.addEventListener=function(type){try{window.__EVT.push(String(type));}catch(e){}' +
+  'return o.apply(this,arguments);};}wrap(window);wrap(document);})();' +
+  '<\/script>';
+
+/* ---------------- fault injection ---------------- */
+var SENT_NAN = "@@L7_NONFINITE@@", SENT_INF = "@@L7_INFINITY@@";
+var S_JSON = JSON.stringify(SENT_NAN), I_JSON = JSON.stringify(SENT_INF);
+/* Payload strings that would be live XSS if any renderer used innerHTML. The
+   closing script tag is written as a marker and only turned into a real,
+   backslash-escaped closing tag in the mutated source, so it can never
+   terminate this page's own script element. */
+var SENT_ENDSCRIPT = "@@L7_ENDSCRIPT@@";
+var XSS_IMG = '<img src=x onerror="window.__XSS=1">';
+var XSS_SCRIPT = '<script>window.__XSS=2';
+var XSS_TEXT = XSS_IMG + XSS_SCRIPT + "<" + "/script>";
+
+function mutate(src, kind) {
+  var k = src.indexOf("window.L7_DATA = ");
+  if (kind === "nodata") {
+    var st = src.indexOf("{", k), d = 0, i = st;
+    for (;;) { if (src[i] === "{") d++; else if (src[i] === "}") { d--; if (!d) break; } i++; }
+    return src.slice(0, k) + "/* removed by fault injection */" + src.slice(src.indexOf(";", i) + 1);
+  }
+  if (k < 0) return src;
+  var s2 = src.indexOf("{", k), dd = 0, j = s2;
+  for (;;) { if (src[j] === "{") dd++; else if (src[j] === "}") { dd--; if (!dd) break; } j++; }
+  var end = src.indexOf(";", j) + 1;
+  var head = src.slice(0, s2), txt = src.slice(s2, j + 1), tail = src.slice(end);
+  var D = JSON.parse(txt);
+  var wd = D.tables.weekday, t0 = wd.dn[0], a = t0.a, b = t0.b;
+
+  switch (kind) {
+    case "nocorridor": delete D.meta.corridor; break;
+    case "noorder": delete D.order; break;
+    case "noloadflag": delete wd.loaded; break;
+    case "badwindow": wd.window = [wd.window[1], wd.window[0]]; break;
+    case "equalwindow": wd.window = [wd.window[0], wd.window[0]]; break;
+    case "nullwindow": wd.window = [null, wd.window[1]]; break;
+    case "oobtrip": wd.dn[0].b = 999; break;
+    case "negstart": wd.dn[0].a = -1; break;
+    case "aafterb": wd.dn[0].a = wd.dn[0].b; break;
+    case "badtime": wd.dn[0].t[a] = "nope"; break;
+    case "shortt": wd.dn[0].t = [1, 2]; break;
+    case "nullstart": wd.dn[0].t[a] = null; break;
+    case "nullend": wd.dn[0].t[b] = null; break;
+    case "nanstart": wd.dn[0].t[a] = SENT_NAN; break;
+    case "infend": wd.dn[0].t[b] = SENT_INF; break;
+    case "nonmono": wd.dn[0].t[a + 1] = wd.dn[0].t[a] - 60; break;
+    case "zerodur":
+      for (var z = wd.dn[0].a; z <= wd.dn[0].b; z++) wd.dn[0].t[z] = wd.dn[0].t[a];
+      break;
+    case "oobtime": wd.dn[0].t[b] = 2 * 86400; break;
+    case "nulloutside":
+      for (var o = b + 1; o < D.meta.corridor.length; o++) wd.dn[0].t[o] = null;
+      break;
+    case "duptrip": if (wd.dn[1]) wd.dn[1] = JSON.parse(JSON.stringify(wd.dn[0])); break;
+    case "emptydir": wd.dn = []; break;
+    case "notarray": wd.dn = {}; break;
+    case "allunloaded":
+      D.order.forEach(function (id) { if (D.tables[id]) D.tables[id].loaded = false; });
+      break;
+    case "dualtable":
+      D.tables.saturday = JSON.parse(JSON.stringify(wd));
+      D.tables.saturday.label = "SATURDAY";
+      D.tables.saturday.loaded = true;
+      break;
+    case "specials":
+      D.meta.corridor[0] = "A<em>x</em>B" + XSS_IMG + XSS_SCRIPT + SENT_ENDSCRIPT;
+      D.meta.corridor[D.meta.corridor.length - 1] = D.meta.corridor[0];
+      wd.label = 'L<&">B';
+      break;
+    case "bademeta":
+      var mk = tail.indexOf("window.L7_META = ");
+      tail = tail.slice(0, mk) + "window.L7_META = 7;" + tail.slice(tail.indexOf(";", mk) + 1);
+      break;
+  }
+  return (head + JSON.stringify(D) + tail).split(S_JSON).join("NaN")
+    .split(I_JSON).join("Infinity")
+    .split(SENT_ENDSCRIPT).join("<\\/script>");
+}
+
+/* ---------------- groups ---------------- */
+var T = {};
+
+/* 1: live payload passes the guard and the board really starts. */
+T.schema = async function (W) {
+  var d = W.document, L = W.__L7, g = "A. schema guard (live data)";
+  C(1);
+  eq(g, "guard reports no error", W.__L7_DATA_ERROR, null, "valid payload must pass silently");
+  eq(g, "no banner element", d.querySelectorAll("div.dataerr").length, 0);
+  ok(g, "board is visible", getComputedStyle(d.getElementById("board")).display !== "none");
+  ok(g, "sections were built", d.querySelectorAll("#sections .sec").length > 0,
+     d.querySelectorAll("#sections .sec").length + " sections");
+  ok(g, "trips were loaded", L.trips().length > 0, L.trips().length + " trips");
+  eq(g, "body has no dataerr class", /dataerr/.test(d.body.className), false);
+  if (W.__ERRS) eq(g, "no uncaught errors while booting", W.__ERRS.length, 0, W.__ERRS.join(" | "));
+  else skip(g, "no uncaught errors while booting", "error collector not injectable from file://");
+};
+
+/* 1-5: structural / service-quality validation via fault injection. */
+T.faults = async function (src) {
+  var cases = [
+    [1, "nodata",     "window.L7_DATA missing",          "window.L7_DATA is missing"],
+    [1, "nocorridor", "meta.corridor removed",           "corridor is missing or empty"],
+    [1, "noorder",    "order removed",                   "order is missing or empty"],
+    [1, "noloadflag", "loaded flag removed",             ".loaded is not a boolean"],
+    [1, "bademeta",   "L7_META is not an object",        "window.L7_META is not an object"],
+
+    [2, "badtime",    "a stop time is a string",         "is not a time"],
+    [2, "nanstart",   "departure time is NaN",           "is not a time"],
+    [2, "infend",     "terminal time is Infinity",       "is not a time"],
+    [2, "nullstart",  "departure time is null",          "is not a time"],
+    [2, "nullend",    "terminal time is null",           "is not a time"],
+    [2, "oobtime",    "a stop time is beyond 2 days",    "outside 0.."],
+    [2, "zerodur",    "a trip takes no time at all",     "non-positive duration"],
+
+    [3, "nonmono",    "station times descend",           "chronological"],
+    [3, "duptrip",    "duplicate trip numbers",          "duplicate"],
+
+    [4, "badwindow",  "window lo/hi reversed",           "window is not a [lo, hi] pair"],
+    [4, "equalwindow","window lo == hi",                 "window is not a [lo, hi] pair"],
+    [4, "nullwindow", "window bound is null",            "window is not a [lo, hi] pair"],
+    [4, "oobtrip",    "trip b beyond corridor",          "outside 0.."],
+    [4, "negstart",   "trip a is negative",              "outside 0.."],
+    [4, "aafterb",    "trip a == b",                     "outside 0.."],
+
+    [5, "shortt",     "t[] too short for the corridor",  "does not cover all"],
+    [5, "notarray",   "direction is not an array",       "is not an array"],
+    [5, "emptydir",   "direction array is empty",        "empty"]
+  ];
+  for (var c = 0; c < cases.length; c++) {
+    var item = cases[c][0], kind = cases[c][1], want = cases[c][2], frag = cases[c][3];
+    C(item);
+    var g = "B. fault injection: " + want;
+    var f;
+    try { f = await loadDoc(CATCH + mutate(src, kind)); }
+    catch (e) { skip(g, "iframe load", String(e.message)); continue; }
+    var W = f.contentWindow, d = W.document;
+    var box = d.querySelector("div.dataerr");
+    var err = W.__L7_DATA_ERROR;
+    ok(g, "reports an error", typeof err === "string" && err.length > 0, err || "(none)");
+    ok(g, "reason names the fault", typeof err === "string" && err.indexOf(frag) > -1, err || "(none)");
+    ok(g, "banner is shown", !!box && box.offsetHeight > 0);
+    ok(g, "reason is displayed in the banner",
+       !!box && (box.querySelector(".why b") || {}).textContent === err);
+    eq(g, "board is hidden", getComputedStyle(d.getElementById("board")).display, "none");
+    eq(g, "render loop never started", !!W.__L7, false, "no rAF, no __L7");
+    eq(g, "no sections drawn", d.querySelectorAll("#sections .sec").length, 0);
+    eq(g, "no uncaught errors", (W.__ERRS || []).length, 0, (W.__ERRS || []).join(" | "));
+    f.parentNode.removeChild(f);
+  }
+
+  /* The mirror image of the null tests above: a null OUTSIDE a trip's active
+     span [a,b] is the expected value, not a defect. If the guard ever starts
+     demanding a time on every row, this catches it. */
+  C(2);
+  var gOut = "B. schema guard: nulls outside the active span are accepted";
+  try {
+    var fOut = await loadDoc(CATCH + mutate(src, "nulloutside"));
+    var Wout = fOut.contentWindow;
+    eq(gOut, "a null outside [a,b] does not trip the guard", Wout.__L7_DATA_ERROR, null,
+       Wout.__L7_DATA_ERROR || "");
+    ok(gOut, "the board still boots", !!Wout.__L7, "no __L7");
+    eq(gOut, "no uncaught errors", (Wout.__ERRS || []).length, 0, (Wout.__ERRS || []).join(" | "));
+    fOut.parentNode.removeChild(fOut);
+  } catch (e) {
+    skip(gOut, "iframe load", String(e.message));
+  }
+};
+
+/* 11,12,14,15: date programming decided by the viewer's two rules. */
+T.dates = async function (W) {
+  var L = W.__L7, d = W.document;
+  function R(y, mo, da, h) { return L.resolveTable(new Date(y, mo, da, h === undefined ? 12 : h)); }
+
+  C(11);
+  var g = "C. day-of-week selection";
+  eq(g, "Thu 24 Sep 2026 -> weekday", R(2026, 8, 24).id, "weekday");
+  eq(g, "Fri -> weekday", R(2026, 8, 25).id, "weekday");
+  eq(g, "Mon -> weekday", R(2026, 8, 28).id, "weekday");
+  eq(g, "Sat 26 Sep 2026 -> saturday", R(2026, 8, 26).id, "saturday");
+  eq(g, "Sun 27 Sep 2026 -> sunday", R(2026, 8, 27).id, "sunday");
+  eq(g, "day-of-week path is labelled AUTO", R(2026, 8, 26).how, "AUTO");
+  eq(g, "saturday never auto-selects special", R(2026, 8, 26).id !== "special", true);
+
+  C(12);
+  g = "C. exact-date override vs annual recurrence";
+  /* An annual entry on 24 Sep and an exact entry on 24 Sep 2026 point at
+     different tables. The exact date is the more specific rule, so it must win
+     regardless of the order the entries were written in. */
+  L.setProgram([{ date: "2000-09-24", table: "sunday", annual: true },
+                { date: "2026-09-24", table: "saturday", annual: false }]);
+  eq(g, "exact-date wins when the annual entry is listed first", R(2026, 8, 24).id, "saturday");
+  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false },
+                { date: "2000-09-24", table: "sunday", annual: true }]);
+  eq(g, "exact-date wins when the annual entry is listed second", R(2026, 8, 24).id, "saturday");
+  eq(g, "the annual rule still applies in a later year", R(2031, 8, 24).id, "sunday");
+  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false }]);
+  eq(g, "one-off override matches its own date", R(2026, 8, 24).how, "DATE OVERRIDE");
+  eq(g, "one-off override does not repeat next year", R(2027, 8, 24).how, "AUTO");
+  L.setProgram([]);
+
+  C(13);
+  g = "C. duplicate dates and unloaded target tables";
+  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false },
+                { date: "2026-09-24", table: "special", annual: false }]);
+  var d1 = R(2026, 8, 24).id;
+  L.setProgram([{ date: "2026-09-24", table: "special", annual: false },
+                { date: "2026-09-24", table: "saturday", annual: false }]);
+  var d2 = R(2026, 8, 24).id;
+  eq(g, "two entries on one date resolve the same way in either order", d1, d2,
+     "first order gave " + d1 + ", reversed gave " + d2);
+  /* An override to a table with no data must fall back, and say so. */
+  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false }]);
+  L.at(21600, new Date(2026, 8, 24, 12));
+  eq(g, "an override to an unloaded table falls back", d.getElementById("tblHow").textContent, "FALLBACK");
+  eq(g, "the fallback shows a table that is loaded", d.getElementById("tblName").textContent, "WEEKDAY");
+  eq(g, "the notice is raised for the substitution", /\bnl\b/.test(d.body.className), true);
+  var lrf = L.last();
+  eq(g, "the fallback records the requested table", lrf && lrf.requested, "saturday",
+     "requested = " + (lrf && lrf.requested));
+  eq(g, "the fallback records the displayed table", lrf && lrf.displayed, "weekday",
+     "displayed = " + (lrf && lrf.displayed));
+  eq(g, "the fallback is not reported as a refusal", !!(lrf && lrf.refused), false);
+  eq(g, "the fixed readout pairs displayed with requested",
+     d.getElementById("selFixed").textContent, "WEEKDAY  SHOWN FOR SATURDAY");
+  /* Strict mode is the opposite decision: refuse rather than substitute. */
+  L.setStrict(true);
+  L.at(21600, new Date(2026, 8, 24, 12));
+  eq(g, "strict mode reports REFUSED", d.getElementById("tblHow").textContent, "REFUSED");
+  eq(g, "strict mode titles the refusal", d.getElementById("nlTitle").textContent,
+     "STRICT MODE - SERVICE REFUSED");
+  eq(g, "strict mode marks the board", /\bstrict\b/.test(d.body.className), true);
+  eq(g, "strict mode is not a fallback", /\bfb\b/.test(d.body.className), false);
+  eq(g, "strict mode draws no trains", d.querySelectorAll("#sections .train").length, 0);
+  ok(g, "strict readout names the unsubstituted table",
+     /SATURDAY/.test(d.getElementById("selFixed").textContent) &&
+     /STRICT/.test(d.getElementById("selFixed").textContent),
+     d.getElementById("selFixed").textContent);
+  var lrs = L.last();
+  eq(g, "strict mode records the requested table", lrs && lrs.requested, "saturday");
+  eq(g, "strict mode reports a refusal, not a fallback", !!(lrs && lrs.refused), true);
+  eq(g, "strict mode shows no substitute timetable", lrs && lrs.displayed, "saturday",
+     "displayed = " + (lrs && lrs.displayed) + " (must not be the substituted weekday)");
+  eq(g, "strict mode can be switched off again", (function () {
+    L.setStrict(false); return L.strict();
+  })(), false);
+  L.setProgram([]);
+
+  C(14);
+  g = "C. leap day and local-date boundaries";
+  L.setProgram([{ date: "2000-02-29", table: "saturday", annual: true }]);
+  eq(g, "annual 29-Feb matches in leap year 2028", R(2028, 1, 29).how, "DATE OVERRIDE");
+  eq(g, "annual 29-Feb matches in leap year 2032", R(2032, 1, 29).how, "DATE OVERRIDE");
+  eq(g, "annual 29-Feb does NOT apply on 1 Mar 2027", R(2027, 2, 1).how, "AUTO");
+  eq(g, "annual 29-Feb does NOT apply on 28 Feb 2027", R(2027, 1, 28).how, "AUTO");
+  L.setProgram([]);
+  /* Midnight-anchored: the matcher must read LOCAL date parts. A switch to
+     toISOString() would read UTC and shift the day for a +05:30 zone, matching
+     the wrong entry for hours of every day. Check the edges of the day. */
+  var prog = [{ date: "2026-09-24", table: "saturday", annual: false }];
+  L.setProgram(prog);
+  eq(g, "00:00 local on a programmed date matches", R(2026, 8, 24, 0).how, "DATE OVERRIDE");
+  eq(g, "23:59 local on the same date matches", R(2026, 8, 24, 23).how, "DATE OVERRIDE");
+  eq(g, "the previous local day is untouched", R(2026, 8, 23, 23).how, "AUTO");
+  L.setProgram([]);
+  /* Day of week must survive every local hour and month boundary, which is what
+     a device timezone or clock change moves. */
+  [[2026, 2, 8], [2026, 8, 24], [2026, 9, 25], [2026, 11, 31]].forEach(function (dt) {
+    var local = new Date(dt[0], dt[1], dt[2]).getDay();
+    var expect = local === 0 ? "sunday" : local === 6 ? "saturday" : "weekday";
+    var same = R(dt[0], dt[1], dt[2], 0).id === R(dt[0], dt[1], dt[2], 23).id;
+    eq(g, "local day stable across the whole day " + dt.join("-"), same, true);
+    eq(g, "local day matches the device calendar " + dt.join("-"), R(dt[0], dt[1], dt[2]).id, expect);
+  });
+  var rolled = new Date(2027, 1, 29, 12);
+  eq(g, "JS rolls 29 Feb 2027 to 1 Mar, and the viewer agrees", rolled.getDate(), 1);
+};
+
+/* 6-10: the pure time engine, driven on synthetic trips so every boundary is exact. */
+function syn(dir, t, a, b) {
+  a = a || 0; if (b === undefined) b = t.length - 1;
+  return { dir: dir, a: a, b: b, t: t, t0: t[a], t1: t[b],
+           span: Math.max(1, t[b] - t[a]), seg: a, lastS: -1,
+           pos: 0, stop: 0, dwell: false };
+}
+
+T.timeEngine = async function (W) {
+  var L = W.__L7, d = W.document;
+
+  C(6);
+  var g = "D. departure and arrival";
+  var dep = syn("dn", [0, 600, 1200]);
+  eq(g, "true exactly at departure", L.resolve(dep, 0), true);
+  eq(g, "at departure the train is at row a", dep.pos, 0);
+  var arr = syn("dn", [0, 600, 1200]);
+  eq(g, "true exactly at arrival", L.resolve(arr, 1200), true);
+  eq(g, "at arrival the train is at row b", arr.pos, 2);
+  eq(g, "at arrival it is not dwelling", arr.dwell, false);
+  eq(g, "one second before departure the train is not on the board", L.resolve(dep, -1), false);
+  eq(g, "one second after arrival with wrap off it is gone", L.resolve(arr, 1201), false);
+
+  C(7);
+  g = "D. station arrival/departure boundary";
+  var bt = syn("dn", [0, 120, 300, 480, 600]);   /* every gap < 300s */
+  for (var r = bt.a; r <= bt.b; r++) {
+    var got = L.resolve(bt, bt.t[r]);
+    ok(g, "at t[" + r + "] resolve is true and pos == " + r, got === true && near(bt.pos, r),
+       "pos " + bt.pos + " stop " + bt.stop);
+  }
+  eq(g, "the stop row tracks the boundary", bt.stop, bt.b);
+
+  C(8);
+  g = "D. dwell threshold";
+  eq(g, "the viewer's threshold is 300s", L.dwellThreshold(), 300);
+  function gapTrip(gap) { var o = syn("dn", [0, 100, 100 + gap]); L.resolve(o, 101); return o; }
+  var below = gapTrip(299), at = gapTrip(300), above = gapTrip(301);
+  eq(g, "gap 299s does not dwell", below.dwell, false);
+  ok(g, "gap 299s glides through the station", below.pos > 1 && below.pos < 1.01, "pos " + below.pos);
+  eq(g, "gap 300s dwells (inclusive boundary)", at.dwell, true);
+  eq(g, "gap 300s holds at the station", at.pos, 1);
+  eq(g, "gap 301s dwells", above.dwell, true);
+  eq(g, "gap 301s holds at the station", above.pos, 1);
+
+  C(9);
+  g = "D. forward and backward jumps";
+  var j = syn("dn", [100, 200, 300, 400, 500, 600, 700]);
+  L.resolve(j, 650);
+  var fwd = j.pos;
+  ok(g, "a forward jump lands inside the trip", fwd > 5 && fwd <= 6, "pos " + fwd);
+  L.resolve(j, 120);
+  eq(g, "a backward jump rewinds the cached segment", j.seg, j.a, "seg was " + j.seg);
+  ok(g, "a backward jump lands near the early time", near(j.pos, 0.2, 0.5), "pos " + j.pos);
+  eq(g, "a backward jump records the new time", j.lastS, 120);
+  L.resolve(j, 700);
+  L.resolve(j, 100);
+  eq(g, "jumping back to the departure rewinds to a", j.seg, j.a);
+  var beforePos = j.pos;
+  eq(g, "before the trip start returns false", L.resolve(j, 50), false);
+  eq(g, "before the trip start leaves pos untouched", j.pos, beforePos);
+  eq(g, "past the trip end returns false", L.resolve(j, 800), false);
+  /* Overnight services carry times past 86400; the engine must not wrap them. */
+  var night = syn("dn", [86300, 86500, 86700, 86900]);
+  eq(g, "an overnight trip resolves", L.resolve(night, 86700), true);
+  eq(g, "an overnight trip reaches row 2", night.pos, 2);
+
+  C(10);
+  g = "D. wrap behaviour";
+  var wb = d.getElementById("bWrap");
+  eq(g, "wrap is off by default", /\bon\b/.test(wb.className), false);
+  var w = syn("dn", [0, 100, 200, 300]);
+  eq(g, "with wrap off, past t1 the train is gone", L.resolve(w, 400), false);
+  wb.click();
+  eq(g, "the control turns wrap on", /\bon\b/.test(wb.className), true);
+  eq(g, "first wrap puts the train back on the board", L.resolve(w, 400), true);
+  ok(g, "first wrap lands inside the trip", w.pos >= 0 && w.pos <= 3, "pos " + w.pos);
+  L.resolve(w, 0);
+  eq(g, "a second wrap resolves", L.resolve(w, 550), true);
+  ok(g, "a second wrap lands inside the trip", w.pos >= 0 && w.pos <= 3, "pos " + w.pos);
+  eq(g, "more than one span past the end is rejected", L.resolve(w, 700), false);
+  ok(g, "state stays in range after repeated wraps", w.pos >= 0 && w.pos <= 3, "pos " + w.pos);
+  wb.click();
+  eq(g, "the control turns wrap off again", /\bon\b/.test(wb.className), false);
+  eq(g, "with wrap off again, past t1 is gone", L.resolve(w, 400), false);
+};
+
+/* 26: the service clock must carry a service day across midnight. A service day
+   does not end at 24:00; the last booked calls run past midnight and are stored
+   as 86400+, so between 00:00:00 and that last call the wall clock has wrapped
+   but the service day has not. The board must read 24:00:00 there, not 00:00:00,
+   and must resolve the date in force to the day that just ended. */
+T.midnight = async function (W) {
+  C(26);
+  var L = W.__L7, d = W.document, g = "D. service clock across midnight";
+  var hi = L.data.tables.weekday.window[1];
+  eq(g, "the weekday window runs past midnight", hi > 86400, true);
+  var tail = hi - 86400;              /* 2366s = 00:39:26 */
+  eq(g, "the after-midnight tail is derived from the window", L.serviceTail(), tail);
+
+  /* Mapping wall-clock instants onto the service clock. */
+  var t1 = L.tickTable(new Date(2026, 8, 24, 23, 59, 59));
+  eq(g, "23:59:59 is 86,399s into the service day", t1.sec, 23 * 3600 + 59 * 60 + 59);
+  eq(g, "23:59:59 stays on its own service date", t1.date.getDate(), 24);
+
+  var t2 = L.tickTable(new Date(2026, 8, 25, 0, 0, 0));
+  eq(g, "00:00:00 becomes 24:00:00", t2.sec, 86400);
+  eq(g, "00:00:00 still belongs to the service day that just ended", t2.date.getDate(), 24);
+
+  var t3 = L.tickTable(new Date(2026, 8, 25, 0, 39, 26));
+  eq(g, "the last booked second is 24:39:26", t3.sec, hi);
+  eq(g, "the last booked second is still the old service day", t3.date.getDate(), 24);
+
+  var t4 = L.tickTable(new Date(2026, 8, 25, 0, 39, 27));
+  eq(g, "one second past the tail is the new service day", t4.sec, 39 * 60 + 27);
+  eq(g, "one second past the tail rolls the date", t4.date.getDate(), 25);
+
+  /* Drive the real board across the boundary: the readout must step from
+     23:59:59 to 24:00:00 rather than snapping back to 00:00:00, and the board
+     must stay in-window until the tail has genuinely run out. */
+  L.atWall(new Date(2026, 8, 24, 23, 59, 59));
+  eq(g, "the board shows 23:59:59", d.getElementById("simclk").textContent, "23:59:59");
+  L.atWall(new Date(2026, 8, 25, 0, 0, 0));
+  eq(g, "the board shows 24:00:00 just after midnight", d.getElementById("simclk").textContent, "24:00:00");
+  eq(g, "the board stays in-window across midnight", /\bnl\b/.test(d.body.className), false, d.body.className);
+  L.atWall(new Date(2026, 8, 25, 0, 39, 26));
+  eq(g, "the board reaches the last booked second", d.getElementById("simclk").textContent, "24:39:26");
+  L.atWall(new Date(2026, 8, 25, 0, 39, 27));
+  eq(g, "one second later the clock is the new day", d.getElementById("simclk").textContent, "00:39:27");
+  ok(g, "the board reports the new day as out of window", /\bnl\b/.test(d.body.className), d.body.className);
+
+  /* Leave the board where the other checks expect it. */
+  L.at(21600, new Date(2026, 8, 24, 12));
+};
+
+/* 15: a build with no loaded timetable must degrade, not throw. */
+T.noTable = async function (W) {
+  C(15);
+  var g = "C. no valid timetable available", d = W.document;
+  eq(g, "the guard stays quiet (an unloaded table is legal)", W.__L7_DATA_ERROR, null);
+  ok(g, "the board did not throw while booting", !!W.__L7);
+  eq(g, "the notice reports NOT LOADED", d.getElementById("nlTitle").textContent, "NOT LOADED");
+  eq(g, "no trains are drawn", d.querySelectorAll("#sections .train").length, 0);
+  eq(g, "no uncaught errors", (W.__ERRS || []).length, 0, (W.__ERRS || []).join(" | "));
+};
+
+/* 23: repeated rebuilds and repeated resizes keep the geometry consistent. */
+T.rebuild = async function (f, W) {
+  C(23);
+  var L = W.__L7, d = W.document, g = "E. rebuilds";
+  var n0 = L.secs().length;
+  L.buildSections(); L.buildSections();
+  eq(g, "repeated rebuilds keep the section count", L.secs().length, n0);
+  eq(g, "sections remain attached to the DOM", d.querySelectorAll("#sections .sec").length, n0);
+  ok(g, "the last section still ends at the corridor end",
+     L.secs()[L.secs().length - 1].hi === L.ns());
+  /* resize across a chunk boundary and back, twice, to exercise the rebuild */
+  f.width = 900;
+  try { W.dispatchEvent(new W.Event("resize")); } catch (e) { }
+  await sleep(280);
+  eq(g, "a resize re-chunks to 7 per section", L.perSection(), 7);
+  f.width = 1280;
+  try { W.dispatchEvent(new W.Event("resize")); } catch (e) { }
+  await sleep(280);
+  eq(g, "returning to desktop re-chunks to 10 per section", L.perSection(), 10);
+  ok(g, "sections still cover the corridor after the resizes",
+     L.secs().length > 0 && L.secs()[L.secs().length - 1].hi === L.ns());
+  eq(g, "no uncaught errors across the rebuilds", (W.__ERRS || []).length, 0, (W.__ERRS || []).join(" | "));
+};
+
+/* 23: switching the loaded table must not leave stale sections or errors. */
+T.tableChange = async function (Wd) {
+  C(23);
+  var Ld = Wd.__L7, dd = Wd.document, g = "E. table changes";
+  Ld.setProgram([{ date: "2026-09-24", table: "saturday", annual: false }]);
+  Ld.at(30000, new Date(2026, 8, 24, 12));
+  eq(g, "a programmed date switches the loaded table", dd.getElementById("tblName").textContent, "SATURDAY");
+  ok(g, "the switched table still has sections", Ld.secs().length > 0);
+  Ld.setProgram([]);
+  Ld.at(30000, new Date(2026, 8, 24, 12));
+  eq(g, "clearing the programme returns to weekday", dd.getElementById("tblName").textContent, "WEEKDAY");
+  eq(g, "no uncaught errors across the changes", (Wd.__ERRS || []).length, 0, (Wd.__ERRS || []).join(" | "));
+};
+
+T.visibility = async function (W) {
+  C(22);
+  var g = "E. hidden tab", d = W.document, L = W.__L7;
+  var evts = W.__EVT || [];
+  eq(g, "the viewer subscribes to visibilitychange", evts.indexOf("visibilitychange") > -1, true,
+     "no visibilitychange listener was registered");
+  var before = (W.__ERRS || []).length;
+  try { d.dispatchEvent(new W.Event("visibilitychange")); } catch (e) { }
+  L.at(30000, new Date(2026, 8, 24, 12));
+  eq(g, "the board keeps rendering after a visibility change", (W.__ERRS || []).length, before);
+};
+
+/* 21: section geometry -- chunking, seam sharing, and seam drawing. */
+T.sections = async function (W) {
+  C(21);
+  var L = W.__L7, W_doc = W.document, g = "E. section geometry";
+  var NS = L.ns(), stops = L.stops();
+  eq(g, "corridor is 44 stations / 43 links", NS, 43);
+  eq(g, "ring closes at MKPR", stops[0], stops[NS]);
+
+  [4, 7, 10].forEach(function (per) {
+    var ch = L.chunkSections(per), i;
+    eq(g, "per=" + per + ": first chunk starts at 0", ch[0].lo, 0);
+    eq(g, "per=" + per + ": last chunk ends at NS", ch[ch.length - 1].hi, NS);
+    var shared = true, gaps = false;
+    for (i = 0; i < ch.length - 1; i++) {
+      if (ch[i].hi !== ch[i + 1].lo) shared = false;
+      if (ch[i + 1].lo !== ch[i].hi) gaps = true;
+    }
+    ok(g, "per=" + per + ": adjacent sections share a boundary station", shared);
+    eq(g, "per=" + per + ": no uncovered stations", gaps, false);
+    var cover = ch.reduce(function (a, c) { return a + (c.hi - c.lo + 1); }, 0);
+    ok(g, "per=" + per + ": chunks cover NS+1 slots", cover >= NS + 1, cover + " slots in " + ch.length + " sections");
+  });
+
+  L.buildSections();
+  var secs = L.secs();
+  ok(g, "sections exist in the DOM", secs.length > 0, secs.length + " sections");
+  if (!secs.length) return;
+
+  var seam = null;
+  for (var i = 0; i < secs.length - 1; i++) {
+    if (secs[i].hi === secs[i + 1].lo) { seam = i; break; }
+  }
+  ok(g, "found a shared boundary section", seam !== null);
+  if (seam === null) return;
+  var k = secs[seam].hi;
+  var hits = L.sectionsFor(k);
+  eq(g, "sectionsFor at the seam returns 2", hits.length, 2);
+  ok(g, "sectionsFor at the seam returns the two neighbours",
+     hits.indexOf(secs[seam]) > -1 && hits.indexOf(secs[seam + 1]) > -1);
+
+  var midK = (secs[0].lo + secs[0].hi) >> 1;
+  eq(g, "sectionsFor deep inside a section returns 1", L.sectionsFor(midK).length, 1);
+  eq(g, "sectionsFor beyond the ends returns 0", L.sectionsFor(NS + 9).length, 0);
+
+  var trips = L.trips();
+  var dir = trips[0].dir;
+  var tr = null;
+  for (var j = 0; j < trips.length; j++) if (trips[j].dir === dir) { tr = trips[j]; break; }
+  ok(g, "found a train to draw", !!tr, tr ? "dir " + dir + " no " + tr.no : "none");
+  if (!tr) return;
+
+  var keep = { pos: tr.pos, seg: tr.seg, lastS: tr.lastS, stop: tr.stop, dwell: tr.dwell };
+  var saveSty = tr.els.map(function (e) { return { p: e.style.left, c: e.className, d: e.style.display }; });
+
+  tr.pos = k; tr.seg = k; tr.dwell = false;
+  L.drawTrain(tr);
+  var shown = tr.els.filter(function (e) { return e.style.display === "block"; });
+  eq(g, "seam train drawn into 2 elements", shown.length, 2);
+  var parents = tr.els.map(function (e) { return e.parentNode; });
+  ok(g, "the two elements sit in different sections",
+     parents[0] && parents[1] && parents[0] !== parents[1]);
+  tr.els.forEach(function (e) {
+    var v = parseFloat(e.style.left);
+    ok(g, "clamped inside 0..100% (" + e.style.left + ")", v >= -0.001 && v <= 100.001);
+  });
+
+  function arrowsAt(kk) {
+    tr.els.forEach(function (e) { e.style.display = "none"; });
+    tr.pos = kk; tr.seg = kk; tr.dwell = false;
+    L.drawTrain(tr);
+    var shownN = tr.els.filter(function (e) { return e.style.display === "block"; });
+    return {
+      n: shownN.length,
+      a: shownN.filter(function (e) { return /cont-(up|down)/.test(e.className); }).length
+    };
+  }
+  var atH = arrowsAt(k);
+  eq(g, "on the seam station: drawn in both sections", atH.n, 2);
+  eq(g, "on the seam station: no continuation arrow needed", atH.a, 0);
+  if (k - 1 >= 0) {
+    var below = arrowsAt(k - 1);
+    eq(g, "one before the seam: drawn in both sections", below.n, 2);
+    eq(g, "one before the seam: exactly one continues up", below.a, 1);
+  } else skip(g, "one before the seam", "seam is at the corridor start");
+  if (k + 1 <= NS) {
+    var above = arrowsAt(k + 1);
+    eq(g, "one past the seam: drawn in both sections", above.n, 2);
+    eq(g, "one past the seam: exactly one continues down", above.a, 1);
+  } else skip(g, "one past the seam", "seam is at the corridor end");
+
+  var mk = (secs[0].lo + secs[0].hi) >> 1;
+  tr.els.forEach(function (e) { e.style.display = "none"; });
+  tr.pos = mk; tr.seg = mk;
+  L.drawTrain(tr);
+  var shown2 = tr.els.filter(function (e) { return e.style.display === "block"; });
+  eq(g, "mid-section train drawn once", shown2.length, 1);
+
+  [0, 1, NS - 1, NS, NS + 5, k].forEach(function (p) {
+    tr.els.forEach(function (e) { e.style.display = "none"; });
+    tr.pos = p; tr.seg = p;
+    L.drawTrain(tr);
+    var n2 = tr.els.filter(function (e) { return e.style.display === "block"; }).length;
+    ok(g, "pos " + p + " draws at most 2", n2 <= 2, n2 + " drawn");
+  });
+
+  tr.pos = keep.pos; tr.seg = keep.seg; tr.lastS = keep.lastS;
+  tr.stop = keep.stop; tr.dwell = keep.dwell;
+  tr.els.forEach(function (e, idx) {
+    e.style.left = saveSty[idx].p; e.className = saveSty[idx].c; e.style.display = saveSty[idx].d;
+  });
+  L.at(W.__L7.data.tables.weekday.window[0] + 3600, new Date(2026, 8, 24));
+};
+
+/* 21: viewport widths choose the section chunking. */
+T.widths = async function (f, W) {
+  C(21);
+  var g = "E. widths", L = W.__L7;
+  async function at(px) {
+    f.width = px;
+    try { W.dispatchEvent(new W.Event("resize")); } catch (e) { }
+    await sleep(280);
+    return L.perSection();
+  }
+  eq(g, "mobile width chunks 4 per section", await at(700), 4);
+  eq(g, "mid width chunks 7 per section", await at(900), 7);
+  eq(g, "desktop width chunks 10 per section", await at(1400), 10);
+  ok(g, "the rebuilt sections still cover the corridor", L.secs().length > 0 &&
+     L.secs()[L.secs().length - 1].hi === L.ns());
+  await at(1280);
+};
+
+/* 24: keyboard controls reach the same state as the buttons. */
+T.keyboard = async function (W) {
+  C(24);
+  var d = W.document, g = "E. keyboard";
+  function K(k) { W.dispatchEvent(new W.KeyboardEvent("keydown", { key: k, bubbles: true })); }
+  K("ArrowLeft");
+  eq(g, "left arrow leaves NOW", /\bon\b/.test(d.getElementById("bNow").className), false);
+  K("n");
+  eq(g, "n returns to NOW", /\bon\b/.test(d.getElementById("bNow").className), true);
+  K("w");
+  ok(g, "w turns wrap on", /WRAP/.test(d.getElementById("fMode").textContent), d.getElementById("fMode").textContent);
+  K("w");
+  ok(g, "w turns wrap off", /SCHEDULE/.test(d.getElementById("fMode").textContent), d.getElementById("fMode").textContent);
+  K("p");
+  ok(g, "p opens the programme panel", /\bprog\b/.test(d.body.className), d.body.className);
+  K("Escape");
+  eq(g, "escape clears the open panels", /(\bprog\b|\bpnl\b)/.test(d.body.className), false);
+};
+
+/* 25: no uncaught errors and no console errors while the board plays. */
+T.playback = async function (W) {
+  C(25);
+  var L = W.__L7, g = "E. playback";
+  try {
+    for (var s = 19000; s < 90000; s += 137) {
+      L.at(s < 89000 ? s : s - 90000, new Date(2026, 8, 24, 12));
+    }
+  } catch (e) {
+    rec(g, "playback sweep did not throw", "FAIL", String(e && e.message || e));
+  }
+  rec(g, "playback sweep did not throw", "PASS", "swept 05:16 -> midnight");
+  eq(g, "no uncaught errors during playback", (W.__ERRS || []).length, 0, (W.__ERRS || []).join(" | "));
+  eq(g, "no console errors during playback", (W.__CERR || []).length, 0, (W.__CERR || []).join(" | "));
+};
+
+/* 16,17,19,20: upload boundary and export pipeline, through the admin page. */
+T.admin = async function (WA) {
+  var A = WA.__L7_ADMIN, U = A.upload, doc = WA.document; C(16);
+  var g = "F. workbook upload boundary";
+  ok(g, "the upload engine is present", !!U);
+  eq(g, "this browser can decompress xlsx", U.needs, true);
+  var r1 = throwsSync(function () { U.zipOpen(new ArrayBuffer(32)); }, "not a zip");
+  ok(g, "a non-zip buffer is refused", r1.ok, r1.err);
+  var r2 = await rejects(function () { return U.readWorkbook(new ArrayBuffer(64)); }, "not a zip");
+  ok(g, "readWorkbook rejects a non-zip buffer", r2.ok, r2.err);
+  var r3 = throwsSync(function () { U.buildFromCells({}); }, "no station labels");
+  ok(g, "an empty sheet is refused with an actionable message", r3.ok, r3.err);
+  eq(g, "an unrecognised sheet name maps to nothing", U.guessTable("Sheet1"), "");
+  eq(g, "a name without a date yields no valid-from date", U.dateFromName("Sheet1"), null);
+  eq(g, "an impossible date is rejected", U.dateFromName("Sheet_31132026"), null);
+
+  /* Attribute order must not matter: some writers emit <c s="1" r="A1">. The
+     regex parser this replaced silently read no cell at all for that shape. */
+  var sxml = '<worksheet><sheetData><row r="1">'
+    + '<c s="1" r="A1" t="s"><v>0</v></c>'
+    + '<c r="B1"><v>3.5</v></c>'
+    + '<c t="inlineStr" r="C1"><is><t>Hi</t></is></c>'
+    + '</row></sheetData></worksheet>';
+  var scells = U.cellsFrom(sxml, ["HELLO"]);
+  eq(g, "a shared-string cell with attributes before r is read", scells["1,1"], "HELLO");
+  eq(g, "a plain numeric cell is read as a number", scells["2,1"], 3.5);
+  eq(g, "an inline-string cell is read", scells["3,1"], "Hi");
+  var rbad = throwsSync(function () { U.cellsFrom("<worksheet><row", []); }, "not well formed");
+  ok(g, "malformed worksheet XML is refused, not read as empty", rbad.ok, rbad.err);
+
+  ok(g, "a workbook size ceiling is declared", U.UPL.MAX_WORKBOOK > 0, String(U.UPL.MAX_WORKBOOK));
+  var rov = await rejects(function () {
+    return U.readWorkbook({ byteLength: U.UPL.MAX_WORKBOOK + 1 });
+  }, "over the");
+  ok(g, "an oversized workbook is refused before parsing", rov.ok, rov.err);
+  var rmethod = await rejects(function () {
+    return U.zipText({ entries: { "xl/x.xml": { method: 12, csize: 0, usize: 0, lho: 0 } } }, "xl/x.xml");
+  }, "compression method");
+  ok(g, "an unsupported compression method is refused by name", rmethod.ok, rmethod.err);
+  var rdeclare = await rejects(function () {
+    return U.zipText({ entries: { "xl/x.xml": { method: 8, csize: 0, usize: U.UPL.MAX_XML + 1, lho: 0 } } }, "xl/x.xml");
+  }, "over the");
+  ok(g, "a part declaring more than the XML ceiling is refused", rdeclare.ok, rdeclare.err);
+
+  /* Zero-second links are legal and must survive as-is: the builder counts
+     them and must not nudge the two calls a second apart. */
+  var zcells = {}, zr;
+  for (zr = 9; zr <= 52; zr++) zcells["1," + zr] = "S" + zr;
+  zcells["3,1"] = 101;
+  [1000, 1000, 2000, 3000, 4000].forEach(function (sec, i) {
+    zcells["3," + (9 + i)] = sec / 86400;
+  });
+  var zd = U.buildFromCells(zcells);
+  eq(g, "an equal adjacent pair is counted for review", zd._stats.zero, 1);
+  eq(g, "the equal pair is not repaired away", zd.dn[0].t[1], zd.dn[0].t[0], "t1=" + zd.dn[0].t[1]);
+
+  C(17);
+  g = "F. failed upload does not disturb valid data";
+  var before = A.buildEndUser();
+  try { await U.readWorkbook(new ArrayBuffer(128)); } catch (e) { }
+  throwsSync(function () { U.buildFromCells({}); }, "no station labels");
+  eq(g, "the exported payload is byte-for-byte unchanged", A.buildEndUser() === before, true);
+  eq(g, "nothing was marked dirty", A.dirty(), false);
+  ok(g, "the original loaded table is still present", A.data().tables.weekday.loaded === true &&
+     A.data().tables.weekday.dn.length > 0, A.data().tables.weekday.dn.length + " DN trips");
+
+  /* Staged apply is atomic: a selection whose imported sheets disagree on the
+     station list, or which would leave an un-replaced timetable on a stale
+     list, is refused before any of DATA is touched. */
+  g = "F. upload apply is validated before it commits";
+  var up = A.upResults(), corridor0 = A.data().meta.corridor.slice();
+  var newList = corridor0.slice(); newList[0] = newList[0] + "-X";
+  function fakeRes(mapTo, name, stops) {
+    return { ok: true, r: { mapTo: mapTo, sh: { name: name } }, d: { stops: stops } };
+  }
+  up["probe1"] = fakeRes("saturday", "SheetA", corridor0.slice());
+  up["probe2"] = fakeRes("sunday", "SheetB", newList);
+  var plan = A.stageApply();
+  ok(g, "differing station lists are refused", plan.problems.length > 0, plan.problems.join(" "));
+  ok(g, "the refusal names the odd sheet out", /SheetB/.test(plan.problems.join(" ")), plan.problems.join(" "));
+  eq(g, "a refused selection never marks the file dirty", A.dirty(), false);
+  ok(g, "a refused selection leaves the corridor untouched",
+     A.data().meta.corridor.join("|") === corridor0.join("|"));
+  Object.keys(up).forEach(function (k) { delete up[k]; });
+
+  /* A single sheet that changes the corridor must flag every loaded timetable
+     it does not replace as incompatible, so the admin has to unload it. */
+  up["probe3"] = fakeRes("saturday", "SheetC", newList);
+  var plan2 = A.stageApply();
+  eq(g, "a changed corridor is detected", plan2.corridorChanged, true);
+  ok(g, "the un-replaced loaded timetable is flagged incompatible",
+     plan2.incompatible.indexOf("weekday") > -1, plan2.incompatible.join(","));
+  Object.keys(up).forEach(function (k) { delete up[k]; });
+  eq(g, "staging left the data untouched", A.dirty(), false);
+
+  C(19);
+  g = "F. export placeholder replacement";
+  var html = A.buildEndUser();
+  eq(g, "no data placeholder remains", html.indexOf("/*__L7_DATA__*/"), -1);
+  eq(g, "no metadata placeholder remains", html.indexOf("/*__L7_META__*/"), -1);
+  eq(g, "no stylesheet placeholder remains", html.indexOf("/*__L7_CSS__*/"), -1);
+  ok(g, "the metadata block is present", html.indexOf("/*L7_META_START*/") > -1 &&
+     html.indexOf("/*L7_META_END*/") > -1);
+  ok(g, "the metadata payload is present", html.indexOf("window.L7_META = {") > -1);
+  ok(g, "the timetable payload is present", html.indexOf("window.L7_DATA = {") > -1);
+  var seg = html.slice(html.indexOf("/*L7_META_START*/"), html.indexOf("/*L7_META_END*/"));
+  ok(g, "the replaced block carries the live metadata", seg.indexOf('"corridor"') > -1);
+  eq(g, "the admin test hook is not exported into the viewer", html.indexOf("__L7_ADMIN"), -1);
+
+  C(20);
+  g = "F. exported viewer, opened independently";
+  var f = await loadDoc(CATCH + html);
+  var W2 = f.contentWindow;
+  var booted = await until(function () { return !!W2.__L7; }, 8000);
+  ok(g, "the exported file boots", booted, "guard said: " + W2.__L7_DATA_ERROR);
+  eq(g, "the exported file's data guard is quiet", W2.__L7_DATA_ERROR, null);
+  ok(g, "the exported board is visible",
+     getComputedStyle(W2.document.getElementById("board")).display !== "none");
+  ok(g, "the exported board loaded trips", booted && W2.__L7.trips().length > 0,
+     booted ? W2.__L7.trips().length + " trips" : "(not booted)");
+  eq(g, "the exported file raises no uncaught errors", (W2.__ERRS || []).length, 0, (W2.__ERRS || []).join(" | "));
+  if (f.parentNode) f.parentNode.removeChild(f);
+
+  /* C13: the admin refuses to create two rules of the SAME specificity on one
+     day, while allowing an exact date and an annual recurrence to share one --
+     they are different rules and the exact one is the more specific. */
+  C(13);
+  g = "F. admin date programme conflicts";
+  var savedProgram = JSON.stringify(A.conf().program);
+  A.conf().program = [];
+  A.addEntry("2030-09-24", "saturday", false);
+  eq(g, "the first exact entry is accepted", A.conf().program.length, 1);
+  A.addEntry("2031-09-24", "sunday", true);
+  eq(g, "an annual rule on the same MM-DD is allowed beside the exact one", A.conf().program.length, 2);
+  A.addEntry("2030-09-24", "special", false);
+  eq(g, "a second exact rule on one date is refused", A.conf().program.length, 2);
+  ok(g, "the refusal explains the clash",
+     /already programmed/.test(WA.document.getElementById("prErr").textContent),
+     WA.document.getElementById("prErr").textContent);
+  A.addEntry("2032-09-24", "special", true);
+  eq(g, "a second annual rule on one MM-DD is refused", A.conf().program.length, 2);
+  A.addEntry("2031-09-24", "sunday", true);
+  eq(g, "a duplicate annual rule is refused", A.conf().program.length, 2);
+  var vp = A.validateProgram([{ date: "2034-01-01", table: "saturday", annual: false },
+                              { date: "2034-01-01", table: "special", annual: false }]);
+  ok(g, "the export validator rejects two exact rules on one date", vp.length > 0, vp.join("; "));
+  var vp2 = A.validateProgram([{ date: "2034-01-01", table: "saturday", annual: false },
+                               { date: "2000-01-01", table: "special", annual: true }]);
+  eq(g, "the export validator accepts an exact plus an annual rule", vp2.length, 0, vp2.join("; "));
+  A.conf().program = JSON.parse(savedProgram);
+
+  /* C18: operator-typed metadata is serialised into the built file's script
+     block, so a value containing a closing script tag must be escaped, not
+     allowed to terminate the element and spill the rest of the payload. */
+  C(18);
+  g = "F. script-safe serialization";
+  var label0 = A.conf().tables.weekday.label;
+  var XSS_CLOSE = "<" + "/script>", XSS_OPEN = "<" + "script>";
+  A.conf().tables.weekday.label = "W" + XSS_CLOSE + XSS_OPEN + "window.__XSS=9" + XSS_CLOSE;
+  var built = A.buildEndUser();
+  eq(g, "metadata cannot inject a second closing script tag",
+     (built.match(/<\/script>/g) || []).length, (A.baseHtml().match(/<\/script>/g) || []).length,
+     "closing tags in built vs base");
+  ok(g, "the label is escaped as \\u003c in the built file", built.indexOf("\\u003c/script") > -1);
+  var f6 = await loadDoc(CATCH + built);
+  var W6 = f6.contentWindow;
+  var boot6 = await until(function () { return !!W6.__L7 || !!W6.__L7_DATA_ERROR; }, 8000);
+  ok(g, "the built file still boots and the guard accepts the escaped label",
+     boot6 && W6.__L7_DATA_ERROR === null, "guard: " + W6.__L7_DATA_ERROR);
+  eq(g, "the injected handler never ran", W6.__XSS, undefined);
+  if (f6.parentNode) f6.parentNode.removeChild(f6);
+  A.conf().tables.weekday.label = label0;
+
+  /* C23: the headway analysis caches per timetable and the selector decides
+     which timetable that is; discarding an upload has to clear the cache. */
+  C(23);
+  g = "F. headway timetable selector and cache";
+  var sel = A.gTable();
+  ok(g, "the headway timetable selector exists", !!sel);
+  A.syncGapsTable();
+  eq(g, "the selector lists every timetable", sel.options.length, A.tableOrder().length);
+  eq(g, "the selected timetable is the one being analysed", sel.value, "weekday");
+  ok(g, "an unloaded timetable is disabled in the selector",
+     [].some.call(sel.options, function (o) { return o.disabled; }), "no disabled option");
+  var calls = A.callsFor("dn");
+  eq(g, "callsFor returns one slot per corridor position", calls.length, A.data().meta.corridor.length);
+  ok(g, "the calls cache is populated under a table+direction key",
+     Object.keys(A.callsCache()).length > 0, Object.keys(A.callsCache()).join(","));
+  WA.document.getElementById("upRevert").click();
+  eq(g, "discarding an upload clears the headway cache", Object.keys(A.callsCache()).length, 0);
+};
+
+/* 18: special characters must survive as text, not become markup. */
+T.specials = async function (W) {
+  C(18);
+  var d = W.document, L = W.__L7, g = "F. special characters";
+  ok(g, "the special-character build still boots", !!L);
+  eq(g, "the guard accepts special characters in strings", W.__L7_DATA_ERROR, null);
+  var label = d.getElementById("tblName");
+  eq(g, "a metadata label with markup is shown literally", label.textContent, 'L<&">B');
+  eq(g, "a metadata label does not create elements", label.children.length, 0);
+  eq(g, "a station code with markup is retained verbatim", L.stops()[0], "A<em>x</em>B" + XSS_TEXT);
+  var rng = d.querySelector("#sections .rng");
+  ok(g, "a station code in a section header is escaped, not parsed",
+     !!rng && rng.querySelector("em") === null && rng.querySelector("img") === null &&
+     rng.querySelector("script") === null, rng ? rng.innerHTML : "(no .rng)");
+  /* The injected <img onerror> is the real exploit: if any renderer assigned
+     the station code through innerHTML the image would be constructed and its
+     handler would fire. Documented as text, it can never do either. */
+  eq(g, "no injected element is created anywhere in the board",
+     d.querySelectorAll("#board img, #board script, #sections img, #sections script").length, 0);
+  eq(g, "no injected element is created in the header",
+     d.querySelectorAll("header img, header script, .fixed img, .fixed script").length, 0);
+  eq(g, "the injected event handler never ran", W.__XSS, undefined);
+  eq(g, "no uncaught errors from the special-character build", (W.__ERRS || []).length, 0,
+     (W.__ERRS || []).join(" | "));
+};
+
+/* ---------------- render ---------------- */
+function checkStatus(n) {
+  var rows = R.rows.filter(function (r) { return r.check === n; });
+  if (!rows.length) return "MISSING";
+  if (rows.some(function (r) { return r.st === "FAIL"; })) return "FAIL";
+  if (rows.every(function (r) { return r.st === "SKIP"; })) return "SKIP";
+  return "PASS";
+}
+function render() {
+  document.getElementById("nP").textContent = R.pass;
+  document.getElementById("nF").textContent = R.fail;
+  document.getElementById("nS").textContent = R.skip;
+  document.getElementById("nT").textContent = R.rows.length;
+
+  var checked = 0, cl = "";
+  for (var n = 1; n <= NCHECK; n++) {
+    var st = checkStatus(n);
+    if (st === "PASS") checked++;
+    var mark = st === "PASS" ? "\u2713" : st === "FAIL" ? "\u2715" : "-";
+    cl += '<div class="cl ' + st + '"><span class="box">' + mark + '</span><span class="t">' +
+      '<span class="cat">' + CHECKS[n - 1][0] + ' &middot; ' + n + '</span>' +
+      CHECKS[n - 1][1] + '</span></div>';
+  }
+  document.getElementById("cl").innerHTML = cl;
+  document.getElementById("clsum").innerHTML =
+    "<b>" + checked + " / " + NCHECK + "</b> checklist items checked &middot; " +
+    "<span class='PASS'>" + R.pass + " pass</span>, " +
+    "<span class='FAIL'>" + R.fail + " fail</span>, " +
+    "<span class='SKIP'>" + R.skip + " skip</span>";
+
+  var h = "";
+  for (var c = 1; c <= NCHECK; c++) {
+    var rows = R.rows.filter(function (r) { return r.check === c; });
+    if (!rows.length) continue;
+    h += "<h2>" + c + ". " + CHECKS[c - 1][0] + " &middot; " + CHECKS[c - 1][1] +
+         " <span class='" + checkStatus(c) + "'>[" + checkStatus(c) + "]</span></h2><table>";
+    rows.forEach(function (r) {
+      h += "<tr><td class='s " + r.st + "'>" + r.st + "</td><td class='n'>" + r.n +
+           "</td><td class='d'>" + (r.d || "").replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</td></tr>";
+    });
+    h += "</table>";
+  }
+  document.getElementById("out").innerHTML = h;
+
+  var v = R.pass + "/" + (R.pass + R.fail) + " passed" + (R.skip ? ", " + R.skip + " skipped" : "");
+  document.title = (R.fail ? "FAIL " : "OK ") + checked + "/" + NCHECK + " checks, " + R.fail + " failed";
+  document.body.dataset.result = R.fail ? "fail" : "pass";
+  document.body.dataset.pass = R.pass;
+  document.body.dataset.fail = R.fail;
+  document.body.dataset.skip = R.skip;
+  document.body.dataset.checked = checked;
+  document.body.dataset.total = NCHECK;
+  window.__TEST_RESULT = {
+    pass: R.pass, fail: R.fail, skip: R.skip, checked: checked, total: NCHECK,
+    rows: R.rows,
+    checklist: CHECKS.map(function (c, i) { return { n: i + 1, cat: c[0], name: c[1], status: checkStatus(i + 1) }; })
+  };
+  console.log("L7 TEST: " + checked + "/" + NCHECK + " checks, " + v);
+}
+
+/* ---------------- main ---------------- */
+(async function main() {
+  var srcViewer = null, srcAdmin = null, why = "";
+  try { srcViewer = await fetchText(VIEWER); }
+  catch (e) { why = "needs http://, not file:// (" + e.message + ")"; }
+  try { srcAdmin = await fetchText(ADMIN); } catch (e) { srcAdmin = null; }
+
+  /* -- the main viewer -- */
+  var f, W, got;
+  try {
+    f = srcViewer ? await loadDoc(CATCH + srcViewer) : await loadSrc(VIEWER);
+  } catch (e) {
+    rec("harness", "viewer loaded", "FAIL", String(e.message || e));
+    render(); return;
+  }
+  W = f.contentWindow;
+  got = await until(function () { return W.__L7 && W.document.querySelectorAll("#sections .sec").length > 0; }, 8000);
+  if (!got) {
+    rec("harness", "viewer booted", "FAIL",
+        "iframe never exposed __L7 (guard error: " + W.__L7_DATA_ERROR + ")");
+    render(); return;
+  }
+
+  await T.schema(W);
+  await T.dates(W);
+  await T.timeEngine(W);
+  await T.midnight(W);
+  await T.sections(W);
+  await T.visibility(W);
+  await T.keyboard(W);
+  await T.playback(W);
+  await T.widths(f, W);
+  await T.rebuild(f, W);
+  if (f.parentNode) f.parentNode.removeChild(f);
+
+  /* -- structural fault injection (needs the viewer source) -- */
+  if (srcViewer) {
+    await T.faults(srcViewer);
+    var fv;
+    try {
+      fv = await loadDoc(CATCH + mutate(srcViewer, "allunloaded"));
+      if (await until(function () { return !!fv.contentWindow.__L7; }, 6000)) await T.noTable(fv.contentWindow);
+      else { C(15); skip("C. no valid timetable available", "variant booted", "no __L7"); }
+      fv.parentNode.removeChild(fv);
+    } catch (e) { C(15); skip("C. no valid timetable available", "variant load", String(e.message)); }
+
+    try {
+      var fs = await loadDoc(CATCH + mutate(srcViewer, "specials"));
+      if (await until(function () { return !!fs.contentWindow.__L7; }, 6000)) await T.specials(fs.contentWindow);
+      else { C(18); skip("F. special characters", "variant booted", "no __L7"); }
+      fs.parentNode.removeChild(fs);
+    } catch (e) { C(18); skip("F. special characters", "variant load", String(e.message)); }
+
+    try {
+      var fd = await loadDoc(CATCH + mutate(srcViewer, "dualtable"));
+      if (await until(function () {
+            return fd.contentWindow.__L7 && fd.contentWindow.document.querySelectorAll("#sections .sec").length > 0;
+          }, 6000)) await T.tableChange(fd.contentWindow);
+      else { C(23); skip("E. table changes", "variant booted", "no __L7"); }
+      fd.parentNode.removeChild(fd);
+    } catch (e) { C(23); skip("E. table changes", "variant load", String(e.message)); }
+  } else {
+    C(1); skip("B. fault injection", "all structural cases", why);
+    C(15); skip("C. no valid timetable available", "allunloaded variant", why);
+    C(18); skip("F. special characters", "specials variant", why);
+  }
+
+  /* -- the administration console: upload boundary and export -- */
+  if (srcAdmin) {
+    var fa;
+    try {
+      fa = await loadDoc(CATCH + srcAdmin);
+      var WA = fa.contentWindow;
+      if (await until(function () { return !!WA.__L7_ADMIN; }, 8000)) {
+        await T.admin(WA);
+      } else {
+        C(16); skip("F. admin console", "hook exposed", "__L7_ADMIN never appeared");
+      }
+      fa.parentNode.removeChild(fa);
+    } catch (e) {
+      C(16); skip("F. admin console", "iframe load", String(e.message));
+    }
+  } else {
+    C(16); skip("F. workbook upload boundary", "admin source", "could not fetch " + ADMIN);
+    C(17); skip("F. failed upload is inert", "admin source", "could not fetch " + ADMIN);
+    C(19); skip("F. export placeholders", "admin source", "could not fetch " + ADMIN);
+    C(20); skip("F. exported viewer", "admin source", "could not fetch " + ADMIN);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

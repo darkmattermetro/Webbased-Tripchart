@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DMRC Line 7 - Timetable Time-Sync View</title>
+<style>
+/*__L7_CSS__*/
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="brand">
+      <h1>LINE <b>7</b> &middot; TIMETABLE TIME-SYNC VIEW</h1>
+      <div class="sub" id="brSub">TIMETABLE CORRIDOR MIMIC</div>
+    </div>
+    <div class="sep"></div>
+    <div class="badge">
+      <b>SIMULATED</b> &mdash; every train position below is
+      <b>derived from the timetable</b>, not reported by any train.
+      <b>Not live train status.</b>
+    </div>
+    <div class="spacer"></div>
+    <div class="readout tbl" title="Which timetable is running is decided by the administration
+      console and baked into this file. There is deliberately no selector here: the end user sees
+      the decision and cannot change it.">
+      <div class="k">TIMETABLE IN FORCE</div>
+      <div class="v sm"><span id="tblName">--</span> <span class="how auto" id="tblHow">--</span></div>
+      <div class="k" style="margin-top:2px">WEF <span id="wef">--</span>
+        <span class="how auto" id="force">--</span></div>
+    </div>
+    <div class="readout clock">
+      <div class="k">DEVICE TIME</div><div class="v" id="devclk">--:--:--</div>
+    </div>
+    <div class="readout tbl">
+      <div class="k">TABLES TIME (SYNCED)</div><div class="v" id="simclk">--:--:--</div>
+    </div>
+    <div class="readout">
+      <div class="k">DN / UP SCHEDULED</div>
+      <div class="v"><span id="cdn">0</span><span style="color:var(--dim)"> / </span><span id="cup">0</span></div>
+    </div>
+  </div>
+  <div class="hrow" style="border-top:1px solid var(--border)">
+    <div class="sel">
+      <span class="lbl">TIMETABLE</span>
+      <span class="fixed" id="selFixed">--</span>
+      <span class="lbl2">SET BY ADMINISTRATION &mdash; NOT SELECTABLE HERE</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="ctrls">
+      <button id="bNow" title="Follow device clock">NOW</button>
+      <button id="bBack">&minus;15m</button>
+      <button id="bFwd">+15m</button>
+      <button id="bWrap" title="Finished trains keep circulating the ring">WRAP</button>
+      <button id="btnPanel">TRAINS</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="board" id="board">
+    <div class="notload" id="notload">
+      <div class="nlbar">
+        <b id="nlTitle">TIMETABLE NOT LOADED</b>
+        <span id="nlBody"></span>
+        <details class="nldet">
+          <summary>WHY</summary>
+          <div class="nlmore">
+            <p id="nlMore"></p>
+            <div class="src" id="nlSrc"></div>
+            <div class="row2" id="nlBtns"></div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div id="sections"></div>
+  </section>
+
+  <aside id="panel">
+    <div class="hd"><b>SCHEDULED TRAINS</b><span id="pcount">0</span></div>
+    <div class="list" id="plist"></div>
+  </aside>
+</main>
+
+<footer>
+  <div class="c">CORRIDOR <b id="fStops">0</b> STATIONS</div>
+  <div class="c">TRIPS <b id="fTrips">0</b></div>
+  <div class="c">WINDOW <b id="fWin">--:--</b></div>
+  <div class="c">PER SECTION <b id="fPer">--</b></div>
+  <div class="c" id="fMode">MODE <b>SCHEDULE</b></div>
+  <div class="spacer"></div>
+  <div class="c" id="fProg">PROGRAMME <b>--</b></div>
+  <div class="lg"><i class="sw tr"></i>TRAIN</div>
+  <div class="lg"><i class="sw st"></i>STATION</div>
+  <div class="lg"><i class="sw ok"></i>PLATFORM OCCUPIED</div>
+  <div class="lg"><i class="sw dw"></i>DWELLING (BLINKING)</div>
+  <div class="c" id="fFps">-- FPS</div>
+</footer>
+
+
+<div id="tip"></div>
+<script>
+/*__L7_DATA__*/
+</script>
+<script>
+/*L7_META_START*/
+/*__L7_META__*/
+/*L7_META_END*/
+</script>
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- boot-time schema guard ----------------
+     The render loop indexes straight into the payload with no checks of its
+     own: TABLES[id].loaded, then tr.t[tr.a], with tr.a / tr.b used as corridor
+     positions. A single missing field becomes a TypeError thrown from inside
+     requestAnimationFrame, which kills the board and leaves a blank page with
+     nothing to explain why. So the shape is checked once, up front.
+
+     This has to sit ABOVE the first dereference, which is the var block
+     immediately below -- by the time that runs, a bad payload has already
+     thrown. Everything from there to the end of the IIFE is skipped on
+     failure, so no rAF loop is ever started.
+
+     Two shape rules that are easy to get wrong:
+       - An unloaded table is legitimately just {label, loaded:false}. It has
+         no window and no dn/up arrays at all, and loadTable() returns before
+         reading either. Only a LOADED table has to satisfy the render loop, so
+         demanding dn/up unconditionally would reject the real payload.
+       - L7_META is optional; the viewer already falls back to {tables:{}}.
+         Reject it only when it is present and structurally wrong.
+
+     Returns null when the payload is sound, or a short reason when it is not. */
+  function schemaError(D, CONF) {
+    var i, k, j, r, q, id, tb, dir, tr, v, w, cor, NS, list, seen;
+    var dirs = ["dn", "up"];
+
+    if (!D || typeof D !== "object")
+      return "window.L7_DATA is missing or is not an object";
+    if (!D.meta || typeof D.meta !== "object")
+      return "L7_DATA.meta is missing or is not an object";
+
+    cor = D.meta.corridor;
+    if (!Array.isArray(cor) || !cor.length)
+      return "L7_DATA.meta.corridor is missing or empty";
+    for (i = 0; i < cor.length; i++) {
+      if (typeof cor[i] !== "string" || !cor[i])
+        return "L7_DATA.meta.corridor[" + i + "] is not a station code";
+    }
+    NS = cor.length;
+
+    if (!D.tables || typeof D.tables !== "object")
+      return "L7_DATA.tables is missing or is not an object";
+    if (!Array.isArray(D.order) || !D.order.length)
+      return "L7_DATA.order is missing or empty";
+
+    for (k = 0; k < D.order.length; k++) {
+      id = D.order[k];
+      if (typeof id !== "string" || !id)
+        return "L7_DATA.order[" + k + "] is not a table id";
+      tb = D.tables[id];
+      if (!tb || typeof tb !== "object") return "L7_DATA.tables." + id + " is missing";
+      if (typeof tb.loaded !== "boolean")
+        return "L7_DATA.tables." + id + ".loaded is not a boolean";
+      if (typeof tb.label !== "string" || !tb.label)
+        return "L7_DATA.tables." + id + ".label is missing";
+      if (!tb.loaded) continue;
+
+      /* A loaded table's window must be a real, ordered pair inside one
+         service day. 2*86400 is a hard ceiling: the build stores post-midnight
+         calls as 86400+ so the replay stays monotonic, but nothing legitimate
+         reaches a second service day. */
+      if (!Array.isArray(tb.window) || tb.window.length !== 2 ||
+          typeof tb.window[0] !== "number" || typeof tb.window[1] !== "number" ||
+          !isFinite(tb.window[0]) || !isFinite(tb.window[1]) ||
+          tb.window[0] < 0 || tb.window[1] >= 2 * 86400 ||
+          tb.window[0] >= tb.window[1])
+        return "L7_DATA.tables." + id + ".window is not a [lo, hi] pair with lo < hi";
+
+      for (q = 0; q < dirs.length; q++) {
+        dir = dirs[q];
+        list = tb[dir];
+        if (!Array.isArray(list))
+          return "L7_DATA.tables." + id + "." + dir + " is not an array";
+        /* A loaded table whose direction schedules nothing cannot be drawn as
+           a service, and an empty array is far more likely to be a truncated
+           payload than a deliberate one-way timetable. Reject it. */
+        if (!list.length)
+          return "L7_DATA.tables." + id + "." + dir + " is empty";
+        seen = {};
+        for (j = 0; j < list.length; j++) {
+          tr = list[j];
+          w = "L7_DATA.tables." + id + "." + dir + "[" + j + "]";
+          if (!tr || typeof tr !== "object") return w + " is not an object";
+          if (typeof tr.n !== "string" && typeof tr.n !== "number")
+            return w + " has no trip number";
+          if (typeof tr.a !== "number" || tr.a % 1 !== 0 ||
+              typeof tr.b !== "number" || tr.b % 1 !== 0)
+            return w + " has a non-integer a or b";
+          if (tr.a < 0 || tr.b >= NS || tr.a >= tr.b)
+            return w + " spans " + tr.a + ".." + tr.b + ", outside 0.." + (NS - 1);
+          if (!Array.isArray(tr.t) || tr.t.length < NS)
+            return w + ".t does not cover all " + NS + " stations";
+          /* The active span [a, b] is where the train is on the line. Inside
+             it every row MUST carry a real time: loadTable() reads tr.t[tr.a]
+             and tr.t[tr.b] straight out and resolve() indexes t[i + 1] with no
+             null test, so one gap here becomes NaN positions or a TypeError
+             thrown from inside requestAnimationFrame. Outside [a, b] the train
+             is simply not present and null is the expected value, so those
+             rows are left alone. A null and a non-number inside the span are
+             both reported as a row that "is not a time", so a defect of either
+             kind cannot hide among the expected nulls outside the span. */
+          for (r = tr.a; r <= tr.b; r++) {
+            v = tr.t[r];
+            if (v === null || v === undefined)
+              return w + ".t[" + r + "] is not a time (null inside the active " +
+                "span " + tr.a + ".." + tr.b + ", where every row must carry a time)";
+            if (typeof v !== "number" || !isFinite(v))
+              return w + ".t[" + r + "] is not a time";
+            if (v < 0 || v >= 2 * 86400)
+              return w + ".t[" + r + "] is outside 0.." + (2 * 86400 - 1) + " seconds";
+            if (r > tr.a && v < tr.t[r - 1])
+              return w + ".t[" + r + "] is not in chronological order (" +
+                v + " < " + tr.t[r - 1] + ")";
+          }
+          /* A trip that takes no time would put every station at one instant;
+             reject it rather than draw a train that never moves. */
+          if (tr.t[tr.b] <= tr.t[tr.a])
+            return w + " has a non-positive duration (" + tr.t[tr.a] + ".." + tr.t[tr.b] + ")";
+          /* Duplicate trip. A single train number legitimately appears several
+             times in a direction: one rake works many journeys in a day. Two
+             entries with the same number AND the same departure, however, are
+             the same working listed twice, and drawing both puts two trains on
+             one service. hasOwnProperty, not a truthy test, so a trip called
+             "constructor" cannot read as a duplicate of an inherited property. */
+          var key = tr.n + "|" + tr.t[tr.a];
+          if (Object.prototype.hasOwnProperty.call(seen, key))
+            return w + " has a duplicate trip number " + tr.n +
+              " departing at " + tr.t[tr.a];
+          seen[key] = true;
+        }
+      }
+    }
+
+    if (CONF !== undefined && CONF !== null) {
+      if (typeof CONF !== "object") return "window.L7_META is not an object";
+      if (CONF.tables !== undefined && (!CONF.tables || typeof CONF.tables !== "object"))
+        return "L7_META.tables is not an object";
+      if (CONF.corridor !== undefined && typeof CONF.corridor !== "string")
+        return "L7_META.corridor is not a string";
+    }
+    return null;
+  }
+
+  /* Exposed for l7-test.html and for the admin export audit, so the same guard
+     that protects the viewer can be run against a candidate payload without a
+     second copy of the rules drifting out of step with this one. */
+  window.L7_SCHEMA = schemaError;
+
+  var DATA_ERR = schemaError(window.L7_DATA, window.L7_META);
+  /* Published unconditionally, including when it is null, so a test can assert
+     the guard stayed quiet on good data. That assertion is the only real proof
+     that adding the guard changed no working behaviour. */
+  window.__L7_DATA_ERROR = DATA_ERR;
+  if (DATA_ERR) {
+    document.body.className += " dataerr";
+    var box = document.createElement("div");
+    box.className = "dataerr";
+    var eh = document.createElement("h2");
+    eh.textContent = "DATA ERROR";
+    var es = document.createElement("p");
+    es.className = "sub";
+    es.textContent = "the board was not started";
+    var ew = document.createElement("div");
+    ew.className = "why";
+    var eb = document.createElement("b");
+    eb.textContent = DATA_ERR;               // textContent, so no escaping needed
+    ew.appendChild(eb);
+    var eu = document.createElement("ul");
+    ["This file was built from a payload whose shape the viewer does not recognise.",
+     "Rebuild it from the source workbook:  python extract.py",
+     "If it arrived by download, ask for a fresh copy rather than editing the JSON by hand."].forEach(function (t) {
+      var li = document.createElement("li");
+      li.textContent = t;
+      eu.appendChild(li);
+    });
+    box.appendChild(eh); box.appendChild(es); box.appendChild(ew); box.appendChild(eu);
+    /* #board lives inside <main>, not directly under <body>, so insert before
+       the board's real parent -- and fall back to the body if the markup ever
+       changes shape. An uncaught throw here would leave the board hidden with
+       no message at all, which is worse than the failure being reported. */
+    var host = document.getElementById("board");
+    if (host && host.parentNode) host.parentNode.insertBefore(box, host);
+    else document.body.appendChild(box);
+    document.title = "DATA ERROR - DMRC Line 7 time sync";
+    return;
+  }
+
+  var D = window.L7_DATA, META = D.meta, TABLES = D.tables;
+  var CONF = window.L7_META || { tables: {} };
+  var MT = CONF.tables || {};
+  var STOPS = META.corridor;
+  var NS = STOPS.length - 1;
+  var DWELL_S = 300;
+
+  /* Strict mode. When the administration exports with CONF.strict set, the
+     viewer refuses to substitute a different timetable for one that has no
+     data: it shows nothing and explains, rather than drawing another day's
+     services. The flag is baked in at export time and the viewer only ever
+     reads it -- there is no control on this page that can change it. */
+  var STRICT = !!CONF.strict;
+
+  /* ---------------- formatting ---------------- */
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  /* A trip's times are forward-filled at build time, so a null inside a trip's
+     [a, b] span should be impossible. This guard is deliberate belt-and-braces:
+     the build is fed a workbook we do not control, and one null reaching hms()
+     would print "NaN:NaN" into the board rather than fail visibly. Anything not
+     a finite number is reported as a missing time, never as a time of zero. */
+  function tAt(o, r) {
+    if (!o || !o.t) return null;
+    var v = o.t[r];
+    return (typeof v === "number" && isFinite(v)) ? v : null;
+  }
+
+  function hms(s) {
+    if (s === null || s === undefined || isNaN(s)) return "--:--:--";
+    s = Math.max(0, Math.round(s));
+    return pad2(Math.floor(s / 3600)) + ":" + pad2(Math.floor((s % 3600) / 60)) + ":" + pad2(s % 60);
+  }
+  function hm(s) {
+    if (s === null || s === undefined || isNaN(s)) return "--:--";
+    s = Math.max(0, Math.round(s));
+    return pad2(Math.floor(s / 3600)) + ":" + pad2(Math.floor((s % 3600) / 60));
+  }
+  function ymd(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+  function deviceSec() { var d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); }
+  function wallSec(d) { return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); }
+  /* The board runs on a SERVICE clock, never the wall clock. A service day
+     does not end at midnight: the last booked calls run past 24:00 and the
+     build stores them as 86400+, so the replay stays monotonic. Between
+     midnight and the last such call the wall clock has wrapped but the service
+     day has not. The wall-clock interval [00:00:00, tail] is therefore read as
+     [24:00:00, 24:00:00 + tail], and the date in force across it is the day
+     that has just ended -- not the one starting. `tail` is the furthest any
+     loaded timetable runs past midnight, so a build with no overnight service
+     keeps the plain wall clock. Playback offsets stay in service seconds. */
+  function serviceTail() {
+    var t = 0, i;
+    for (i = 0; i < D.order.length; i++) {
+      var tb = TABLES[D.order[i]];
+      if (tb && tb.loaded && tb.window && tb.window[1] > 86400 &&
+          tb.window[1] - 86400 > t) t = tb.window[1] - 86400;
+    }
+    return t;
+  }
+  function dayBefore(now) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1,
+      now.getHours(), now.getMinutes(), now.getSeconds());
+  }
+  function serviceSec(now) {
+    var w = wallSec(now), tail = serviceTail();
+    return (tail > 0 && w <= tail) ? 86400 + w : w;
+  }
+  function serviceDate(now) {
+    var tail = serviceTail();
+    return (tail > 0 && wallSec(now) <= tail) ? dayBefore(now) : new Date(now.getTime());
+  }
+  function tickTable(now) {
+    return { date: serviceDate(now), sec: serviceSec(now) };
+  }
+  function el(tag, cls, parent) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  /* ---- DOM building helpers ----
+     Everything the board shows that comes from the payload or from metadata an
+     operator typed is built as nodes, never as an HTML string. A station code,
+     a table label or a trip number therefore cannot be read as markup, however
+     it got into the data. innerHTML is used nowhere below except to clear a
+     host, and clearing never parses. */
+  function textNode(t) { return document.createTextNode(t); }
+  function strong(t) { var e = document.createElement("strong"); e.textContent = t; return e; }
+  function lineBreak() { return document.createElement("br"); }
+  function rule() { return document.createElement("hr"); }
+  function kSpan(t) { var e = document.createElement("span"); e.className = "k"; e.textContent = t; return e; }
+  function wSpan(t) { var e = document.createElement("span"); e.className = "w"; e.textContent = t; return e; }
+  function setRich(host, spec) {
+    host.textContent = "";
+    for (var i = 0; i < spec.length; i++) host.appendChild(spec[i]);
+  }
+  function jumpButton(at, label) {
+    var b = document.createElement("button");
+    b.setAttribute("data-jump", at);
+    b.textContent = label;
+    return b;
+  }
+
+
+  /* ---------------- which timetable is in force ----------------
+     The end user has no say in this. The administration console writes the
+     date programme into the file's metadata block at export time, and the two
+     rules below are the whole decision:
+
+       1. a programmed date matching today  -> DATE OVERRIDE
+       2. otherwise the day of the week     -> AUTO   (SPECIAL is never auto)
+
+     Nothing is read from the URL, the query string or local storage, so there
+     is no way for a viewer to redirect the board onto a different timetable. */
+  var PROGRAM = (function () {
+    var a = CONF.program, out = [], i;
+    if (Object.prototype.toString.call(a) !== "[object Array]") return out;
+    for (i = 0; i < a.length; i++) {
+      var e = a[i];
+      if (e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && TABLES[e.table]) {
+        out.push({ date: e.date, table: e.table, annual: !!e.annual });
+      }
+    }
+    return out;
+  })();
+
+  function isLeap(y) {
+    return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  }
+
+  /* An annual entry dated 29 Feb cannot match in a non-leap year, and the
+     matcher below will not match it -- correctly. The decision is to SKIP it
+     for that year, not to fall back to 28 Feb or 1 Mar. Shifting the date would
+     run a timetable on a day nobody programmed, and the substitution would be
+     invisible: a leap-day special service that quietly runs a day early looks
+     exactly like a service that was meant to run that day. Skipping keeps the
+     board's one promise, that everything on it was programmed. The cost is a
+     silent no-op, so the skip is reported to the user instead -- on the two
+     days it could be noticed, 28 Feb and 1 Mar.
+
+     Returns the skipped entry, or null. */
+  function leapSkipped(now) {
+    if (isLeap(now.getFullYear())) return null;      /* the date exists: nothing to report */
+    var md = ymd(now).slice(5);
+    if (md !== "02-28" && md !== "03-01") return null;
+    for (var i = 0; i < PROGRAM.length; i++) {
+      var e = PROGRAM[i];
+      if (e.annual && e.date.slice(5) === "02-29") {
+        /* carry the year we evaluated, not the wall-clock year: the board can
+           be driven to another date, and the notice must name that one. */
+        return { table: e.table, date: e.date, year: now.getFullYear() };
+      }
+    }
+    return null;
+  }
+
+  function resolveTable(now) {
+    var today = ymd(now), md = today.slice(5), i, e, pick = null;
+    /* Exact one-off dates are the more specific rule, so they are decided
+       before any annual recurrence: a 24 Sep 2026 entry pinning one year beats
+       a 24 Sep entry that repeats every year. Annual entries compare MM-DD, so
+       02-29 only ever matches in a leap year -- in any other year it falls
+       through to the day-of-week rule, which is the intended skip (see
+       leapSkipped()).
+
+       Within a group the winner is the lowest table id, never the order the
+       entries happen to sit in PROGRAM. Two entries on one date therefore
+       resolve the same way however the programme was written or re-saved. */
+    for (i = 0; i < PROGRAM.length; i++) {
+      e = PROGRAM[i];
+      if (!e.annual && e.date === today && (pick === null || e.table < pick))
+        pick = e.table;
+    }
+    if (pick !== null)
+      return { id: pick, how: "DATE OVERRIDE", leapSkip: null };
+    for (i = 0; i < PROGRAM.length; i++) {
+      e = PROGRAM[i];
+      if (e.annual && e.date.slice(5) === md && (pick === null || e.table < pick))
+        pick = e.table;
+    }
+    if (pick !== null)
+      return { id: pick, how: "DATE OVERRIDE", leapSkip: null };
+    var dow = now.getDay();
+    var id = dow === 0 ? "sunday" : dow === 6 ? "saturday" : "weekday";
+    return { id: id, how: "AUTO", leapSkip: leapSkipped(now) };
+  }
+
+  function loadedIds() {
+    return D.order.filter(function (id) { return TABLES[id].loaded; });
+  }
+
+  /* What the day asks for may have no data. Two behaviours, chosen at export
+     time:
+       - default: fall back to a timetable that does exist, so the board stays
+         usable, but label the substitution so it can never be mistaken for the
+         real Saturday / Sunday / special service;
+       - strict (CONF.strict): refuse to substitute at all. Nothing is drawn and
+         the notice says why.
+     The result records requested and displayed separately, and whether a
+     substitution or a refusal happened, so the decision is auditable rather
+     than implied by whichever table happens to be first in D.order. */
+  function pickTable(res) {
+    var requested = res.id;
+    if (TABLES[requested].loaded)
+      return { id: requested, requested: requested, fallback: null, refused: false };
+    if (STRICT)
+      return { id: requested, requested: requested, fallback: null, refused: true };
+    var avail = loadedIds();
+    if (!avail.length)
+      return { id: requested, requested: requested, fallback: null, refused: false };
+    return { id: avail[0], requested: requested, fallback: requested, refused: false };
+  }
+
+  /* ---------------- section geometry ----------------
+     43 stations are cut into vertical sections that share their boundary
+     station, so the ring reads continuously and a train crossing a seam can
+     be drawn in both sections at once. */
+  function perSection() {
+    var w = window.innerWidth;
+    if (w >= 1280) return 10;
+    if (w >= 820) return 7;
+    return 4;
+  }
+  function chunkSections(per) {
+    var out = [], n = STOPS.length, lo = 0;
+    while (lo < n - 1) {
+      var hi = Math.min(lo + per - 1, n - 1);
+      out.push({ lo: lo, hi: hi });
+      if (hi >= n - 1) break;
+      lo = hi;
+    }
+    return out;
+  }
+
+  var SECS = [];
+
+  function buildSections() {
+    var per = perSection();
+    var host = document.getElementById("sections");
+    host.textContent = "";
+    SECS = [];
+    var chunks = chunkSections(per), RING = STOPS[0] === STOPS[NS];
+    chunks.forEach(function (sc, idx) {
+      var span = sc.hi - sc.lo;
+      var sec = el("div", "sec");
+      var hd = el("div", "sec-hd", sec);
+      el("span", "no", hd).textContent = "SECTION " + (idx + 1);
+      el("span", "rng", hd).textContent = STOPS[sc.lo] + " \u2192 " + STOPS[sc.hi];
+      if (RING && idx === chunks.length - 1) {
+        el("span", "ringmark", hd).textContent = "\u21bb RING CLOSES AT " + STOPS[sc.hi];
+      }
+      el("span", "cnt", hd).textContent = (span + 1) + " STOPS";
+
+      var plot = el("div", "plot", sec);
+      var lrow = el("div", "prow labels", plot);
+      for (var k = sc.lo; k <= sc.hi; k++) {
+        var lx = (k - sc.lo) / span * 100;
+        var l = el("span", "lbl", lrow);
+        l.style.left = lx + "%";
+        l.textContent = STOPS[k];
+        if (k === sc.lo) l.className = "lbl edge";
+        if (k === sc.hi) l.className = "lbl edge e";
+      }
+
+      var rec = { lo: sc.lo, hi: sc.hi, span: span, sec: sec, lines: {} };
+      ["dn", "up"].forEach(function (dir) {
+        var rr = el("div", "prow railrow " + dir, plot);
+        el("div", "rail", rr);
+        el("div", "rowtag", rr).textContent = dir.toUpperCase();
+        // Travel direction read off the timetable: the DN table walks the
+        // corridor forwards (MKPR, AZU, ...) so it runs left-to-right; the UP
+        // table walks it backwards (MKPR, BURI, ...) so it runs right-to-left.
+        var chip = el("div", "dirchip " + (dir === "dn" ? "r" : "l"), rr);
+        chip.textContent = dir === "dn" ? "\u25b6" : "\u25c0";
+
+        var ov = el("div", "ov", rr);
+        var L = { nodes: {}, leds: {}, tOv: null };
+        for (var j = sc.lo; j <= sc.hi; j++) {
+          var jx = (j - sc.lo) / span * 100;
+          var nd = el("div", "node", ov);
+          nd.style.left = jx + "%";
+          nd.setAttribute("data-stn", STOPS[j]);
+          nd.setAttribute("data-k", j);
+          var led = el("div", "led", ov);
+          led.style.left = jx + "%";
+          L.nodes[j] = nd;
+          L.leds[j] = led;
+        }
+        var tov = el("div", "ov", rr);
+        tov.style.zIndex = "20";
+        L.tOv = tov;
+        rec.lines[dir] = L;
+      });
+      host.appendChild(sec);
+      SECS.push(rec);
+    });
+    document.getElementById("fPer").textContent = per;
+  }
+
+  /* which sections does a continuous corridor position touch? */
+  function sectionsFor(pos) {
+    var out = [];
+    for (var i = 0; i < SECS.length; i++) {
+      var s = SECS[i];
+      if (pos >= s.lo - 1 && pos <= s.hi + 1) out.push(s);
+    }
+    return out;
+  }
+
+  /* ---------------- trips ---------------- */
+  function makeTrainEl(dir, no, flagged) {
+    var e = el("div", "train " + dir);
+    if (flagged) e.className += " flag";
+    e.setAttribute("data-no", no);
+    el("span", "", e).textContent = no;
+    e.leadEl = el("i", "lead", e);
+    e.contEl = el("i", "cont", e);
+    e.style.display = "none";
+    return e;
+  }
+
+  var TRIPS = [], TBL_ID = null, TBL = null;
+
+  function loadTable(id) {
+    TBL_ID = id;
+    TBL = TABLES[id] || null;
+    TRIPS = [];
+    if (!TBL || !TBL.loaded) { return; }
+    ["dn", "up"].forEach(function (dir) {
+      TBL[dir].forEach(function (tr) {
+        var t0 = tr.t[tr.a], t1 = tr.t[tr.b];
+        var o = {
+          no: tr.n, dir: dir, a: tr.a, b: tr.b, t: tr.t,
+          depot: tr.d || null, md: tr.m || null, flagged: !!tr.x,
+          t0: t0, t1: t1, span: Math.max(1, t1 - t0),
+          seg: tr.a, lastS: -1, pos: 0, stop: 0, dwell: false,
+          els: [makeTrainEl(dir, tr.n, tr.x), makeTrainEl(dir, tr.n, tr.x)]
+        };
+        o.els[0]._trip = o;
+        o.els[1]._trip = o;
+        TRIPS.push(o);
+      });
+    });
+  }
+
+  /* ---------------- playback state ---------------- */
+  var WRAP = false, OFFSET = 0;
+  var ndn = 0, nup = 0, live = [], marked = [];
+  var prevClock = "", prevName = "", prevHow = "", prevCounts = "", prevNl = "";
+  var prevWef = "", prevForce = "";
+  var LAST_RES = null;      /* last render decision, exposed for l7-test.html */
+
+  /* Corridor coordinate of a trip's current row index. The DN table lists
+     stations forwards and the UP table backwards, so the two need opposite
+     signs to land on the same physical station. */
+  function kOf(o) { return o.dir === "dn" ? o.pos : NS - o.pos; }
+
+  /* Clamped, because a trip can be booked one row past the end of the corridor
+     (the closing MKPR slot) and a bare STOPS[n] would leak "undefined". */
+  function stationAt(dir, rowIdx) {
+    var k = dir === "dn" ? rowIdx : NS - rowIdx;
+    if (!(k >= 0)) k = 0;
+    if (k > NS) k = NS;
+    return STOPS[k];
+  }
+
+  /* ---- WEF ("with effect from") ---- */
+  var MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  function fmtDate(iso) {
+    if (!iso) return "--";
+    var p = String(iso).split("-");
+    if (p.length !== 3 || !MON[+p[1] - 1]) return iso;
+    return p[2] + "-" + MON[+p[1] - 1] + "-" + p[0];
+  }
+  function wefText(id) {
+    var t = MT[id] || {};
+    if (!t.wef && !t.weto) return "--";
+    return fmtDate(t.wef) + (t.weto ? " TO " + fmtDate(t.weto) : "");
+  }
+  function forceState(id, now) {
+    var t = MT[id];
+    if (!t || (!t.wef && !t.weto)) return "NO WEF SET";
+    var today = ymd(now);
+    if (t.wef && today < t.wef) return "NOT YET IN FORCE";
+    if (t.weto && today > t.weto) return "EXPIRED";
+    return "IN FORCE";
+  }
+  function forceClass(f) {
+    return f === "IN FORCE" ? "ok" : f === "NO WEF SET" ? "auto"
+         : f === "EXPIRED" ? "bad" : "date";
+  }
+
+  function resolve(o, S) {
+    if (S < o.t0) return false;
+    if (S > o.t1) {
+      if (!WRAP || S > o.t1 + o.span) return false;
+      S = o.t0 + ((S - o.t0) % o.span);
+    }
+    // the cached segment only walks forward, so a backwards jump in tables
+    // time (the -15m control, or a jump to a checkpoint) must rewind it
+    if (S < o.lastS || o.seg < o.a || o.seg >= o.b) o.seg = o.a;
+    o.lastS = S;
+
+    var t = o.t, a = o.a, b = o.b, i, ts;
+    if (S >= t[b]) { i = b; ts = 1; o.dwell = false; }
+    else {
+      i = o.seg;
+      if (i < a || i >= b) i = a;
+      while (i < b - 1 && t[i + 1] !== null && S > t[i + 1]) i++;
+      o.seg = i;
+      var gap = (t[i + 1] === null) ? 0 : t[i + 1] - t[i];
+      // the timetable already contains the dwell; a long inter-stop gap is a
+      // station stop, so hold the train there rather than gliding through it
+      if (gap >= DWELL_S) { ts = 0; o.dwell = true; }
+      else { ts = gap > 0 ? (S - t[i]) / gap : 0; o.dwell = false; }
+    }
+    o.pos = i + ts;
+    if (o.pos < o.a) o.pos = o.a;
+    if (o.pos > o.b) o.pos = o.b;
+    o.stop = i > NS ? NS : i;
+    return true;
+  }
+
+  function drawTrain(o) {
+    var k = kOf(o);
+    var secs = sectionsFor(k);
+    var n = secs.length < 2 ? secs.length : 2;
+    for (var i = 0; i < n; i++) {
+      var s = secs[i], e = o.els[i];
+      var p = Math.min(Math.max(k, s.lo), s.hi);
+      if (e.parentNode !== s.lines[o.dir].tOv) s.lines[o.dir].tOv.appendChild(e);
+      e.style.left = ((p - s.lo) / s.span * 100) + "%";
+      var cls = "train " + o.dir + (o.flagged ? " flag" : "") + (o.dwell ? " dwl" : "");
+      var arrow = "";
+      if (k < s.lo) { cls += " cont-up"; arrow = "\u25B2"; }
+      else if (k > s.hi) { cls += " cont-down"; arrow = "\u25BC"; }
+      if (e.className !== cls) e.className = cls;
+      if (e.contEl.textContent !== arrow) e.contEl.textContent = arrow;
+      if (e.style.display !== "block") e.style.display = "block";
+    }
+    for (var j = n; j < o.els.length; j++) {
+      if (o.els[j].style.display !== "none") o.els[j].style.display = "none";
+    }
+  }
+  function hideTrain(o) {
+    for (var i = 0; i < o.els.length; i++) {
+      if (o.els[i].style.display !== "none") o.els[i].style.display = "none";
+    }
+  }
+
+  function markOcc(dir, rowIdx, dwell) {
+    var k = dir === "dn" ? rowIdx : NS - rowIdx;
+    if (k < 0) k = 0;
+    if (k > NS) k = NS;
+    var mode = dwell ? "dwl" : "occ";
+    for (var i = 0; i < SECS.length; i++) {
+      var L = SECS[i].lines[dir];
+      if (k >= SECS[i].lo && k <= SECS[i].hi) {
+        L.nodes[k].className = "node " + mode;
+        L.leds[k].className = "led " + (dwell ? "dwl" : "on");
+        marked.push(L.nodes[k], L.leds[k]);
+      }
+    }
+  }
+
+  /* ---------------- notice above the board ---------------- */
+  function renderNotice(res, loaded, inWin) {
+    var fb = !!res.fallback, refused = !!res.refused;
+    var key = !loaded ? (refused ? "R" : "L") + res.id
+            : fb ? "F" + res.fallback + (inWin ? "1" : "0") + (res.why === "DATE OVERRIDE" ? "P" : "A")
+            : inWin ? "" : "W";
+    if (res.leapSkip) key += "Y";       // the skipped-date notice is its own state
+    if (key === prevNl) return;
+    prevNl = key;
+    var det = document.querySelector("#notload .nldet");
+    if (det) det.open = false;          // never carry an open WHY across days
+    if (loaded && inWin && !fb && !res.leapSkip) return;
+
+    var T = document.getElementById("nlTitle"),
+        B = document.getElementById("nlBody"),
+        More = document.getElementById("nlMore"),
+        S = document.getElementById("nlSrc"),
+        K = document.getElementById("nlBtns");
+    var asked = fb ? TABLES[res.fallback].label : TABLES[res.id].label;
+    /* Built as nodes, never as an HTML string: `asked`, station codes and every
+       other value here originate in the payload or in operator-typed metadata,
+       so none of it may be allowed to read as markup. */
+    var line = [], parts = [];
+    function para(spec) {
+      if (parts.length) parts.push(textNode(" "));
+      for (var i = 0; i < spec.length; i++) parts.push(spec[i]);
+    }
+
+    if (!loaded) {
+      if (refused) {
+        /* Strict mode: the requested table has no data and the viewer was told
+           not to substitute. The message must make clear that the blank board
+           is a decision, not a failure. */
+        T.textContent = "STRICT MODE - SERVICE REFUSED";
+        line = [textNode("No "), strong(asked),
+          textNode(" data in this build; strict mode refuses to substitute another timetable.")];
+        para([textNode("Today resolves to "), strong(asked),
+          textNode(" but the source workbook contains no " + asked.toLowerCase() +
+            " service data. Strict mode is switched on, so the board deliberately shows nothing " +
+            "rather than substituting a different day's service. Load the real " +
+            asked.toLowerCase() + " timetable, or switch strict mode off, and re-export.")]);
+      } else {
+        T.textContent = "NOT LOADED";
+        line = [textNode("No "), strong(asked), textNode(" data in this build, so nothing is drawn.")];
+        para([textNode("There is no "), strong(asked),
+          textNode(" service data in the source workbook, so nothing is drawn for this selection. " +
+            "No services are invented for it \u2014 load the real timetable and it appears here " +
+            "with no code change.")]);
+      }
+    } else {
+      if (fb) {
+        T.textContent = asked + " DATA NOT LOADED";
+        /* The one line has to stay honest on its own, because it is all most
+           people will read: say what is on screen and what it is not. */
+        line = [textNode("Showing "), strong(TBL.label), textNode(" services \u2014 these are not " +
+          asked.toLowerCase() + " services.")];
+        /* Say how the date resolved. A programmed date was not chosen by the
+           day-of-week rule, so claiming it was would be a lie the end user
+           has no way to correct. */
+        var lead = res.why === "DATE OVERRIDE"
+          ? "The administration has programmed this date to "
+          : "Today resolves to ";
+        var after = res.why === "DATE OVERRIDE"
+          ? ", but the source "
+          : " in the automatic rule, but the source ";
+        para([textNode(lead), strong(asked), textNode(after + "workbook contains no " +
+          asked.toLowerCase() + " service data at all. The "), strong(TBL.label),
+          textNode(" timetable is shown instead so the board stays usable \u2014 these are "),
+          strong("not"), textNode(" " + asked.toLowerCase() +
+            " services, and none have been invented.")]);
+      } else if (!inWin) {
+        /* Only reachable when the clock is outside the window, now that a
+           skipped leap date can force this notice open while inWin is true. */
+        T.textContent = "OUTSIDE SERVICE HOURS";
+        line = [textNode(TBL.label + " runs "), strong(hm(TBL.window[0])), textNode(" to "),
+          strong(hms(TBL.window[1])), textNode(".")];
+      }
+      if (!inWin) {
+        para([textNode("The " + TBL.label + " timetable runs "), strong(hm(TBL.window[0])),
+          textNode(" to "), strong(hms(TBL.window[1])),
+          textNode(". The tables clock is outside that window, so no train is scheduled to be " +
+            "anywhere on the line.")]);
+      }
+    }
+
+    /* The skip is otherwise silent, so say it plainly. Reported on 28 Feb and
+       1 Mar only -- the two days anyone would look for the missing service. */
+    if (res.leapSkip) {
+      var ly = res.leapSkip.year;
+      if (loaded && inWin && !fb) {
+        T.textContent = "PROGRAMMED DATE SKIPPED";
+        line = [textNode("29 Feb does not exist in "), strong(String(ly)),
+          textNode(" \u2014 that programmed service is not run.")];
+      }
+      para([textNode("An annual programme entry sets "), strong("29 February"), textNode(" to "),
+        strong(TABLES[res.leapSkip.table].label), textNode(", but " + ly +
+          " is not a leap year and the date does not exist. The entry is "), strong("skipped"),
+        textNode(" this year rather than moved to 28 Feb or 1 Mar, because running it on a " +
+          "neighbouring date would put a service on the line that nobody programmed, and it " +
+          "would look identical to a real one. It applies again in the next leap year.")]);
+    }
+    setRich(B, line);
+    setRich(More, parts);
+
+    if (loaded) {
+      S.textContent = "SOURCE: sheet " + TBL.sheet + "  |  WEF: " + wefText(TBL_ID) +
+        "  |  " + TBL.dn.length + " DN + " + TBL.up.length + " UP SERVICES";
+      K.textContent = "";
+      K.appendChild(jumpButton(TBL.window[0] + 900, "JUMP TO FIRST SERVICE"));
+      K.appendChild(jumpButton(TBL.window[0] + 2.5 * 3600, "JUMP TO PEAK"));
+      K.appendChild(jumpButton(0, "BACK TO 00:00"));
+    } else {
+      S.textContent = "AVAILABLE IN THIS BUILD: " + loadedIds().map(function (id) {
+        return TABLES[id].label + " (sheet " + TABLES[id].sheet + ", WEF " + wefText(id) + ")";
+      }).join("  |  ");
+      K.textContent = "The timetable in force is set by the administration console. To change it, "
+        + "program the date there and re-export this file.";
+    }
+  }
+
+  /* ---------------- frame ---------------- */
+  function render(S, now) {
+    var want = resolveTable(now);
+    var res = pickTable(want);
+    res.how = res.refused ? "REFUSED" : res.fallback ? "FALLBACK" : want.how;
+    res.asked = want.id;
+    /* keep the pre-fallback reason: a day can be programmed to a table that has
+       no data, and the notice must still say "programmed", not "automatic" */
+    res.why = want.how;
+    /* requested and displayed are tracked separately on purpose: a fallback
+       means the file shows one timetable's services for a day that asked for
+       another, and an audit has to be able to tell that from a real match. */
+    res.requested = want.id;
+    res.displayed = res.id;
+    /* pickTable() builds a fresh object, so the skip report has to be carried
+       across explicitly or the notice never sees it. */
+    res.leapSkip = want.leapSkip;
+    if (res.id !== TBL_ID) {
+      loadTable(res.id);
+      buildSections();
+      syncSel(res);
+      document.getElementById("fTrips").textContent = TRIPS.length;
+      document.getElementById("fWin").textContent =
+        (TBL && TBL.loaded) ? hm(TBL.window[0]) + "-" + hms(TBL.window[1]) : "--";
+    }
+
+    var loaded = !!(TBL && TBL.loaded);
+    var inWin = loaded && S >= TBL.window[0] && S <= TBL.window[1];
+
+    for (var m = 0; m < marked.length; m++) {
+      marked[m].className = marked[m].classList.contains("led") ? "led" : "node";
+    }
+    marked.length = 0;
+    ndn = 0; nup = 0; live.length = 0;
+
+    for (var i = 0; i < TRIPS.length; i++) {
+      var o = TRIPS[i];
+      if (inWin && resolve(o, S)) {
+        if (o.dir === "dn") ndn++; else nup++;
+        live.push(o);
+        drawTrain(o);
+        markOcc(o.dir, o.stop, o.dwell);
+      } else {
+        hideTrain(o);
+      }
+    }
+
+    var c = hms(S);
+    if (c !== prevClock) {
+      document.getElementById("devclk").textContent = hms(deviceSec());
+      document.getElementById("simclk").textContent = c;
+      prevClock = c;
+    }
+    var nm = TABLES[res.id].label;
+    if (nm !== prevName) {
+      document.getElementById("tblName").textContent = nm;
+      prevName = nm;
+    }
+    var wt = wefText(TBL_ID);
+    if (wt !== prevWef) {
+      document.getElementById("wef").textContent = wt;
+      prevWef = wt;
+    }
+    var fs = forceState(TBL_ID, now);
+    if (fs !== prevForce) {
+      var fe = document.getElementById("force");
+      fe.textContent = fs;
+      fe.className = "how " + forceClass(fs);
+      prevForce = fs;
+    }
+    selFixed(res);
+    if (res.how !== prevHow) {
+      var h = document.getElementById("tblHow");
+      h.textContent = res.how;
+      h.className = "how " + (res.how === "AUTO" ? "auto"
+        : res.how === "FALLBACK" ? "fb"
+        : res.how === "REFUSED" ? "bad" : "date");
+      prevHow = res.how;
+    }
+    var cn = ndn + "/" + nup;
+    if (cn !== prevCounts) {
+      document.getElementById("cdn").textContent = ndn;
+      document.getElementById("cup").textContent = nup;
+      document.getElementById("pcount").textContent = live.length;
+      prevCounts = cn;
+    }
+
+    /* A fallback or a refusal is a whole-board state, not a detail of one
+       readout: the banner is styled prominently and says so. */
+    document.body.classList.toggle("nl",
+      !loaded || !inWin || !!res.fallback || !!res.leapSkip || !!res.refused);
+    document.body.classList.toggle("nlw", loaded && !inWin && !res.fallback);
+    document.body.classList.toggle("fb", !!res.fallback);
+    document.body.classList.toggle("strict", !!res.refused);
+    LAST_RES = res;
+    renderNotice(res, loaded, inWin);
+  }
+
+  /* ---------------- service panel ---------------- */
+  function panelRow(o, S) {
+    var here = stationAt(o.dir, o.stop);
+    var last = o.stop >= o.b;
+    var nxt = last ? "TERMINUS" : stationAt(o.dir, o.stop + 1);
+    var row = el("div", "row " + o.dir);
+    var no = el("div", "no", row);
+    no.appendChild(textNode(String(o.no)));
+    if (o.flagged) {
+      var fx = document.createElement("span");
+      fx.className = "fx";
+      fx.textContent = "!";
+      no.appendChild(fx);
+    }
+    var path = el("div", "path", row);
+    path.appendChild(strong(here));
+    path.appendChild(textNode(" \u2192 " + nxt));
+    var eta = el("div", "eta", row);
+    if (last) {
+      eta.textContent = "TERM";
+    } else if (o.dwell) {
+      var hold = document.createElement("span");
+      hold.className = "h";
+      hold.textContent = "HOLD";
+      eta.appendChild(hold);
+      var small = document.createElement("small");
+      small.textContent = hms(o.t[o.stop + 1] - S);
+      eta.appendChild(small);
+    } else {
+      eta.textContent = hms(o.t[o.stop + 1] - S);
+    }
+    return row;
+  }
+  function buildPanel(S) {
+    var dn = [], up = [], i;
+    for (i = 0; i < live.length; i++) (live[i].dir === "dn" ? dn : up).push(live[i]);
+    function byT0(a, b) { return a.t0 - b.t0; }
+    dn.sort(byT0); up.sort(byT0);
+    var host = document.getElementById("plist");
+    host.textContent = "";
+    function blk(list, dir, label) {
+      var grp = el("div", "grp " + dir, host);
+      el("span", "", grp).textContent = label;
+      el("span", "", grp).textContent = list.length;
+      if (!list.length) {
+        el("div", "empty", host).textContent = "NO " + dir.toUpperCase() + " SERVICES SCHEDULED";
+        return;
+      }
+      for (var j = 0; j < list.length; j++) host.appendChild(panelRow(list[j], S));
+    }
+    blk(dn, "dn", "DN LINE  " + STOPS[0] + " \u2192 " + STOPS[NS]);
+    blk(up, "up", "UP LINE  " + STOPS[NS] + " \u2192 " + STOPS[0]);
+  }
+
+  /* ---------------- controls ---------------- */
+  var FOLLOW = true, prevFixed = "";
+  function selFixed(res) {
+    var e = document.getElementById("selFixed");
+    var txt;
+    if (res.refused) {
+      txt = TABLES[res.id].label + "  (STRICT: NOT SUBSTITUTED)";
+    } else if (res.fallback) {
+      txt = TABLES[res.id].label + "  SHOWN FOR " + TABLES[res.fallback].label;
+    } else {
+      txt = TABLES[res.id].label + (res.how === "DATE OVERRIDE" ? "  (PROGRAMMED)" : "");
+    }
+    if (txt === prevFixed) return;
+    e.textContent = txt;
+    /* The title spells out requested vs displayed, so the substitution is
+       legible even to someone who only hovers the readout. */
+    e.title = res.refused
+      ? TABLES[res.id].label + " was requested but has no data; strict mode refuses to substitute"
+      : res.fallback
+        ? "Displaying " + TABLES[res.id].label + "; " + TABLES[res.fallback].label +
+          " was requested but has no data"
+        : TABLES[res.id].label + " is in force";
+    prevFixed = txt;
+  }
+  function syncSel(res) {
+    // display only -- there is nothing here the viewer can press. render()
+    // owns this text, so that the two header readouts can never disagree.
+    if (res) selFixed(res);
+  }
+  function syncBtns() {
+    document.getElementById("bNow").className = FOLLOW ? "on" : "";
+    document.getElementById("bWrap").className = WRAP ? "on" : "";
+    var fm = document.getElementById("fMode");
+    fm.textContent = "MODE ";
+    var b = document.createElement("b");
+    b.textContent = WRAP ? "WRAP" : "SCHEDULE";
+    fm.appendChild(b);
+  }
+  function setOffset(v) { OFFSET = v; FOLLOW = (v === 0); syncBtns(); }
+
+  function paint(res) {
+    prevNl = "";
+    var tt = tickTable(new Date());
+    render(tt.sec + OFFSET, tt.date);
+    buildPanel(tt.sec + OFFSET);
+    /* selFixed is owned by render(), which holds the picked result. Calling
+       syncSel here with the raw request would show the requested timetable's
+       label and then have the next frame flip it back to the displayed one. */
+  }
+
+  document.getElementById("bNow").addEventListener("click", function () { setOffset(0); });
+  document.getElementById("bBack").addEventListener("click", function () { setOffset(OFFSET - 900); });
+  document.getElementById("bFwd").addEventListener("click", function () { setOffset(OFFSET + 900); });
+  document.getElementById("bWrap").addEventListener("click", function () { WRAP = !WRAP; syncBtns(); });
+  document.getElementById("btnPanel").addEventListener("click", function () {
+    document.body.classList.toggle("pnl");
+  });
+
+  /* ---------------- notice panel buttons ---------------- */
+  document.getElementById("nlBtns").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("button") : null;
+    if (!b) return;
+    // time navigation only -- a viewer cannot switch timetable from here
+    if (b.hasAttribute("data-jump")) { setOffset(+b.getAttribute("data-jump") - serviceSec(new Date())); paint(); }
+  });
+
+  /* ---------------- tooltip ---------------- */
+  var tip = document.getElementById("tip");
+  function showTip(spec, ev) {
+    setRich(tip, spec);
+    tip.style.display = "block";
+    var r = tip.getBoundingClientRect();
+    var x = ev.clientX + 14, y = ev.clientY + 16;
+    if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - 12;
+    if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 12;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+  document.addEventListener("mouseover", function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest(".train,.node") : null;
+    if (!t) return;
+    if (t.classList.contains("node")) {
+      /* The station code and the sheet name are payload data, so they are
+         appended as text, never spliced into markup. */
+      var spec = [strong("STATION " + t.getAttribute("data-stn")), rule(),
+        kSpan("corridor index"), textNode(" " + t.getAttribute("data-k") + " of " + NS), lineBreak(),
+        kSpan("platform state")];
+      if (t.classList.contains("dwl")) { spec.push(textNode(" "), wSpan("DWELLING")); }
+      else spec.push(textNode(" " + (t.classList.contains("occ") ? "OCCUPIED" : "IDLE")));
+      spec.push(lineBreak(), kSpan("source"), textNode(" " + (TBL ? TBL.sheet : "-")));
+      showTip(spec, ev);
+      return;
+    }
+    var o = t._trip;
+    if (!o) return;
+    var rows = [], r, skipped = 0;
+    for (r = Math.max(o.a, o.stop - 1); r <= Math.min(o.b, o.stop + 2); r++) {
+      var tv = tAt(o, r);
+      /* Skip the station entirely when it has no usable time. Rendering it as
+         "--:--:--" would imply a scheduled call that the timetable does not
+         contain, which is exactly the invention this view must not make. */
+      if (tv === null) { skipped++; continue; }
+      var tvTxt = stationAt(o.dir, r) + "  " + hms(tv);
+      rows.push(r === o.stop ? strong(tvTxt) : textNode(tvTxt));
+      rows.push(lineBreak());
+    }
+    if (skipped) {
+      rows.push(wSpan(skipped + " station" + (skipped > 1 ? "s" : "") +
+        " in this window " + (skipped > 1 ? "have" : "has") +
+        " no scheduled time and " + (skipped > 1 ? "are" : "is") + " not shown."));
+      rows.push(lineBreak());
+    }
+    if (!rows.length) { rows.push(wSpan("no scheduled times in this window.")); rows.push(lineBreak()); }
+    var spec2 = [strong(o.dir.toUpperCase() + " \u00a0SERVICE " + String(o.no))];
+    if (o.flagged) { spec2.push(textNode(" "), wSpan("[PARITY FLAG]")); }
+    spec2.push(rule());
+    for (var ri = 0; ri < rows.length; ri++) spec2.push(rows[ri]);
+    spec2.push(rule(), kSpan("scheduled"), textNode(" " + hms(o.t0) + " \u2192 " + hms(o.t1)),
+      lineBreak(), kSpan("depot"), textNode(" " + (o.depot || "-") + " \u00a0"),
+      kSpan("day type"), textNode(" " + (o.md || "-")), lineBreak(), kSpan("state"));
+    if (o.dwell) spec2.push(textNode(" "), wSpan("DWELLING"));
+    else spec2.push(textNode(" IN SECTION"));
+    spec2.push(lineBreak(), kSpan("position from timetable, not reported by the train"));
+    showTip(spec2, ev);
+  });
+  document.addEventListener("mouseout", function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest(".train,.node") : null;
+    if (t) tip.style.display = "none";
+  });
+
+  /* ---------------- resize: re-chunk the sections ---------------- */
+  var lastPer = 0, rzTimer = 0;
+  window.addEventListener("resize", function () {
+    if (perSection() === lastPer) return;
+    clearTimeout(rzTimer);
+    rzTimer = setTimeout(function () {
+      lastPer = perSection();
+      buildSections();
+      prevNl = "";
+      paint();
+    }, 180);
+  });
+
+  /* ---------------- visibility: resync on return ----------------
+     While the tab is hidden the browser suspends requestAnimationFrame, so the
+     board stops repainting. Nothing it draws is accumulated from frame time --
+     every frame reads the device clock afresh -- so there is no drift to
+     correct. The one thing worth doing on return is an immediate repaint
+     instead of waiting for the suspended rAF to resume, plus a reset of the
+     frame timer so the first resumed frame does not see a huge dt. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) return;
+    last = 0;
+    paint();
+  });
+
+  /* ---------------- keyboard ---------------- */
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") setOffset(OFFSET - 900);
+    else if (e.key === "ArrowRight") setOffset(OFFSET + 900);
+    else if (e.key === "n") setOffset(0);
+    else if (e.key === "w") { WRAP = !WRAP; syncBtns(); }
+    else if (e.key === "p") document.body.classList.toggle("prog");
+    else if (e.key === "Escape") { document.body.classList.remove("prog", "pnl"); }
+  });
+
+  /* ---------------- main loop ---------------- */
+  var last = 0, acc = 0, frames = 0, lastPanel = 0;
+  function frame(now) {
+    if (!last) last = now;
+    var dt = now - last;
+    last = now;
+    if (dt > 0 && dt < 1000) { acc += dt; frames++; }
+    if (acc > 500) {
+      var f = document.getElementById("fFps");
+      f.textContent = Math.round(frames * 1000 / acc) + " FPS";
+      f.className = "c " + (frames * 1000 / acc >= 50 ? "ok" : "wn");
+      acc = 0; frames = 0;
+    }
+    var tt = tickTable(new Date());
+    var S = tt.sec + OFFSET;
+    render(S, tt.date);
+    if (now - lastPanel > 250) { buildPanel(S); lastPanel = now; }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------------- boot ---------------- */
+  document.getElementById("fStops").textContent = STOPS.length;
+  (function () {
+    var fp = document.getElementById("fProg");
+    fp.textContent = "PROGRAMME ";
+    var b = document.createElement("b");
+    b.textContent = PROGRAM.length
+      ? PROGRAM.length + " DATE" + (PROGRAM.length > 1 ? "S" : "")
+      : "NONE - FOLLOWS DAY OF WEEK";
+    fp.appendChild(b);
+  })();
+  lastPer = perSection();
+
+  // If the wall clock sits outside the timetable window, seed the tables clock
+  // just inside it so the board is never blank on first paint.
+  (function seed() {
+    var tt = tickTable(new Date());
+    var tb = TABLES[resolveTable(tt.date).id];
+    if (!tb || !tb.loaded) return;
+    var w = tt.sec;
+    if (w < tb.window[0] - 3600 || w > tb.window[1] + 3600) {
+      OFFSET = Math.round(tb.window[0] + 2.5 * 3600 - w);
+      FOLLOW = false;
+    }
+  })();
+
+  document.getElementById("brSub").textContent = (CONF.corridor || "DMRC CORRIDOR MIMIC") +
+    "  \u00b7  " + STOPS.length + " STATION SLOTS  \u00b7  REPLAYED FROM SHEET DATA";
+  syncBtns();
+  paint();
+  requestAnimationFrame(frame);
+
+  // Test hook. rAF is throttled to a standstill in a background tab, so this
+  // lets an automated check drive the board at an exact tables time.
+  window.__L7 = {
+    data: D, trips: function () { return TRIPS; }, secs: function () { return SECS; },
+    perSection: perSection, chunkSections: chunkSections, resolveTable: resolveTable,
+    /* Exposed for l7-test.html. resolve() and drawTrain() mutate and read the
+       live trip objects, so a test must snapshot and restore them; that is the
+       test's job, not the viewer's. No UI calls any of these. */
+    resolve: resolve, drawTrain: drawTrain, sectionsFor: sectionsFor, kOf: kOf,
+    buildSections: buildSections, stops: function () { return STOPS.slice(); },
+    ns: function () { return NS; }, dwellThreshold: function () { return DWELL_S; },
+    program: function () { return PROGRAM.slice(); },
+    wef: wefText, force: forceState, meta: CONF,
+    setOffset: setOffset,
+    /* Service-clock hooks. `at` drives the board at an exact service second,
+       `atWall` takes a wall-clock instant and lets the service clock decide
+       which service day and second it belongs to. */
+    serviceTail: serviceTail, serviceSec: serviceSec, serviceDate: serviceDate,
+    tickTable: tickTable,
+    /* The same guard the viewer runs at boot, plus the last render decision and
+       a strict-mode toggle. The test page uses these to prove the fallback /
+       strict behaviour and that the guard rejects the new fault shapes; again,
+       no UI path calls them. */
+    schema: schemaError,
+    strict: function () { return STRICT; },
+    setStrict: function (v) { STRICT = !!v; paint(); },
+    last: function () { return LAST_RES; },
+    /* test hook only, for driving the board onto a programmed date without
+       editing metadata and rebuilding. The page exposes no UI that calls it. */
+    setProgram: function (a) {
+      PROGRAM = (a || []).slice();
+      paint();
+    },
+    at: function (sec, date) {
+      render(sec, date || new Date());
+      buildPanel(sec);
+    },
+    atWall: function (now) {
+      var tt = tickTable(now);
+      render(tt.sec, tt.date);
+      buildPanel(tt.sec);
+      return tt;
+    }
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DMRC Line 7 - Timetable Administration</title>
+<style>
+:root{
+  --bg:#05090f; --text:#8ab4f8; --track:#334155; --station:#ffffff;
+  --dn:#fbbf24; --dn-lt:#fde68a; --up:#22d3ee; --up-lt:#a5f3fc;
+  --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --orange:#fb923c;
+  --panel:#0f172a; --border:#1e293b; --dim:#5b7391; --bright:#e8f1fa;
+  --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,"DejaVu Sans Mono","Liberation Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;
+  min-height:100vh;display:flex;flex-direction:column;
+}
+button,input,select,textarea{
+  font-family:var(--mono);font-size:11px;color:var(--text);background:#0a1220;
+  border:1px solid var(--border);padding:6px 9px;border-radius:2px;
+}
+button{cursor:pointer;letter-spacing:.07em;transition:background .12s,border-color .12s}
+button:hover{background:#18293f;border-color:#2f4a68;color:var(--bright)}
+button.go{background:#0d3324;border-color:var(--green);color:var(--green);padding:9px 16px;font-size:12px}
+button.go:hover{background:#12472f}
+button.sm{padding:3px 8px;font-size:10px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#2f4a68}
+h1,h2,h3{font-weight:700}
+.note{font-size:9.5px;line-height:1.7;color:var(--dim);letter-spacing:.04em}
+.note.warn{color:var(--amber)}
+.note b{color:var(--text);font-weight:400}
+.hr{height:1px;background:var(--border);margin:14px 0}
+
+/* ---------- lock ---------- */
+#lock{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+      background:radial-gradient(circle at 50% 35%,#0c1522,#05090f 70%)}
+#lock .card{width:min(430px,92vw);border:1px solid var(--border);background:var(--panel);
+            border-radius:4px;padding:26px 26px 22px;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+#lock h2{font-size:14px;letter-spacing:.2em;color:var(--bright);margin-bottom:5px}
+#lock .card p{margin:10px 0 15px}
+#lock input{width:100%;text-align:center;letter-spacing:.3em;font-size:14px;padding:10px}
+#lock .err{color:var(--red);font-size:10px;min-height:14px;margin-top:8px;letter-spacing:.1em}
+#lock .hint{margin-top:16px;padding-top:13px;border-top:1px solid var(--border)}
+
+/* ---------- shell ---------- */
+header{flex:0 0 auto;background:linear-gradient(180deg,#0c1522,#070d16);
+       border-bottom:1px solid var(--border);padding:11px 16px;
+       display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:14px;letter-spacing:.16em;color:var(--bright)}
+header h1 b{color:var(--dn)}
+header .sub{font-size:9.5px;letter-spacing:.1em;color:var(--dim);margin-top:2px}
+.chip{font-size:9px;letter-spacing:.13em;border:1px solid var(--border);padding:3px 8px;
+      border-radius:2px;color:var(--dim);white-space:nowrap}
+.chip.ok{color:var(--green);border-color:rgba(34,197,94,.45)}
+.chip.wn{color:var(--amber);border-color:rgba(245,158,11,.45)}
+.spacer{flex:1 1 auto}
+nav{flex:0 0 auto;display:flex;gap:0;border-bottom:1px solid var(--border);background:#070d16;
+    padding:0 10px;overflow-x:auto}
+nav button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;
+           padding:11px 15px;font-size:11px;letter-spacing:.13em;color:var(--dim);white-space:nowrap}
+nav button.on{color:var(--bright);border-bottom-color:var(--dn)}
+nav button:hover{color:var(--bright);background:#0d1727}
+main{flex:1 1 auto;padding:16px;max-width:1500px;width:100%}
+.view{display:none} .view.on{display:block}
+h2.vt{font-size:11px;letter-spacing:.2em;color:var(--bright);margin-bottom:4px}
+h3.st{font-size:9.5px;letter-spacing:.16em;color:var(--dim);margin:20px 0 8px;
+      border-bottom:1px solid var(--border);padding-bottom:5px}
+footer{flex:0 0 auto;border-top:1px solid var(--border);background:#070d16;padding:8px 16px;
+       font-size:9.5px;letter-spacing:.09em;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+/* ---------- tables / stats ---------- */
+.stats{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}
+.stat{border:1px solid var(--border);background:var(--panel);border-radius:3px;
+      padding:9px 13px;min-width:118px}
+.stat .k{font-size:8.5px;letter-spacing:.14em;color:var(--dim)}
+.stat .v{font-size:17px;font-weight:700;color:var(--bright);margin-top:3px;
+         font-variant-numeric:tabular-nums}
+.stat.dn .v{color:var(--dn)} .stat.up .v{color:var(--up)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{font-size:8.5px;letter-spacing:.13em;color:var(--dim);text-align:left;
+   padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;
+   background:#070d16;z-index:2}
+td{padding:4px 8px;border-bottom:1px solid #101a28;font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover{background:#111e30}
+td.stn{color:var(--station);font-weight:700}
+td.dnv{color:var(--dn)} td.upv{color:var(--up)}
+td.dim{color:var(--dim)}
+.scroll{max-height:430px;overflow:auto;border:1px solid var(--border);border-radius:3px;background:#070d16}
+.scroll::-webkit-scrollbar{width:11px;height:11px}
+.scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+.bar{position:relative;height:9px;background:#101a28;border-radius:2px;overflow:hidden;min-width:70px}
+.bar i{position:absolute;left:0;top:0;bottom:0;display:block}
+.bar i.dnv{background:linear-gradient(90deg,#b45309,var(--dn))}
+.bar i.upv{background:linear-gradient(90deg,#0e7490,var(--up))}
+.badge{display:inline-block;font-size:8.5px;letter-spacing:.1em;padding:1px 6px;border-radius:2px;
+       border:1px solid var(--border);color:var(--dim)}
+.badge.ok{color:var(--green);border-color:rgba(34,197,94,.45)}
+.badge.no{color:var(--red);border-color:rgba(239,68,68,.45)}
+
+/* ---------- day profile + histogram ---------- */
+.chart{display:flex;align-items:flex-end;gap:1px;height:104px;border:1px solid var(--border);
+       background:#070d16;padding:5px 6px 0;border-radius:3px;overflow-x:auto}
+.chart .col{flex:1 0 5px;display:flex;flex-direction:column;justify-content:flex-end;
+            align-items:center;gap:1px;min-width:5px}
+.chart .col i{width:100%;display:block;background:linear-gradient(180deg,var(--dn),#b45309);
+              min-height:1px}
+.chart .col.upz i{background:linear-gradient(180deg,var(--up),#0e7490)}
+.chartx{display:flex;justify-content:space-between;font-size:8.5px;color:var(--dim);
+        margin-top:4px;letter-spacing:.08em}
+.hist{display:flex;align-items:flex-end;gap:2px;height:82px;padding:5px 6px 0;
+      border:1px solid var(--border);background:#070d16;border-radius:3px}
+.hist .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px}
+.hist .b i{width:100%;background:linear-gradient(180deg,#3b82f6,#1e3a8a);min-height:1px;display:block}
+.hist .b.hot i{background:linear-gradient(180deg,var(--red),#7f1d1d)}
+.hist .b.warm i{background:linear-gradient(180deg,var(--amber),#78350f)}
+.histx{display:flex;gap:2px;margin-top:4px}
+.histx span{flex:1;text-align:center;font-size:7.5px;color:var(--dim)}
+
+/* ---------- station timeline strip ---------- */
+.tl{border:1px solid var(--border);background:#070d16;border-radius:3px;overflow:auto;max-height:520px}
+.tlrow{display:grid;grid-template-columns:104px 1fr;align-items:center;
+       border-bottom:1px solid #0e1826}
+.tlrow .n{font-size:9.5px;color:var(--station);font-weight:700;padding:0 8px;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tlrow .t{position:relative;height:15px}
+.tlrow .t i{position:absolute;top:3px;width:2px;height:9px;border-radius:1px;display:block}
+.tlrow .t i.g{background:var(--green)}
+.tlrow .t i.a{background:var(--amber)}
+.tlrow .t i.r{background:var(--red)}
+.tlrow .t i.z{background:#243244}
+.tlrow.bnd{border-top:1px solid #2f4a68}
+.tlrow.bnd .n{color:var(--up)}
+.tlaxis{position:relative;height:20px;margin-left:104px;border-top:1px solid var(--border)}
+.tlaxis span{position:absolute;font-size:8px;color:var(--dim);transform:translateX(-50%);
+             letter-spacing:.06em}
+.lgd{display:flex;gap:13px;flex-wrap:wrap;margin:9px 0 0;font-size:9px;color:var(--dim);
+     letter-spacing:.08em}
+.lgd i{display:inline-block;width:9px;height:9px;border-radius:1px;margin-right:4px;
+      vertical-align:-1px}
+
+/* ---------- date programme ---------- */
+.progform{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;
+          align-items:end;max-width:1080px}
+.progform label{display:block;font-size:8.5px;letter-spacing:.14em;color:var(--dim);margin-bottom:4px}
+.progform input[type=date],.progform select{width:100%}
+.chkwrap .chk{display:flex;align-items:center;gap:7px;font-size:11px;margin-bottom:5px}
+.chkwrap input{width:auto}
+.prbtns{display:flex;gap:8px;flex-wrap:wrap}
+.prlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:7px;max-width:1180px}
+.prlist .row{
+  display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:2px;background:#0a1220;font-size:11px;
+}
+.prlist .row.annual{border-color:rgba(34,211,238,.4)}
+.prlist .row.today{border-color:var(--dn);box-shadow:0 0 0 1px rgba(251,191,36,.3)}
+.prlist .d{color:var(--dim);font-variant-numeric:tabular-nums}
+.prlist .t{color:var(--bright);letter-spacing:.11em}
+.prlist .a{color:var(--up);font-size:8.5px;letter-spacing:.09em}
+.prlist .flagd{color:var(--dn);font-size:8.5px;letter-spacing:.09em}
+.prlist button{padding:2px 8px;font-size:10px;margin-left:auto}
+.prlist .none{grid-column:1/-1;color:var(--dim);font-size:11px;padding:11px;
+              border:1px dashed var(--border);border-radius:2px;text-align:center}
+.prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px;max-width:1180px}
+.prgrid .dcard{border:1px solid var(--border);border-radius:2px;background:#0a1220;padding:7px 9px}
+.prgrid .dcard.ov{border-color:var(--dn);background:rgba(251,191,36,.07)}
+.prgrid .dd{font-size:8.5px;color:var(--dim);letter-spacing:.09em}
+.prgrid .dw{font-size:8.5px;color:var(--up);letter-spacing:.09em}
+.prgrid .dt{font-size:11.5px;color:var(--bright);letter-spacing:.1em;margin-top:2px}
+.prgrid .dh{font-size:8px;letter-spacing:.1em;margin-top:1px}
+.prgrid .dh.auto{color:var(--dim)} .prgrid .dh.ovr{color:var(--dn)}
+
+/* ---------- timetable upload ---------- */
+.upnow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;max-width:1180px}
+.upnow .c{border:1px solid var(--border);border-radius:2px;background:#0a1220;padding:8px 10px}
+.upnow .c .k{font-size:8.5px;letter-spacing:.13em;color:var(--dim)}
+.upnow .c .v{font-size:12px;color:var(--bright);letter-spacing:.08em;margin-top:2px}
+.upnow .c .v.ld{color:var(--dn)} .upnow .c .v.no{color:var(--dim)}
+.upnow .c .s{font-size:9.5px;color:var(--dim);margin-top:3px;word-break:break-all}
+.updrop{border:1px dashed var(--border);border-radius:2px;padding:14px;max-width:1180px}
+.updrop input[type=file]{font-size:11.5px;color:var(--text);width:100%;margin-bottom:8px}
+.upsheet{border:1px solid var(--border);border-radius:2px;background:#0a1220;padding:10px 12px;margin-bottom:7px;max-width:1180px}
+.upsheet .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.upsheet .nm{font-size:12.5px;color:var(--bright);letter-spacing:.06em}
+.upsheet .sz{font-size:9.5px;color:var(--dim)}
+.upsheet .fld{display:flex;align-items:center;gap:6px}
+.upsheet .fld label{font-size:8.5px;letter-spacing:.13em;color:var(--dim)}
+.upsheet select,.upsheet input[type=date]{width:auto;min-width:150px}
+.upsheet .tag{font-size:8.5px;letter-spacing:.1em;padding:2px 6px;border:1px solid var(--border);border-radius:2px;color:var(--dim)}
+.upsheet .tag.hid{color:var(--amber);border-color:rgba(245,158,11,.45)}
+.upsheet .tag.guess{color:var(--up);border-color:rgba(34,211,238,.4)}
+.upsheet .tag.guess.bad{color:var(--amber);border-color:rgba(245,158,11,.45)}
+.upsheet .sub{margin-top:6px;font-size:9.5px;color:var(--dim);word-break:break-all}
+.upcard{border:1px solid var(--border);border-radius:2px;background:#0a1220;padding:11px 13px;margin-bottom:8px;max-width:1180px}
+.upcard.bad{border-color:rgba(248,113,113,.5)}
+.upcard .hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+.upcard .hd b{font-size:12px;color:var(--bright);letter-spacing:.08em}
+.upcard .arrow{color:var(--dn);letter-spacing:.1em}
+.upcard .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:7px}
+.upcard .stats div{font-size:9.5px;color:var(--dim)}
+.upcard .stats b{display:block;font-size:12.5px;color:var(--text);letter-spacing:.05em;margin-top:1px}
+.upcard .stats b.warnv{color:var(--dn)}
+.upcard .svc{margin-top:8px;font-size:9.5px;color:var(--dim);display:flex;gap:12px;flex-wrap:wrap}
+.upcard .svc b{color:var(--text)}
+.upcard .warns{margin-top:8px}
+.upcard .warns div{font-size:10px;color:var(--amber);line-height:1.6}
+.upcard .warns div.ok{color:var(--up)}
+.upapply{border:1px solid var(--dn);border-radius:2px;padding:12px 14px;background:rgba(251,191,36,.05);max-width:1180px}
+.upapply .chk{display:flex;align-items:flex-start;gap:8px;font-size:11px;margin-bottom:11px;line-height:1.6}
+.upapply input[type=checkbox]{width:auto;margin-top:2px}
+.upapply .excl{display:flex;flex-direction:column;gap:6px;margin:0 0 11px}
+.upapply .excl .chk{margin-bottom:0;color:var(--amber)}
+
+/* ---------- metadata form ---------- */
+.mt{border:1px solid var(--border);background:var(--panel);border-radius:3px;
+    padding:13px 15px;margin-bottom:11px}
+.mt .hd{display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+.mt .hd b{font-size:12px;letter-spacing:.13em;color:var(--bright)}
+.mt .hd .sub{font-size:9px;color:var(--dim);letter-spacing:.1em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px}
+.grid label{display:block;font-size:8.5px;letter-spacing:.14em;color:var(--dim);margin-bottom:4px}
+.grid input,.grid select,.grid textarea{width:100%}
+.grid textarea{min-height:52px;resize:vertical;line-height:1.6}
+.rowb{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.exportbox{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:11px;margin:13px 0}
+iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;background:#05090f}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:10.5px;margin:9px 0}
+.kv .k{color:var(--dim);letter-spacing:.1em;font-size:9px}
+.kv .v{color:var(--bright)}
+@media(max-width:700px){
+  .tlrow{grid-template-columns:78px 1fr} .tlrow .n{font-size:9px;padding:0 5px}
+  .tlaxis{margin-left:78px} main{padding:11px}
+}
+</style>
+</head>
+<body>
+<div id="lock">
+  <div class="card">
+    <h2>TIMETABLE ADMIN</h2>
+    <p class="note">DMRC Line 7 &mdash; administration console. Enter the passphrase to manage
+      timetable metadata, WEF dates and service analysis.</p>
+    <input type="password" id="pw" placeholder="PASSPHRASE" autocomplete="off">
+    <div class="err" id="pwErr"></div>
+    <button class="go" id="pwGo" style="width:100%;margin-top:12px">UNLOCK</button>
+    <div class="hint note warn">
+      Default passphrase <b id="pwdHint">dmrc7</b> &mdash; change it by editing
+      <b>PW_HASH</b> in <b>l7-admin-template.html</b> and rebuilding.
+      <br><br>
+      This gate is a user-interface lock, <b>not security</b>. Anyone holding this file can read the
+      passphrase out of it. Real protection means serving the file behind a login.
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;flex:1 1 auto;flex-direction:column">
+  <header>
+    <div>
+      <h1>LINE <b>7</b> &middot; TIMETABLE ADMINISTRATION</h1>
+      <div class="sub" id="hSub">--</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip" id="cData">--</span>
+    <span class="chip" id="cRing">--</span>
+    <span class="chip" id="cBuild">--</span>
+    <button class="sm" id="bLock">LOCK</button>
+  </header>
+
+  <nav>
+    <button data-v="meta" class="on">WEF &amp; METADATA</button>
+    <button data-v="prog">DATE PROGRAMME</button>
+    <button data-v="up">UPLOAD TIMETABLE FILE</button>
+    <button data-v="gaps">SERVICE GAPS / HEADWAYS</button>
+    <button data-v="exp">EXPORT END-USER FILE</button>
+  </nav>
+
+  <main>
+    <section class="view on" id="v-meta">
+      <h2 class="vt">TIMETABLE METADATA</h2>
+      <p class="note" style="max-width:900px">These fields are what the end user sees in the header
+        of the mimic: which timetable is in force, and the <b>WEF</b> (&ldquo;with effect from&rdquo;)
+        date it came into force. The timetable <i>services</i> themselves are baked in at build time
+        by <span style="color:var(--text)">extract.py</span> &mdash; this screen cannot change them.</p>
+      <div class="hr"></div>
+      <div class="grid" style="max-width:760px">
+        <div><label>CORRIDOR NAME (shown to end user)</label><input id="mCorridor"></div>
+        <div><label>AUTHORITY / ISSUING OFFICE</label><input id="mAuth"></div>
+      </div>
+      <h3 class="st">TIMETABLES</h3>
+      <div id="mTables"></div>
+      <h3 class="st">BUILD CONFIG</h3>
+      <p class="note">Download <span style="color:var(--text)">l7-meta.json</span> and drop it beside
+        <span style="color:var(--text)">extract.py</span> to make these values the new defaults for
+        the next build.</p>
+      <div class="rowb">
+        <button id="mJson">DOWNLOAD l7-meta.json</button>
+        <button id="mImp">IMPORT l7-meta.json</button>
+        <input type="file" id="mFile" accept=".json,application/json" style="display:none">
+        <button id="mReset">REVERT TO BUILT-IN VALUES</button>
+      </div>
+    </section>
+
+    <section class="view" id="v-prog">
+      <h2 class="vt">DATE PROGRAMME</h2>
+      <p class="note" style="max-width:960px">Assign a timetable to a specific date. A programmed date
+        always wins over the automatic weekday / Saturday / Sunday rule, so this is how a Sunday service
+        or a special holiday timetable ever gets shown. <b>The end user cannot change any of this</b>
+        &mdash; there is no selector on their view, they only ever see which timetable is running.
+        Press build on the export tab to push these into the file.</p>
+      <div class="hr"></div>
+      <div class="progform">
+        <div><label>APPLIES ON</label><input type="date" id="prDate"></div>
+        <div><label>SHOW TIMETABLE</label><select id="prTable"></select></div>
+        <div class="chkwrap">
+          <label class="chk"><input type="checkbox" id="prAnnual"> Repeat every year on this date</label>
+          <div class="note" id="prWhat">&nbsp;</div>
+        </div>
+        <div class="prbtns">
+          <button class="go" id="prAdd">ADD TO PROGRAMME</button>
+          <button id="prToday">TODAY AS SPECIAL</button>
+        </div>
+      </div>
+      <div class="note warn" id="prErr" style="min-height:14px">&nbsp;</div>
+      <h3 class="st">PROGRAMMED DATES</h3>
+      <div class="prlist" id="prList"></div>
+      <div class="rowb">
+        <button id="prClear">CLEAR ALL</button>
+        <span class="note" id="prCount"></span>
+      </div>
+      <h3 class="st">WHAT THE END USER WILL SEE &mdash; NEXT 21 DAYS</h3>
+      <p class="note" style="margin-bottom:8px">Resolved from today's date using the same two rules the
+        end-user page uses. This is a preview of their header, not a live view of the board.</p>
+      <div class="prgrid" id="prGrid"></div>
+    </section>
+
+    <section class="view" id="v-up">
+      <h2 class="vt">UPLOAD TIMETABLE FILE</h2>
+      <p class="note" style="max-width:1000px">Load a Line&nbsp;7 working timetable <b>.xlsx</b> and
+        rebuild the board from it. The file is read <b>inside this page</b> &mdash; nothing is uploaded
+        anywhere, and the page keeps working offline. Every sheet is listed with the timetable it maps
+        to; you confirm what was extracted before any of it reaches the end user.</p>
+      <div class="hr"></div>
+
+      <h3 class="st">IN THE FILE RIGHT NOW</h3>
+      <div class="upnow" id="upNow"></div>
+
+      <h3 class="st">CHOOSE A WORKBOOK</h3>
+      <div class="updrop">
+        <input type="file" id="upFile" accept=".xlsx">
+        <div class="note" id="upFileNote">Only <b>.xlsx</b> is supported. <b>.xls</b> is the old binary
+          format and cannot be read here. Password-protected workbooks are not supported.</div>
+      </div>
+
+      <div id="upSheets"></div>
+
+      <div class="rowb" id="upBtns" style="display:none">
+        <button class="go" id="upExtract">EXTRACT SELECTED SHEETS</button>
+        <button id="upAll">SELECT ALL</button>
+        <button id="upNone">SELECT NONE</button>
+        <span class="note" id="upMsg"></span>
+      </div>
+
+      <div id="upReport"></div>
+
+      <div class="upapply" id="upApplyRow" style="display:none">
+        <label class="chk" id="upCorridorChk" style="display:none">
+          <input type="checkbox" id="upCorridorAck">
+          <span id="upCorridorChkTxt"></span>
+        </label>
+        <div class="excl" id="upCorridorExcl"></div>
+        <div class="rowb">
+          <button class="go" id="upApply">APPLY TO FILE &mdash; THEN BUILD</button>
+          <button id="upRevert">DISCARD UPLOAD</button>
+          <span class="note" id="upApplyMsg"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="v-gaps">
+      <h2 class="vt">SERVICE GAPS / HEADWAYS</h2>
+      <p class="note" style="max-width:940px">Every booked call at every station, sorted along the
+        corridor. The gap between consecutive calls is the headway a passenger actually experiences.
+        Long gaps are under-service; very short gaps mean two trains are close together on the same
+        platform.</p>
+      <div class="stats" id="gStats"></div>
+      <div class="grid" style="max-width:900px;margin:14px 0">
+        <div><label>TIMETABLE TO ANALYSE</label><select id="gTable"></select></div>
+        <div><label>DIRECTION</label><select id="gDir">
+          <option value="both">BOTH DIRECTIONS</option>
+          <option value="dn">DN ONLY</option>
+          <option value="up">UP ONLY</option></select></div>
+        <div><label>UNDER-SERVED IF GAP OVER (MINUTES)</label><input type="number" id="gUnder" value="20" min="1" max="240"></div>
+        <div><label>TIGHT IF GAP UNDER (MINUTES)</label><input type="number" id="gTight" value="4" min="1" max="60"></div>
+      </div>
+      <div class="rowb" style="margin:0 0 6px">
+        <button class="go" id="gRun">RECOMPUTE</button>
+        <span class="note" id="gMsg"></span>
+      </div>
+
+      <h3 class="st">STATION TIMELINE &mdash; ONE TICK PER BOOKED CALL</h3>
+      <div class="lgd">
+        <span><i style="background:var(--green)"></i>within both limits</span>
+        <span><i style="background:var(--amber)"></i>over the under-served limit, or under the tight limit</span>
+        <span><i style="background:var(--red)"></i>over 2x the under-served limit</span>
+        <span><i style="background:#243244"></i>last call of the day, no following headway</span>
+        <span style="color:var(--up)">marker = every 10th station</span>
+      </div>
+      <p class="note" style="margin:7px 0 10px">Each tick is one booked call. A tick is coloured by the
+        gap to the <b>next</b> call at the same station in the same direction, so the last tick of the
+        day is grey by definition. Hover any tick for its exact time and the gap that follows it.</p>
+      <div class="tl" id="gTl"></div>
+
+      <h3 class="st">STATION HEADWAY SUMMARY</h3>
+      <div class="scroll" id="gTbl"></div>
+
+      <h3 class="st">GAP DISTRIBUTION</h3>
+      <div class="hist" id="gHist"></div>
+      <div class="histx" id="gHistX"></div>
+      <div class="note" id="gHistN" style="margin-top:6px"></div>
+
+      <h3 class="st">TRAINS IN SERVICE AT THE START OF EACH 15 MINUTE BUCKET</h3>
+      <div class="chart" id="gDay"></div>
+      <div class="chartx" id="gDayX"></div>
+      <div class="note" style="margin-top:6px">A train is counted in the bucket its departure falls
+        into, so this is a point-in-time count and will be higher than the instantaneous count shown
+        on the mimic for the same moment. It answers &ldquo;how many trains are on the line at a given
+        quarter hour&rdquo;, not &ldquo;how many stops happen in that quarter hour&rdquo;.</div>
+
+      <h3 class="st">UNDER-SERVED GAPS</h3>
+      <div class="scroll" id="gUnderTbl"></div>
+    </section>
+
+    <section class="view" id="v-exp">
+      <h2 class="vt">EXPORT END-USER FILE</h2>
+      <p class="note" style="max-width:940px">The admin console rebuilds the end-user page with the
+        metadata above baked in, then hands you the file. This is deliberately the <b>only</b> update
+        path: a shared-storage overlay would silently fail when the page is opened straight from disk,
+        because browsers block local storage for <span style="color:var(--text)">file://</span> pages.
+        One mechanism that works everywhere beats two where one is unreliable.</p>
+      <div class="hr"></div>
+      <div class="exportbox">
+        <div class="stat"><div class="k">TIMETABLES WITH DATA</div><div class="v" id="eLoaded">--</div></div>
+        <div class="stat"><div class="k">TRIPS BAKED IN</div><div class="v" id="eTrips">--</div></div>
+        <div class="stat"><div class="k">PROGRAMMED DATES</div><div class="v" id="eProg">--</div></div>
+        <div class="stat"><div class="k">OUTPUT SIZE</div><div class="v" id="eSize">--</div></div>
+      </div>
+      <div class="mt" style="max-width:760px">
+        <div class="hd"><b>STRICT MODE</b><span class="sub">EXPORT OPTION</span></div>
+        <label class="chk" style="display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.6">
+          <input type="checkbox" id="eStrict" style="width:auto;margin-top:2px">
+          <span>Refuse to substitute. When the day resolves to a timetable with no service data,
+            the end-user board shows a refusal notice instead of another timetable's services. Off by
+            default: the board then falls back to a timetable that does have data, with the
+            substitution labelled on the page.</span>
+        </label>
+      </div>
+      <div class="kv" id="eMeta"></div>
+      <div class="rowb">
+        <button class="go" id="eGo">BUILD &amp; DOWNLOAD END-USER FILE</button>
+        <button id="eCopy">COPY CONFIG JSON</button>
+        <span class="note" id="eMsg"></span>
+      </div>
+      <div class="note" id="eAudit" style="margin-top:6px"></div>
+      <h3 class="st">PREVIEW</h3>
+      <p class="note" id="ePrevNote">Press build to render the file exactly as the end user will see it.</p>
+      <iframe id="eFrame" title="end-user preview" sandbox="allow-scripts"></iframe>
+    </section>
+  </main>
+
+  <footer>
+    <span id="fSrc">--</span>
+    <span id="fWin">--</span>
+    <span id="fSlots">--</span>
+    <span class="spacer"></span>
+    <span>SIMULATED REPLAY &mdash; NOT LIVE TRAIN STATUS</span>
+  </footer>
+</div>
+
+<div id="tip"></div>
+<script>
+window.L7_BASE = "/*__L7_BASE__*/";
+</script>
+<script>
+(function () {
+  "use strict";
+
+  /*__L7_UPLOAD__*/
+
+  var PW_SALT = 0x811c9dc5, PW_HASH = 0x9b2fa6e2;   // FNV-1a of the default passphrase
+
+  /* Math.imul is not optional here: h * 16777619 reaches 2^55, so a plain float
+     multiply silently loses low bits and the hash never matches its own build. */
+  function fnv1a(s) {
+    var h = PW_SALT;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i) & 0xff;
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  /* ---------- pull the end-user page (and its data) out of the embedded copy ---------- */
+  function b64ToUtf8(b64) {
+    var bin = atob(b64), n = bin.length, bytes = new Uint8Array(n), i;
+    for (i = 0; i < n; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  /* Span of the object literal assigned to "<name> = {...};", found by brace
+     matching with a string guard so braces inside string values are safe.
+     Reading and replacing both need this, because uploading a timetable has to
+     rewrite the data block and not only the metadata block. */
+  function literalSpan(src, name) {
+    var at = src.indexOf(name + " = ");
+    if (at < 0) throw new Error("embedded page has no " + name);
+    var i = src.indexOf("{", at), depth = 0, j = i, inStr = false, esc = false;
+    for (; j < src.length; j++) {
+      var ch = src.charAt(j);
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (!depth) { j++; break; } }
+    }
+    if (depth !== 0) throw new Error("unbalanced braces in " + name);
+    return { i: i, j: j };
+  }
+  function pickLiteral(src, name) {
+    var sp = literalSpan(src, name);
+    return JSON.parse(src.slice(sp.i, sp.j));
+  }
+  function replaceLiteral(src, name, obj) {
+    var sp = literalSpan(src, name);
+    return src.slice(0, sp.i) + jsScriptJson(obj) + src.slice(sp.j);
+  }
+  /* JSON for a <script> context. JSON.stringify leaves "<" alone, so a station
+     code or a label containing a closing script tag would close the viewer's
+     script element early when the built file is parsed as HTML and the rest of
+     the payload would spill into the document as markup. Escaping "<" as \u003c
+     is inert once the literal is parsed as JSON/JS and cannot end the element,
+     so the bytes stay identical to what was meant. */
+  function jsScriptJson(obj) {
+    return JSON.stringify(obj).replace(/</g, "\\u003c");
+  }
+
+  var BASE_HTML = b64ToUtf8(window.L7_BASE);
+  var DATA = pickLiteral(BASE_HTML, "window.L7_DATA");
+  var CONF = pickLiteral(BASE_HTML, "window.L7_META");
+  var BUILTIN = JSON.parse(JSON.stringify(CONF));
+  var DATA_DIRTY = false;          // set when an upload changes the timetable data
+  var DATA_BUILTIN = JSON.parse(JSON.stringify(DATA));
+
+  var STOPS = DATA.meta.corridor;
+  var NS = STOPS.length - 1;
+  var RING = STOPS[0] === STOPS[NS];
+  var LOADED = DATA.order.filter(function (id) { return DATA.tables[id].loaded; });
+  var TID = LOADED[0];
+
+  function q(s) { return document.querySelector(s); }
+  function el(tag, cls, parent) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function hms(s) {
+    s = Math.max(0, Math.round(s));
+    return pad2(Math.floor(s / 3600)) + ":" + pad2(Math.floor((s % 3600) / 60)) + ":" + pad2(s % 60);
+  }
+  function hm(s) { return hms(s).slice(0, 5); }
+  function dur(x) {
+    x = Math.round(x);
+    var h = Math.floor(x / 3600), m = Math.floor((x % 3600) / 60), c = x % 60;
+    if (h) return h + "h " + pad2(m) + "m";
+    if (m) return m + "m " + pad2(c) + "s";
+    return c + "s";
+  }
+  function med(a) {
+    if (!a.length) return 0;
+    var b = a.slice().sort(function (x, y) { return x - y; });
+    var m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  }
+  function pct(a, p) {
+    if (!a.length) return 0;
+    var b = a.slice().sort(function (x, y) { return x - y; });
+    return b[Math.min(b.length - 1, Math.floor(b.length * p))];
+  }
+
+  /* ---------- lock ---------- */
+  var unlocked = false;
+  function tryUnlock() {
+    if (fnv1a(q("#pw").value) === PW_HASH) {
+      unlocked = true;
+      q("#lock").style.display = "none";
+      q("#app").style.display = "flex";
+      q("#pw").value = "";
+      boot();
+    } else {
+      q("#pwErr").textContent = "PASSPHRASE NOT RECOGNISED";
+      q("#pw").value = "";
+    }
+  }
+  q("#pwGo").addEventListener("click", tryUnlock);
+  q("#pw").addEventListener("keydown", function (e) { if (e.key === "Enter") tryUnlock(); });
+  q("#bLock").addEventListener("click", function () {
+    unlocked = false;
+    q("#app").style.display = "none";
+    q("#lock").style.display = "flex";
+  });
+
+  /* ---------- tabs ---------- */
+  var VIEWS = ["meta", "prog", "up", "gaps", "exp"];
+  function show(v) {
+    VIEWS.forEach(function (x) {
+      q("#v-" + x).classList.toggle("on", x === v);
+    });
+    [].forEach.call(document.querySelectorAll("nav button"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-v") === v);
+    });
+    if (v === "gaps") runGaps();
+    if (v === "prog") renderProg();
+    if (v === "up") renderUpNow();
+    /* the metadata fields write straight into CONF, so the export summary has to
+       be re-derived whenever it is shown, not only when it is first built */
+    if (v === "exp") renderExp();
+  }
+  [].forEach.call(document.querySelectorAll("nav button"), function (b) {
+    b.addEventListener("click", function () { show(this.getAttribute("data-v")); });
+  });
+
+  /* ================= metadata editor ================= */
+  function fld(parent, label, id, obj, key, type) {
+    var w = el("div", "", parent);
+    el("label", "", w).textContent = label;
+    var i = el("input", "", w);
+    i.type = type || "text";
+    i.id = id;
+    i.value = obj[key] == null ? "" : obj[key];
+    i.addEventListener("input", function () { obj[key] = i.value; });
+    return i;
+  }
+
+  function renderMeta() {
+    q("#mCorridor").value = CONF.corridor || "";
+    q("#mAuth").value = CONF.authority || "";
+    var host = q("#mTables");
+    host.textContent = "";
+    DATA.order.forEach(function (id) {
+      if (!CONF.tables[id]) CONF.tables[id] = { label: id.toUpperCase(), wef: "", weto: "", note: "" };
+      var t = CONF.tables[id];
+      var loaded = !!DATA.tables[id].loaded;
+      var box = el("div", "mt", host);
+      var hd = el("div", "hd", box);
+      el("b", "", hd).textContent = t.label || id.toUpperCase();
+      el("span", "badge " + (loaded ? "ok" : "no"), hd).textContent =
+        loaded ? "SERVICES LOADED" : "NO SERVICE DATA";
+      el("span", "sub", hd).textContent = loaded
+        ? DATA.tables[id].dn.length + " DN + " + DATA.tables[id].up.length + " UP TRIPS"
+        : "NOT IN THIS BUILD";
+      var g = el("div", "grid", box);
+      fld(g, "LABEL SHOWN TO END USER", "lbl-" + id, t, "label");
+      fld(g, "WEF - WITH EFFECT FROM", "wef-" + id, t, "wef", "date");
+      fld(g, "VALID TO (OPTIONAL)", "weto-" + id, t, "weto", "date");
+      var nt = el("div", "", g);
+      nt.style.gridColumn = "1 / -1";
+      el("label", "", nt).textContent = "NOTE - SHOWN IN THE END-USER NOTICE PANEL";
+      var ta = el("textarea", "", nt);
+      ta.value = t.note || "";
+      ta.addEventListener("input", function () { t.note = ta.value; });
+      if (!loaded) {
+        var row = el("div", "rowb", box);
+        el("span", "note", row).textContent =
+          "A WEF here is only meaningful once real " + t.label.toLowerCase() +
+          " service data is supplied; until then the end user sees a not-loaded notice.";
+      }
+    });
+  }
+  q("#mCorridor").addEventListener("input", function () { CONF.corridor = this.value; });
+  q("#mAuth").addEventListener("input", function () { CONF.authority = this.value; });
+
+  function download(name, text, mime) {
+    var b = new Blob([text], { type: (mime || "text/plain") + ";charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
+  function metaJSON() {
+    return JSON.stringify({
+      corridor: CONF.corridor || "",
+      authority: CONF.authority || "",
+      strict: !!CONF.strict,
+      tables: DATA.order.reduce(function (o, id) {
+        var t = CONF.tables[id] || {};
+        o[id] = { label: t.label || id.toUpperCase(), wef: t.wef || "",
+                  weto: t.weto || "", note: t.note || "" };
+        return o;
+      }, {}),
+      program: progList().map(function (e) {
+        return { date: e.date, table: e.table, annual: !!e.annual };
+      })
+    }, null, 2);
+  }
+  q("#mJson").addEventListener("click", function () {
+    download("l7-meta.json", metaJSON(), "application/json");
+  });
+  q("#mReset").addEventListener("click", function () {
+    CONF = JSON.parse(JSON.stringify(BUILTIN));
+    renderMeta();
+    renderExp();
+  });
+  q("#mImp").addEventListener("click", function () { q("#mFile").click(); });
+  q("#mFile").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        var o = JSON.parse(String(fr.result));
+        /* Stage everything before touching CONF. A malformed table entry used
+           to throw halfway through, after corridor/authority/program had already
+           been overwritten, leaving a mixed import behind. Nothing is committed
+           unless the whole file validates. */
+        var nextCorridor = CONF.corridor, nextAuth = CONF.authority,
+            nextStrict = CONF.strict, nextProgram = null, nextTables = {}, dropped = [];
+        if (typeof o.corridor === "string") nextCorridor = o.corridor;
+        if (typeof o.authority === "string") nextAuth = o.authority;
+        if (typeof o.strict === "boolean") nextStrict = o.strict;
+        if (Object.prototype.toString.call(o.program) === "[object Array]") {
+          /* An imported programme goes through the same conflict rules as one
+             typed into the form, so a hand-edited l7-meta.json cannot smuggle in
+             two rules of the same specificity and silently make the viewer's
+             tie-break decide. Anything rejected is named, not dropped quietly. */
+          var kept = [];
+          o.program.forEach(function (e) {
+            if (!e || typeof e.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
+              dropped.push("an entry with an invalid date (" + (e && e.date) + ")"); return;
+            }
+            if (!CONF.tables[e.table]) {
+              dropped.push(fmtD(e.date) + " points at unknown timetable " + e.table); return;
+            }
+            var why = conflictWith(kept, e.date, e.table, !!e.annual);
+            if (why) { dropped.push(why); return; }
+            kept.push({ date: e.date, table: e.table, annual: !!e.annual });
+          });
+          nextProgram = kept;
+        }
+        Object.keys(o.tables || {}).forEach(function (id) {
+          var v = o.tables[id];
+          if (!v || typeof v !== "object") {
+            dropped.push("timetable " + id + " is not an object");
+            return;
+          }
+          var set = {};
+          ["label", "wef", "weto", "note"].forEach(function (k) {
+            if (typeof v[k] === "string") set[k] = v[k];
+          });
+          nextTables[id] = set;
+        });
+        /* Everything validated. Commit as one step. */
+        CONF.corridor = nextCorridor;
+        CONF.authority = nextAuth;
+        CONF.strict = nextStrict;
+        if (nextProgram) CONF.program = nextProgram;
+        Object.keys(nextTables).forEach(function (id) {
+          if (!CONF.tables[id]) CONF.tables[id] = {};
+          Object.keys(nextTables[id]).forEach(function (k) {
+            CONF.tables[id][k] = nextTables[id][k];
+          });
+        });
+        if (dropped.length) {
+          alert("Imported config: " + dropped.length + " item"
+            + (dropped.length > 1 ? "s were" : " was") + " not used.\n\n- "
+            + dropped.join("\n- "));
+        }
+        renderMeta();
+        renderExp();
+      } catch (err) {
+        alert("Could not read that file as l7-meta.json:\n\n" + err.message);
+      }
+    };
+    fr.readAsText(f);
+    e.target.value = "";
+  });
+
+  /* ================= date programme =================
+     These entries are the only way a non-weekday timetable ever reaches the end
+     user, because their view has no selector of any kind. */
+  function progList() {
+    return Object.prototype.toString.call(CONF.program) === "[object Array]" ? CONF.program : [];
+  }
+  function prErr(msg) { q("#prErr").textContent = msg || "\u00a0"; }
+  function lbl(table) { return (CONF.tables[table] || {}).label || String(table).toUpperCase(); }
+
+  /* Ambiguity is a collision of SPECIFICITY, not merely of a shared date. An
+     exact date and an annual recurrence that land on the same calendar day are
+     different rules -- the exact one is the more specific and wins, which is
+     exactly how the viewer's resolveTable() orders them -- so both are allowed.
+     Two exact rules for one date, or two annual rules for one MM-DD, are the
+     same specificity and cannot both apply, so the second is refused here
+     rather than left for the viewer's table-id tie-break to hide. Returns a
+     reason string, or null when the entry can be added safely. */
+  function conflictWith(list, date, table, annual) {
+    for (var i = 0; i < list.length; i++) {
+      var e = list[i];
+      if (annual && e.annual && e.date.slice(5) === date.slice(5)) {
+        return e.table === table
+          ? date.slice(5) + " is already programmed annually to " + lbl(table) + "."
+          : "Another annual entry already covers " + date.slice(5)
+            + ". Two annual rules on one date would be ambiguous.";
+      }
+      if (!annual && !e.annual && e.date === date) {
+        return e.table === table
+          ? date + " is already programmed to " + lbl(table) + "."
+          : date + " is already programmed to " + lbl(e.table)
+            + ". A date can carry only one exact-date rule.";
+      }
+    }
+    return null;
+  }
+
+  function addEntry(date, table, annual) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return prErr("Pick a date first.");
+    if (!CONF.tables[table]) return prErr("Pick a timetable.");
+    var why = conflictWith(progList(), date, table, !!annual);
+    if (why) return prErr(why);
+    CONF.program.push({ date: date, table: table, annual: !!annual });
+    CONF.program.sort(function (a, b) {
+      return a.date === b.date ? a.table.localeCompare(b.table) : a.date.localeCompare(b.date);
+    });
+    prErr("");
+    renderProg();
+    renderExp();
+  }
+
+  function fmtD(iso) {
+    var p = String(iso).split("-");
+    return p.length === 3 ? p[2] + "-" + p[1] + "-" + p[0] : iso;
+  }
+  function dowName(d) { return ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][d.getDay()]; }
+
+  /* YYYY-MM-DD -> local Date. The month is characters 5-6 and the day 8-9, so
+     slice(5,7)/slice(8,10); getting that wrong yields "9-" and an Invalid Date
+     whose getDay() is NaN, which then silently reads as a Monday everywhere. */
+  function isoToday() {
+    var t = new Date();
+    return t.getFullYear() + "-" + pad2(t.getMonth() + 1) + "-" + pad2(t.getDate());
+  }
+  function isoDate(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return null;
+    var y = +iso.slice(0, 4), m = +iso.slice(5, 7) - 1, d = +iso.slice(8, 10);
+    var dt = new Date(y, m, d);
+    return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d ? dt : null;
+  }
+
+  function renderProg() {
+    var P = progList(), today = new Date();
+    var todayISO = isoToday();
+    var md = todayISO.slice(5);
+
+    if (!q("#prDate").value) q("#prDate").value = todayISO;
+    if (!q("#prTable").options.length) {
+      DATA.order.forEach(function (id) {
+        var o = document.createElement("option");
+        o.value = id;
+        o.textContent = (CONF.tables[id] && CONF.tables[id].label) || id.toUpperCase();
+        q("#prTable").appendChild(o);
+      });
+    }
+
+    /* what the chosen date would actually resolve to */
+    (function preview() {
+      var d = q("#prDate").value, t = q("#prTable").value;
+      var dt = isoDate(d);
+      var pw = q("#prWhat");
+      if (!dt) { pw.textContent = "\u00a0"; return; }
+      var auto = dt.getDay() === 0 ? "sunday" : dt.getDay() === 6 ? "saturday" : "weekday";
+      var diff = t !== auto;
+      pw.textContent = "";
+      pw.appendChild(document.createTextNode(fmtD(d) + " is a " + dowName(dt) +
+        " \u2192 auto rule picks "));
+      var b1 = document.createElement("b");
+      b1.style.color = "var(--text)";
+      b1.textContent = (CONF.tables[auto] || {}).label || auto;
+      pw.appendChild(b1);
+      if (diff) {
+        pw.appendChild(document.createTextNode(" \u00b7 you are choosing "));
+        var b2 = document.createElement("b");
+        b2.style.color = "var(--dn)";
+        b2.textContent = (CONF.tables[t] || {}).label || t;
+        pw.appendChild(b2);
+      } else {
+        pw.appendChild(document.createTextNode(" \u00b7 same as auto"));
+      }
+    })();
+
+    var host = q("#prList");
+    host.textContent = "";
+    if (!P.length) {
+      var e0 = el("div", "none", host);
+      e0.textContent = "NOTHING PROGRAMMED - the end user follows the day of the week "
+        + "(Mon-Fri weekday, Sat, Sun). Program a date to override that.";
+    } else {
+      P.forEach(function (e, i) {
+        var isToday = e.annual ? e.date.slice(5) === md : e.date === todayISO;
+        var box = el("div", "row" + (e.annual ? " annual" : "") + (isToday ? " today" : ""), host);
+        el("span", "d", box).textContent = fmtD(e.date) + (e.annual ? " every year" : "");
+        el("span", "t", box).textContent = (CONF.tables[e.table] || {}).label || e.table;
+        if (e.annual) el("span", "a", box).textContent = "ANNUAL";
+        if (isToday) el("span", "flagd", box).textContent = "IN FORCE TODAY";
+        var del = el("button", "", box);
+        del.setAttribute("data-del", i);
+        del.textContent = "REMOVE";
+      });
+    }
+    q("#prCount").textContent = P.length
+      ? P.length + " programmed date" + (P.length > 1 ? "s" : "") + ", baked in at export"
+      : "no overrides";
+
+    /* 21-day preview, resolved with the end user's own two rules */
+    var g = q("#prGrid");
+    g.textContent = "";
+    for (var k = 0; k < 21; k++) {
+      var dd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + k);
+      var iso = dd.getFullYear() + "-" + pad2(dd.getMonth() + 1) + "-" + pad2(dd.getDate());
+      var dmd = iso.slice(5), hit = null;
+      /* Exact dates are the more specific rule, so they are resolved before
+         annual recurrences, and the lowest table id breaks any tie -- exactly
+         the order the viewer's resolveTable() uses. A single pass would let the
+         order the entries sit in CONF.program decide the outcome. */
+      for (var j = 0; j < P.length; j++) {
+        if (!P[j].annual && P[j].date === iso && (!hit || P[j].table < hit.table)) hit = P[j];
+      }
+      if (!hit) {
+        for (j = 0; j < P.length; j++) {
+          if (P[j].annual && P[j].date.slice(5) === dmd && (!hit || P[j].table < hit.table)) hit = P[j];
+        }
+      }
+      var auto = dd.getDay() === 0 ? "sunday" : dd.getDay() === 6 ? "saturday" : "weekday";
+      var card = el("div", "dcard" + (hit ? " ov" : ""), g);
+      el("div", "dd", card).textContent = fmtD(iso) + " " + dowName(dd);
+      el("div", "dt", card).textContent =
+        ((hit ? hit.table : auto) || "").toUpperCase();
+      var h = el("div", "dh " + (hit ? "ovr" : "auto"), card);
+      h.textContent = hit ? "DATE OVERRIDE" : "AUTO";
+    }
+  }
+
+  q("#prAdd").addEventListener("click", function () {
+    addEntry(q("#prDate").value, q("#prTable").value, q("#prAnnual").checked);
+  });
+  q("#prToday").addEventListener("click", function () {
+    q("#prDate").value = isoToday();
+    addEntry(q("#prDate").value, "special", false);
+  });
+  q("#prDate").addEventListener("change", renderProg);
+  q("#prTable").addEventListener("change", renderProg);
+  q("#prAnnual").addEventListener("change", renderProg);
+  q("#prList").addEventListener("click", function (ev) {
+    var b = ev.target.closest ? ev.target.closest("button[data-del]") : null;
+    if (!b) return;
+    CONF.program.splice(+b.getAttribute("data-del"), 1);
+    prErr("");
+    renderProg();
+    renderExp();
+  });
+  q("#prClear").addEventListener("click", function () {
+    CONF.program = [];
+    prErr("");
+    renderProg();
+    renderExp();
+  });
+
+  /* ================= timetable upload =================
+     Read -> review -> confirm -> apply. Nothing reaches the end user until
+     APPLY is pressed, and the corridor check stops a station-list change from
+     landing silently, because the corridor is shared by every timetable. */
+  var UP = { wb: null, fileName: "", rows: [], results: {}, applied: [] };
+  var DOW_NAME = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+
+  function upMsg(t, bad) {
+    var m = q("#upMsg");
+    m.textContent = t || "\u00a0";
+    m.className = "note" + (bad ? " warn" : "");
+  }
+  function refreshDerived() {
+    STOPS = DATA.meta.corridor;
+    NS = STOPS.length - 1;
+    RING = STOPS[0] === STOPS[NS];
+    LOADED = DATA.order.filter(function (id) { return DATA.tables[id].loaded; });
+    if (LOADED.indexOf(TID) < 0) TID = LOADED[0] || DATA.order[0];
+    /* The station-call arrays are derived from ONE timetable's trips. Any
+       change to the data (upload applied, upload discarded, corridor rebuilt)
+       invalidates every array, so drop the whole cache here rather than trying
+       to work out which key went stale. This is the single place both Apply
+       and Revert funnel through. */
+    CALLS = {};
+    syncGapsTable();
+  }
+
+  /* Keep the headway timetable selector in step with what is actually loaded.
+     An unloaded table is shown but disabled: analysing it would divide by a
+     timetable that has no trips. */
+  function syncGapsTable() {
+    var sel = q("#gTable");
+    if (!sel) return;
+    sel.textContent = "";
+    DATA.order.forEach(function (id) {
+      var t = DATA.tables[id] || {};
+      var o = document.createElement("option");
+      o.value = id;
+      o.textContent = ((CONF.tables[id] || {}).label || id.toUpperCase())
+        + (t.loaded ? "" : "  - NO DATA");
+      o.disabled = !t.loaded;
+      sel.appendChild(o);
+    });
+    sel.value = TID;
+  }
+  function stopsDiffer(a, b) {
+    if (!a || !b || a.length !== b.length) return true;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return true;
+    return false;
+  }
+
+  function renderUpNow() {
+    var host = q("#upNow");
+    host.textContent = "";
+    var i;
+    for (i = 0; i < DATA.order.length; i++) {
+      var id = DATA.order[i], t = DATA.tables[id] || {};
+      var c = el("div", "c", host);
+      el("div", "k", c).textContent = id.toUpperCase();
+      el("div", "v " + (t.loaded ? "ld" : "no"), c).textContent = t.loaded ? "LOADED" : "NOT LOADED";
+      el("div", "s", c).textContent = t.loaded
+        ? (t.dn.length + " DN + " + t.up.length + " UP \u00b7 sheet " + t.sheet +
+           " \u00b7 " + hm(t.window[0]) + "-" + hms(t.window[1]))
+        : ((CONF.tables[id] || {}).note || "no data");
+    }
+    var cc = el("div", "c", host);
+    el("div", "k", cc).textContent = "CORRIDOR";
+    el("div", "v ld", cc).textContent = STOPS.length + " SLOTS";
+    el("div", "s", cc).textContent = STOPS.slice(0, 5).join(" \u2192 ") +
+      (STOPS.length > 5 ? " \u2192 ..." : "") + " \u2192 " + STOPS[NS] +
+      (RING ? "  (RING)" : "");
+    var cu = el("div", "c", host);
+    el("div", "k", cu).textContent = "UNCOMMITTED UPLOAD";
+    el("div", "v " + (UP.applied.length ? "ld" : "no"), cu).textContent =
+      UP.applied.length ? UP.applied.length + " TABLE" + (UP.applied.length > 1 ? "S" : "") : "NONE";
+    el("div", "s", cu).textContent = DATA_DIRTY
+      ? "The file you download from the export tab will carry this."
+      : "Downloads still carry the data this page was built with.";
+  }
+
+  function upReset() {
+    UP.wb = null; UP.fileName = ""; UP.rows = []; UP.results = {}; UP.applied = [];
+    q("#upSheets").textContent = "";
+    q("#upReport").textContent = "";
+    q("#upBtns").style.display = "none";
+    q("#upApplyRow").style.display = "none";
+  }
+
+  q("#upFile").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    upReset();
+    if (!f) return;
+    if (!/\.xlsx$/i.test(f.name)) {
+      upMsg(f.name + " is not an .xlsx workbook. The old binary .xls format cannot be read here.", true);
+      return;
+    }
+    if (!window.L7_UPLOAD || !window.L7_UPLOAD.needs) {
+      upMsg("This browser cannot decompress the workbook (DecompressionStream is missing).", true);
+      return;
+    }
+    upMsg("Reading " + f.name + " \u2026");
+    var fr = new FileReader();
+    fr.onerror = function () { upReset(); upMsg("Could not read that file.", true); };
+    fr.onload = function () {
+      window.L7_UPLOAD.readWorkbook(fr.result).then(function (wb) {
+        UP.wb = wb; UP.fileName = f.name;
+        UP.rows = wb.sheets.map(function (sh, i) {
+          var g = window.L7_UPLOAD.guessTable(sh.name);
+          var dt = window.L7_UPLOAD.dateFromName(sh.name);
+          return { i: i, sh: sh, want: !sh.hidden, mapTo: g, guessed: !!g,
+                   validFor: dt ? dt.iso : "", dow: dt ? dt.dow : null, dowKnown: !!dt };
+        });
+        renderSheets();
+        upMsg(wb.sheets.length + " sheet" + (wb.sheets.length > 1 ? "s" : "") + " in " + f.name
+          + (wb.hiddenSheets ? ", " + wb.hiddenSheets + " hidden and skipped" : "")
+          + ". Tick the sheets to extract and check the timetable each maps to.");
+      }, function (e) {
+        upReset();
+        upMsg("Could not read that workbook: " + e.message, true);
+      });
+    };
+    fr.readAsArrayBuffer(f);
+  });
+
+  function renderSheets() {
+    var host = q("#upSheets"); host.textContent = "";
+    /* Two passes, so a name the engine recognised is never displaced by an
+       earlier unhelpful name. Pass 1 reserves what the sheet names claim.
+       Pass 2 hands the rest a free timetable in workbook order, because leaving
+       a sheet unmapped means it is silently not extracted -- a workbook called
+       Sheet1/Sheet2/Sheet3 would otherwise load one timetable and look fine. */
+    var taken = {};
+    UP.rows.forEach(function (r) {
+      if (!r.sh.hidden && r.mapTo) taken[r.mapTo] = true;
+    });
+    var free = DATA.order.filter(function (id) { return !taken[id]; });
+    UP.rows.forEach(function (r) {
+      if (r.sh.hidden || r.mapTo) return;
+      if (!free.length) return;
+      r.mapTo = free.shift();
+      r.defaulted = true;        // a stand-in, not a reading of the name
+    });
+    UP.rows.forEach(function (r) {
+      var box = el("div", "upsheet", host), top = el("div", "top", box);
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = r.want; cb.disabled = !!r.sh.hidden;
+      cb.addEventListener("change", function () { r.want = this.checked; });
+      top.appendChild(cb);
+      el("span", "nm", top).textContent = r.sh.name;
+      if (r.sh.hidden) el("span", "tag hid", top).textContent = "HIDDEN - NOT READ";
+      else el("span", "tag", top).textContent = Math.round((r.sh.xmlBytes || 0) / 1024) + " KB XML";
+
+      var f1 = el("div", "fld", top);
+      el("label", "", f1).textContent = "MAPS TO";
+      var sel = document.createElement("select");
+      var o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = "-- do not extract --";
+      sel.appendChild(o0);
+      DATA.order.forEach(function (id) {
+        var o = document.createElement("option");
+        o.value = id;
+        o.textContent = ((CONF.tables[id] || {}).label || id.toUpperCase())
+          + (DATA.tables[id] && DATA.tables[id].loaded ? "  (has data)" : "");
+        sel.appendChild(o);
+      });
+      sel.value = r.mapTo || "";
+      sel.addEventListener("change", function () { r.mapTo = this.value; renderSheets(); });
+      f1.appendChild(sel);
+      if (r.mapTo && r.defaulted) {
+        el("span", "tag guess bad", top).textContent = "DEFAULTED - CHECK";
+      } else if (r.mapTo && r.guessed) {
+        el("span", "tag guess", top).textContent = "GUESSED";
+      }
+
+      var f2 = el("div", "fld", top);
+      el("label", "", f2).textContent = "VALID FROM";
+      var din = document.createElement("input");
+      din.type = "date"; din.value = r.validFor; din.disabled = !!r.sh.hidden;
+      din.addEventListener("change", function () {
+        r.validFor = this.value;
+        var dt = isoDate(this.value);
+        r.dowKnown = !!dt; r.dow = dt ? dt.getDay() : null;
+        renderSheets();
+      });
+      f2.appendChild(din);
+      if (r.dowKnown) el("span", "tag", top).textContent = DOW_NAME[r.dow];
+
+      el("div", "sub", box).textContent = r.sh.path
+        + (r.dowKnown ? "  \u00b7  day taken from this date, both fields are editable" : "");
+      if (r.sh.skipped) el("div", "sub", box).textContent = "SKIPPED: " + r.sh.skipped;
+    });
+    var unplaced = UP.rows.filter(function (r) { return !r.sh.hidden && !r.mapTo; });
+    if (unplaced.length) {
+      /* All four timetables are claimed, so these sheets cannot be loaded.
+         Say so rather than leaving the admin to wonder why they went missing. */
+      var n = el("div", "sub", host);
+      n.style.color = "var(--amber)";
+      n.textContent = unplaced.length + " sheet" + (unplaced.length > 1 ? "s" : "")
+        + " cannot be loaded because all four timetables are already taken: "
+        + unplaced.map(function (r) { return r.sh.name; }).join(", ")
+        + ". Rename a sheet or move one to -- do not extract --.";
+    }
+    q("#upBtns").style.display = UP.rows.length ? "flex" : "none";
+  }
+
+  function upExtract() {
+    var U = window.L7_UPLOAD;
+    var todo = UP.rows.filter(function (r) { return r.want && !r.sh.hidden && r.sh.cells && r.mapTo; });
+    if (!todo.length) { upMsg("Tick at least one readable sheet and give it a timetable.", true); return; }
+    var seen = {}, clash = null;
+    todo.forEach(function (r) { if (seen[r.mapTo]) clash = r.mapTo; seen[r.mapTo] = true; });
+    if (clash) {
+      upMsg("More than one sheet is mapped to " + clash.toUpperCase()
+        + ". Each timetable takes exactly one sheet.", true);
+      return;
+    }
+    UP.results = {};
+    todo.forEach(function (r) {
+      var res;
+      try {
+        var d = U.buildFromCells(r.sh.cells);
+        var w = U.windowOf(d);
+        if (!w) throw new Error("no trip had enough usable stop times to be a working timetable");
+        res = { ok: true, d: d, w: w, r: r };
+      } catch (e) {
+        res = { ok: false, err: e.message, r: r };
+      }
+      UP.results[r.i] = res;
+    });
+    renderReport();
+    var bad = Object.keys(UP.results).filter(function (k) { return !UP.results[k].ok; }).length;
+    upMsg(bad ? (bad + " sheet" + (bad > 1 ? "s" : "") + " could not be read - see the reports.")
+              : "Extracted. Read each report before applying.");
+  }
+  q("#upExtract").addEventListener("click", upExtract);
+  q("#upAll").addEventListener("click", function () {
+    UP.rows.forEach(function (r) { if (!r.sh.hidden) r.want = true; }); renderSheets();
+  });
+  q("#upNone").addEventListener("click", function () {
+    UP.rows.forEach(function (r) { r.want = false; }); renderSheets();
+  });
+
+  /* Validate the WHOLE selection before a single byte of DATA changes. The
+     station list is shared by every timetable in the file, so:
+       - every imported sheet must agree on one station list; if two disagree
+         the upload cannot be applied at all, because one of them would be
+         drawn against the other's stations;
+       - if that shared list differs from the one in force, every loaded
+         timetable that this upload does NOT replace is indexed against the old
+         list and must be explicitly unloaded by the admin.
+     Returns a plan; nothing here mutates DATA or CONF. upApply() is the only
+     place that commits, and it commits only after this reports no problems. */
+  function stageApply() {
+    var plan = {
+      ok: [], problems: [], newStops: null, corridorChanged: false,
+      mismatched: [], replaced: {}, incompatible: []
+    };
+    Object.keys(UP.results).forEach(function (k) {
+      var res = UP.results[k];
+      if (!res.ok) return;
+      plan.ok.push(res);
+      plan.replaced[res.r.mapTo] = true;
+    });
+    if (!plan.ok.length) { plan.problems.push("No sheet was read successfully."); return plan; }
+    plan.newStops = plan.ok[0].d.stops;
+    plan.ok.forEach(function (res) {
+      if (stopsDiffer(res.d.stops, plan.newStops)) plan.mismatched.push(res.r.sh.name);
+    });
+    if (plan.mismatched.length) {
+      plan.problems.push("The selected sheets do not all use the same station list: "
+        + plan.mismatched.join(", ") + (plan.mismatched.length > 1 ? " disagree" : " disagrees")
+        + " with " + plan.ok[0].r.sh.name + ". Every timetable in one file must share a single "
+        + "station list, so nothing was applied.");
+      return plan;
+    }
+    plan.corridorChanged = stopsDiffer(plan.newStops, DATA.meta.corridor);
+    if (plan.corridorChanged) {
+      DATA.order.forEach(function (id) {
+        var t = DATA.tables[id];
+        if (!t || !t.loaded) return;
+        if (plan.replaced[id]) return;
+        var eff = t.stops || DATA.meta.corridor;
+        if (stopsDiffer(eff, plan.newStops)) plan.incompatible.push(id);
+      });
+    }
+    return plan;
+  }
+
+  /* APPLY stays disabled until the corridor acknowledgement is ticked and every
+     incompatible loaded timetable has been explicitly marked for unloading. */
+  function syncApplyGate() {
+    var btn = q("#upApply"), plan = UP.plan;
+    if (plan && plan.problems && plan.problems.length) { btn.disabled = true; return; }
+    if (plan && !plan.corridorChanged) { btn.disabled = false; return; }
+    if (!q("#upCorridorAck").checked) { btn.disabled = true; return; }
+    var boxes = q("#upCorridorExcl").querySelectorAll("input[type=checkbox]");
+    for (var i = 0; i < boxes.length; i++) {
+      if (!boxes[i].checked) { btn.disabled = true; return; }
+    }
+    btn.disabled = false;
+  }
+
+  function renderReport() {
+    var U = window.L7_UPLOAD, host = q("#upReport");
+    host.textContent = "";
+    var keys = Object.keys(UP.results);
+    if (!keys.length) return;
+    var anyOk = false;
+
+    keys.forEach(function (k) {
+      var res = UP.results[k], r = res.r;
+      var card = el("div", "upcard" + (res.ok ? "" : " bad"), host);
+      var hd = el("div", "hd", card);
+      el("b", "", hd).textContent = r.sh.name;
+      el("span", "arrow", hd).textContent = "\u2192";
+      el("b", "", hd).textContent = ((CONF.tables[r.mapTo] || {}).label || r.mapTo.toUpperCase());
+
+      if (!res.ok) {
+        var wf = el("div", "warns", card);
+        el("div", "", wf).textContent = "EXTRACTION FAILED: " + res.err;
+        return;
+      }
+      anyOk = true;
+      var d = res.d, st = d._stats;
+      var diff = stopsDiffer(d.stops, DATA.meta.corridor);
+
+      var stats = el("div", "stats", card);
+      function stat(label, val, warn) {
+        var e = el("div", "", stats);
+        e.appendChild(document.createTextNode(label));
+        var b = document.createElement("b");
+        b.textContent = val;
+        if (warn) b.className = "warnv";
+        e.appendChild(b);
+      }
+      stat("STATION SLOTS", d.stops.length + (d.ring ? "  RING" : "  OPEN"), !d.ring);
+      stat("SERVICES", d.dn.length + " DN + " + d.up.length, false);
+      stat("SERVICE WINDOW", hm(res.w[0]) + "-" + hms(res.w[1]), false);
+      stat("SHORT / INDUCTED", String(st.partial), st.partial > 0);
+      stat("DROPPED", String(st.dropped.length), st.dropped.length > 0);
+      stat("REPAIRED", String(st.repaired), st.repaired > 0);
+      stat("PARITY FLAGS", String(st.parity.length)
+        + (st.parity.length ? "  (" + st.parity.map(function (p) { return p[1]; }).join(",") + ")" : ""),
+        st.parity.length > 0);
+      /* Two calls booked at the same instant are a zero-second link. They are
+         legal (the real workbook has two), so they are shown for review rather
+         than corrected: nudging one time would change a working that was
+         actually published. */
+      stat("EQUAL-TIME LINKS", String(st.zero || 0), (st.zero || 0) > 0);
+
+      var svc = el("div", "svc", card);
+      [["05:30", 19800], ["07:30", 27000], ["12:00", 43200], ["18:00", 64800], ["22:00", 79200]]
+        .forEach(function (p) {
+          var sp = el("span", "", svc);
+          sp.appendChild(document.createTextNode(p[0] + "  DN "));
+          var b = document.createElement("b");
+          b.textContent = U.activeAt(d.dn, p[1]);
+          sp.appendChild(b);
+          sp.appendChild(document.createTextNode("  UP "));
+          b = document.createElement("b");
+          b.textContent = U.activeAt(d.up, p[1]);
+          sp.appendChild(b);
+        });
+
+      var w = el("div", "warns", card), add = function (t, ok) {
+        var e = el("div", ok ? "ok" : "", w);
+        e.textContent = t;
+      };
+      add("CORRIDOR: " + d.stops.slice(0, 4).join(" \u2192 ") + " \u2026 \u2192 "
+        + d.stops[d.stops.length - 1] + " (" + d.stops.length + " slots)", true);
+      if (diff) {
+        add("STATION LIST DIFFERS from the " + STOPS.length + " slots now in the file. Applying will "
+          + "replace the corridor for EVERY timetable, and all loaded timetables must use the "
+          + "same station list or trains will be drawn against the wrong stations.");
+      } else {
+        add("Station list matches the file exactly.", true);
+      }
+      if (!d.ring) add("This sheet does not close the ring, so the board will start and end at "
+        + "different stations.");
+      if (DATA.tables[r.mapTo] && DATA.tables[r.mapTo].loaded) {
+        add("REPLACES the " + (DATA.tables[r.mapTo].dn.length + DATA.tables[r.mapTo].up.length)
+          + " services currently loaded for this timetable.");
+      }
+      if (st.dropped.length) {
+        add(st.dropped.length + " column" + (st.dropped.length > 1 ? "s were" : " was")
+          + " dropped for having fewer than " + U.UPL.MIN_CELLS + " stop times.");
+      }
+      if (st.parity.length) {
+        add(st.parity.length + " trip" + (st.parity.length > 1 ? "s" : "")
+          + " break the DN/UP number parity and will be flagged amber on the board: "
+          + st.parity.map(function (p) { return p[0] + " " + p[1]; }).join(", ") + ".");
+      }
+      if (st.zero) {
+        add(st.zero + " adjacent link" + (st.zero > 1 ? "s have" : " has")
+          + " two calls at the same booked time. A zero headway is allowed and left exactly as "
+          + "booked, but it is worth confirming against the source sheet.");
+      }
+      if (!r.dowKnown) add("No valid-from date on this sheet. Set one above if the end user should "
+        + "see a WEF for it.");
+    });
+
+    q("#upApplyRow").style.display = anyOk ? "block" : "none";
+    var plan = stageApply();
+    UP.plan = plan;
+    var problemNote = q("#upApplyMsg");
+    q("#upCorridorExcl").textContent = "";
+    if (plan.problems.length) {
+      q("#upCorridorChk").style.display = "none";
+      problemNote.textContent = plan.problems.join(" ");
+      problemNote.className = "note warn";
+      syncApplyGate();
+      return;
+    }
+    problemNote.textContent = "";
+    problemNote.className = "note";
+    if (plan.corridorChanged) {
+      q("#upCorridorChk").style.display = "flex";
+      q("#upCorridorChkTxt").textContent = "I understand the station list is changing from "
+        + STOPS.length + " slots to " + plan.newStops.length
+        + " slots, and that this applies to every timetable in the file.";
+      q("#upCorridorAck").checked = false;
+      var excl = q("#upCorridorExcl");
+      plan.incompatible.forEach(function (id) {
+        var old = DATA.tables[id].stops;
+        var lab = el("label", "chk", excl);
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.setAttribute("data-unload", id);
+        lab.appendChild(cb);
+        var sp = document.createElement("span");
+        sp.textContent = "UNLOAD " + lbl(id) + " - it was built against the old "
+          + (old ? old.length : STOPS.length) + "-slot station list and cannot stay.";
+        lab.appendChild(sp);
+        cb.addEventListener("change", syncApplyGate);
+      });
+    } else {
+      q("#upCorridorChk").style.display = "none";
+    }
+    syncApplyGate();
+  }
+  q("#upCorridorAck").addEventListener("change", syncApplyGate);
+
+  q("#upApply").addEventListener("click", function () {
+    /* Re-validate at commit time: the page may have sat on the report, and this
+       is the only path that touches DATA. Nothing below runs unless the whole
+       selection passed staging. */
+    var plan = stageApply();
+    if (plan.problems.length) { upMsg(plan.problems.join(" "), true); return; }
+
+    /* Exclusions first, each one explicitly ticked by the admin. */
+    var unloaded = [], boxes = q("#upCorridorExcl").querySelectorAll("input[data-unload]");
+    for (var b = 0; b < boxes.length; b++) {
+      if (!boxes[b].checked) continue;
+      var uid = boxes[b].getAttribute("data-unload");
+      DATA.tables[uid] = { loaded: false, label: (CONF.tables[uid] || {}).label || uid.toUpperCase() };
+      if (CONF.tables[uid]) CONF.tables[uid].loaded = false;
+      unloaded.push(uid);
+    }
+
+    var applied = [], wefSet = [];
+    plan.ok.forEach(function (res) {
+      var r = res.r;
+      DATA.tables[r.mapTo] = {
+        loaded: true,
+        label: (CONF.tables[r.mapTo] || {}).label || r.mapTo.toUpperCase(),
+        sheet: r.sh.name,
+        validFor: r.validFor || "",
+        dow: r.dowKnown ? r.dow : -1,
+        window: res.w,
+        dn: res.d.dn,
+        up: res.d.up,
+        stops: res.d.stops
+      };
+      if (CONF.tables[r.mapTo]) {
+        var ct = CONF.tables[r.mapTo];
+        ct.loaded = true;
+        /* The end user reads WEF from metadata, not from the data block, so
+           without this an uploaded Saturday sheet announces itself as
+           "NO WEF SET". Only fill a blank one -- never overwrite a WEF that
+           was set deliberately, and only when the sheet name really did carry
+           a readable date. */
+        if (!ct.wef && r.dowKnown && r.validFor) {
+          ct.wef = r.validFor;
+          wefSet.push(r.mapTo);
+        }
+      }
+      applied.push(r.mapTo);
+    });
+    DATA.meta.corridor = plan.newStops;
+    DATA_DIRTY = true;
+    UP.applied = applied;
+    refreshDerived();
+    q("#upApplyRow").style.display = "none";
+    q("#upCorridorExcl").textContent = "";
+    renderUpNow(); renderMeta(); renderExp();
+    q("#upApplyMsg").textContent = "";
+    upMsg("Applied " + applied.map(function (x) { return x.toUpperCase(); }).join(" + ")
+      + " from " + UP.fileName
+      + (unloaded.length
+          ? ". Unloaded " + unloaded.map(function (x) { return x.toUpperCase(); }).join(", ")
+            + " because the station list changed."
+          : "")
+      + (wefSet.length
+          ? ". WEF set to the sheet date for " + wefSet.map(function (x) { return x.toUpperCase(); }).join(", ")
+            + " -- check it on the metadata tab."
+          : ".")
+      + " Now build the end-user file on the export tab.");
+  });
+
+  q("#upRevert").addEventListener("click", function () {
+    DATA = JSON.parse(JSON.stringify(DATA_BUILTIN));
+    DATA_DIRTY = false;
+    UP.applied = []; UP.results = {}; UP.plan = null;
+    DATA.order.forEach(function (id) {
+      if (CONF.tables[id]) CONF.tables[id].loaded = !!(DATA.tables[id] && DATA.tables[id].loaded);
+    });
+    refreshDerived();
+    q("#upReport").textContent = "";
+    q("#upApplyRow").style.display = "none";
+    q("#upCorridorExcl").textContent = "";
+    renderUpNow(); renderMeta(); renderExp();
+    upMsg("Upload discarded. Downloads carry the data this page was built with again.");
+  });
+
+  /* ================= export =================
+     The exported file is a promise to the end user, so it is checked before it
+     is handed over, not after. Four failures are possible and all four are
+     silent if you only look at the file size:
+       1. a build marker is left unreplaced, so the file ships a comment where
+          its data or stylesheet should be;
+       2. the metadata or data literal parses but is not the content we meant
+          to ship;
+       3. the programme points at a timetable that does not exist;
+       4. the payload fails the viewer's own boot-time schema guard.
+     (1)-(3) are static and run whenever the export tab is shown. (4) needs the
+     viewer to actually execute, so it runs in a hidden iframe before the
+     download. */
+  function validateProgram(list) {
+    var P = list || progList(), problems = [], i, j;
+    P.forEach(function (e) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || "")) {
+        problems.push("programme date " + e.date + " is not YYYY-MM-DD");
+        return;
+      }
+      if (!CONF.tables[e.table])
+        problems.push("programme entry " + e.date + " points at unknown timetable " + e.table);
+      if (!DATA.tables[e.table])
+        problems.push("programme entry " + e.date + " points at timetable " + e.table +
+          ", which is not in the data block");
+    });
+    /* Same-specificity conflicts are checked pairwise, so an exact date and an
+       annual recurrence that share a calendar day are not mistaken for a
+       duplicate: they are different rules and the exact one is the more
+       specific. Two rules of the SAME specificity on one day are the real
+       defect, and are reported rather than resolved by table id. */
+    for (i = 0; i < P.length; i++) {
+      for (j = i + 1; j < P.length; j++) {
+        if (!!P[i].annual !== !!P[j].annual) continue;
+        var same = P[i].annual ? P[i].date.slice(5) === P[j].date.slice(5)
+                               : P[i].date === P[j].date;
+        if (!same) continue;
+        problems.push(P[i].annual
+          ? "two annual programme entries cover " + P[i].date.slice(5)
+            + " (" + P[i].table + ", " + P[j].table + ")"
+          : "two exact programme entries share " + P[i].date
+            + " (" + P[i].table + ", " + P[j].table + ")");
+      }
+    }
+    return problems;
+  }
+
+  function buildEndUser() {
+    var problems = validateProgram();
+    if (problems.length) throw new Error(problems.join("; "));
+    var mjs = "window.L7_META = " + jsScriptJson(CONF) + ";\n";
+    var re = /\/\*L7_META_START\*\/[\s\S]*?\/\*L7_META_END\*\//;
+    if (!re.test(BASE_HTML)) throw new Error("metadata markers are missing from the embedded page");
+    var out = BASE_HTML.replace(re, "/*L7_META_START*/\n" + mjs + "/*L7_META_END*/");
+    if (DATA_DIRTY) out = replaceLiteral(out, "window.L7_DATA", DATA);
+    return out;
+  }
+
+  /* Static audit of a built file. Returns a list of problems; empty means the
+     bytes are internally consistent. Nothing here executes the export. */
+  function checkBuilt(html) {
+    var problems = [];
+    /* Assembled from pieces on purpose. The build step does a literal
+       substitution of each marker, so writing them out in full here would make
+       extract.py replace THIS list as well as the real insertion point -- which
+       is exactly how a marker list turns into 240 KB of base64 and a syntax
+       error. Splitting the token keeps the list intact across a rebuild. */
+    ["/*__L7_" + "DATA__*/", "/*__L7_" + "META__*/", "/*__L7_" + "CSS__*/",
+     "/*__L7_" + "BASE__*/", "/*__L7_" + "UPLOAD__*/"].forEach(function (mk) {
+      if (html.indexOf(mk) > -1) problems.push("unreplaced build marker " + mk);
+    });
+    if (html.indexOf("window.L7_DATA = ") < 0) problems.push("window.L7_DATA is missing");
+    if (html.indexOf("window.L7_META = ") < 0) problems.push("window.L7_META is missing");
+    if (!/\/\*L7_META_START\*\//.test(html) || !/\/\*L7_META_END\*\//.test(html))
+      problems.push("metadata markers are missing from the export");
+    /* Re-parse both literals and compare them with the objects we mean to ship.
+       Parsing alone is not enough: a brace-match can land on the wrong bytes
+       and still parse, so the content has to be identical. */
+    var gotData, gotMeta;
+    try { gotData = pickLiteral(html, "window.L7_DATA"); }
+    catch (e) { problems.push("cannot re-parse window.L7_DATA: " + e.message); }
+    try { gotMeta = pickLiteral(html, "window.L7_META"); }
+    catch (e) { problems.push("cannot re-parse window.L7_META: " + e.message); }
+    if (gotData && JSON.stringify(gotData) !== JSON.stringify(DATA))
+      problems.push("embedded data does not match the data being exported");
+    if (gotMeta && JSON.stringify(gotMeta) !== JSON.stringify(CONF))
+      problems.push("embedded metadata does not match the metadata being exported");
+    return problems;
+  }
+
+  /* Run the finished file and ask it, in its own words, whether it accepted the
+     payload. The viewer publishes __L7_DATA_ERROR unconditionally and starts
+     the board only when that is null, so a hidden iframe is a real end-to-end
+     check rather than a second implementation of the guard. */
+  function verifyEndUser(html) {
+    return new Promise(function (res) {
+      var f = document.createElement("iframe");
+      f.setAttribute("aria-hidden", "true");
+      f.style.cssText = "position:absolute;left:-99999px;top:0;width:1024px;height:720px;border:0";
+      var settled = false;
+      function finish(r) {
+        if (settled) return;
+        settled = true;
+        if (f.parentNode) f.parentNode.removeChild(f);
+        res(r);
+      }
+      var guard = setTimeout(function () {
+        finish({ ok: false, why: "verification timed out" });
+      }, 6000);
+      f.onload = function () {
+        setTimeout(function () {
+          clearTimeout(guard);
+          var W;
+          try { W = f.contentWindow; }
+          catch (e) { finish({ ok: false, why: "export frame not readable: " + e.message }); return; }
+          if (!W) { finish({ ok: false, why: "export produced no window" }); return; }
+          var err = W.__L7_DATA_ERROR;
+          if (err !== null && err !== undefined) {
+            finish({ ok: false, why: "schema guard rejected the export: " + err });
+            return;
+          }
+          if (!W.__L7) { finish({ ok: false, why: "viewer did not boot (no __L7)" }); return; }
+          finish({ ok: true });
+        }, 150);
+      };
+      f.onerror = function () {
+        clearTimeout(guard);
+        finish({ ok: false, why: "export frame failed to load" });
+      };
+      f.srcdoc = html;
+      document.body.appendChild(f);
+    });
+  }
+
+  function renderExp() {
+    var tb = DATA.tables[TID] || {};
+    q("#eLoaded").textContent = LOADED.length + " of " + DATA.order.length;
+    q("#eTrips").textContent = tb.loaded ? (tb.dn.length + tb.up.length) : 0;
+    q("#eProg").textContent = progList().length;
+    q("#eStrict").checked = !!CONF.strict;
+
+    /* Metadata summary, built as nodes: labels are operator-typed text and
+       must never be parsed as markup. */
+    var host = q("#eMeta");
+    host.textContent = "";
+    DATA.order.forEach(function (id) {
+      var t = CONF.tables[id] || {};
+      el("div", "k", host).textContent = id.toUpperCase();
+      el("div", "v", host).textContent = (t.label || id.toUpperCase()) + " \u00b7 WEF " +
+        (t.wef || "not set") + (t.weto ? " to " + t.weto : "");
+    });
+    var pc = progList().length;
+    el("div", "k", host).textContent = "PROGRAMME";
+    el("div", "v", host).textContent = pc
+      ? pc + " programmed date" + (pc > 1 ? "s" : "") + ": " +
+        progList().map(function (e) {
+          return fmtD(e.date) + (e.annual ? "*" : "") + " \u2192 " + e.table;
+        }).join(", ")
+      : "none";
+
+    /* Static audit, surfaced right under the build button so a blocked export
+       is visible before the operator presses build. */
+    var audit = q("#eAudit");
+    try {
+      var html = buildEndUser();
+      var notes = checkBuilt(html);
+      q("#eSize").textContent = (html.length / 1024).toFixed(1) + " KB";
+      if (notes.length) {
+        audit.textContent = "EXPORT WILL BE BLOCKED: " + notes.join("; ");
+        audit.className = "note warn";
+      } else {
+        audit.textContent = "STATIC CHECK OK: placeholders replaced \u00b7 embedded data " +
+          "re-parsed \u00b7 " + progList().length + " programme entr" +
+          (progList().length === 1 ? "y" : "ies") +
+          " checked \u00b7 the full viewer boot check runs when you build";
+        audit.className = "note";
+      }
+    } catch (e) {
+      q("#eSize").textContent = "ERROR";
+      audit.textContent = "EXPORT WILL BE BLOCKED: " + e.message;
+      audit.className = "note warn";
+    }
+  }
+  q("#eStrict").addEventListener("change", function () {
+    CONF.strict = this.checked;
+    renderExp();
+  });
+  q("#eGo").addEventListener("click", async function () {
+    var html, problems;
+    q("#eMsg").textContent = "";
+    try { html = buildEndUser(); }
+    catch (e) { q("#eMsg").textContent = "BUILD FAILED: " + e.message; return; }
+    problems = checkBuilt(html);
+    if (problems.length) {
+      q("#eMsg").textContent = "EXPORT BLOCKED: " + problems.join("; ");
+      return;
+    }
+    q("#eMsg").textContent = "Booting the exported file to verify it \u2026";
+    var check = await verifyEndUser(html);
+    if (!check.ok) {
+      q("#eMsg").textContent = "EXPORT BLOCKED: " + check.why;
+      return;
+    }
+    download("line7-timetable-timesync.html", html, "text/html");
+    q("#eMsg").textContent = "Verified and downloaded. Open it directly from disk - no server needed.";
+    q("#eFrame").srcdoc = html;
+    q("#ePrevNote").textContent =
+      "Rendered above from the exact verified bytes you just downloaded.";
+    q("#eSize").textContent = (html.length / 1024).toFixed(1) + " KB";
+  });
+  q("#eCopy").addEventListener("click", function () {
+    var txt = metaJSON();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(
+        function () { q("#eMsg").textContent = "Config JSON copied to the clipboard."; },
+        function () { q("#eMsg").textContent = "Clipboard blocked - use DOWNLOAD instead."; });
+    } else {
+      q("#eMsg").textContent = "Clipboard unavailable - use DOWNLOAD instead.";
+    }
+  });
+
+  /* ================= service gaps / headways ================= */
+  /* Slot k holds the booked times at corridor position k. The DN table walks
+     the corridor forwards, the UP table walks it backwards, so the two need
+     opposite row indices to land on the same physical station. */
+  var CALLS = {};
+  function callsFor(dir) {
+    /* Keyed by timetable AND direction. A change of timetable is a different
+       set of calls even though the direction string is the same; the cache is
+       also cleared wholesale by refreshDerived() whenever the underlying data
+       changes, so a re-upload of the same timetable id cannot reuse old calls. */
+    var key = TID + "|" + dir;
+    if (CALLS[key]) return CALLS[key];
+    var tb = DATA.tables[TID];
+    if (!tb || !tb.loaded) { CALLS[key] = []; return CALLS[key]; }
+    var trips = tb[dir], out = [], k, i;
+    for (k = 0; k <= NS; k++) out.push([]);
+    trips.forEach(function (tr) {
+      for (k = 0; k <= NS; k++) {
+        var row = dir === "dn" ? k : NS - k;
+        if (row < tr.a || row > tr.b) continue;
+        var t = tr.t[row];
+        if (t === null || t === undefined) continue;
+        out[k].push(t);
+      }
+    });
+    out.forEach(function (a) { a.sort(function (x, y) { return x - y; }); });
+    CALLS[key] = out;
+    return out;
+  }
+
+  function runGaps() {
+    if (!unlocked) return;
+    /* The selector, not the first loaded table, decides what is analysed. The
+       stats, timeline, tables, histogram and day profile all read TID, so
+       changing it here re-derives every one of them for the chosen table. */
+    var sel = q("#gTable");
+    if (sel && sel.value) TID = sel.value;
+    var tb = DATA.tables[TID];
+    if (!tb || !tb.loaded) {
+      q("#gMsg").textContent = "no service data loaded for " +
+        ((CONF.tables[TID] || {}).label || TID) + " - nothing to analyse";
+      return;
+    }
+    var dirs = q("#gDir").value === "both" ? ["dn", "up"] : [q("#gDir").value];
+    var under = Math.max(1, +q("#gUnder").value || 20) * 60;
+    var tight = Math.max(0, +q("#gTight").value || 4) * 60;
+    var t0 = performance.now();
+
+    var all = [], perStation = [], underList = [];
+    dirs.forEach(function (dir) {
+      var calls = callsFor(dir);
+      for (var k = 0; k <= NS; k++) {
+        var c = calls[k];
+        if (!c.length) continue;
+        var g = [];
+        for (var i = 1; i < c.length; i++) g.push(c[i] - c[i - 1]);
+        all = all.concat(g);
+        perStation.push({
+          k: k, dir: dir, n: c.length, g: g,
+          med: med(g), p90: pct(g, 0.9),
+          max: g.length ? Math.max.apply(null, g) : 0,
+          min: g.length ? Math.min.apply(null, g) : 0
+        });
+        g.forEach(function (v, j) {
+          if (v >= under) underList.push({ k: k, dir: dir, at: c[j], gap: v });
+        });
+      }
+    });
+    underList.sort(function (a, b) { return b.gap - a.gap; });
+
+    /* ---- headline stats ---- */
+    var worst = perStation.slice().sort(function (a, b) { return b.max - a.max; })[0];
+    var distinct = {}, nStations = 0;
+    perStation.forEach(function (r) { if (!distinct[r.k]) { distinct[r.k] = 1; nStations++; } });
+    var st = [
+      ["TRIPS ANALYSED", String(tb.dn.length + tb.up.length)],
+      ["STATIONS SERVED", String(nStations) + " of " + (NS + 1)],
+      ["STATION x DIRECTION", String(perStation.length) + " rows"],
+      ["MEDIAN HEADWAY", dur(med(all))],
+      ["MAXIMUM HEADWAY", dur(all.length ? Math.max.apply(null, all) : 0)],
+      ["UNDER-SERVED GAPS", String(underList.length)],
+      ["WORST HEADWAY AT", worst ? STOPS[worst.k] + " " + worst.dir.toUpperCase() : "-"]
+    ];
+    var gStats = q("#gStats");
+    gStats.textContent = "";
+    st.forEach(function (x) {
+      var stat = el("div", "stat", gStats);
+      el("div", "k", stat).textContent = x[0];
+      el("div", "v", stat).textContent = x[1];
+    });
+
+    /* ---- per-station timeline ---- */
+    var w0 = tb.window[0], w1 = tb.window[1], span = Math.max(1, w1 - w0);
+    var tl = q("#gTl");
+    tl.textContent = "";
+    for (var kk = 0; kk <= NS; kk++) {
+      var row = el("div", "tlrow" + (kk % 10 === 0 && kk > 0 ? " bnd" : ""), tl);
+      el("div", "n", row).textContent = STOPS[kk] + (kk % 10 === 0 && kk > 0 ? "  \u25b8" : "");
+      var lane = el("div", "t", row);
+      dirs.forEach(function (dir) {
+        var c = callsFor(dir)[kk];
+        for (var j = 0; j < c.length; j++) {
+          var nxt = j + 1 < c.length ? c[j + 1] - c[j] : null;
+          var cls = "z";
+          if (nxt !== null) {
+            if (nxt >= under * 2) cls = "r";
+            else if (nxt >= under || nxt < tight) cls = "a";
+            else cls = "g";
+          }
+          var tick = el("i", cls, lane);
+          tick.style.left = ((c[j] - w0) / span * 100).toFixed(3) + "%";
+          tick.title = dir.toUpperCase() + "  " + STOPS[kk] + "  " + hms(c[j]) +
+            (nxt === null ? "  (last call)" : "  +" + hms(nxt) + " to next");
+        }
+      });
+    }
+    var ax = el("div", "tlaxis", tl);
+    for (var t2 = Math.ceil(w0 / 7200) * 7200; t2 <= w1; t2 += 7200) {
+      var sp = el("span", "", ax);
+      sp.style.left = ((t2 - w0) / span * 100).toFixed(3) + "%";
+      sp.textContent = hm(t2);
+    }
+
+    /* ---- station headway table ---- */
+    var rows = perStation.slice().sort(function (a, b) { return b.max - a.max; });
+    var mx = rows.length ? rows[0].max : 1;
+    var gTbl = q("#gTbl");
+    gTbl.textContent = "";
+    var gTab = el("table", "", gTbl);
+    var gHead = el("thead", "", gTab);
+    var gHtr = el("tr", "", gHead);
+    ["STATION", "DIR", "CALLS", "MEDIAN", "P90", "MAX GAP", "MIN GAP", "WORST GAP"]
+      .forEach(function (label) { el("th", "", gHtr).textContent = label; });
+    var gBody = el("tbody", "", gTab);
+    rows.forEach(function (r) {
+      var tr = el("tr", "", gBody);
+      el("td", "stn", tr).textContent = STOPS[r.k];
+      el("td", r.dir + "v", tr).textContent = r.dir.toUpperCase();
+      el("td", "", tr).textContent = r.n;
+      el("td", "", tr).textContent = hms(r.med).slice(0, 5);
+      el("td", "", tr).textContent = hms(r.p90).slice(0, 5);
+      el("td", r.max >= under ? "" : "dim", tr).textContent = hms(r.max).slice(0, 5);
+      el("td", r.min < tight ? "" : "dim", tr).textContent = hms(r.min).slice(0, 5);
+      var barTd = el("td", "", tr);
+      var bar = el("div", "bar", barTd);
+      var barI = el("i", r.dir + "v", bar);
+      barI.style.width = (r.max / mx * 100).toFixed(1) + "%";
+    });
+
+    /* ---- gap histogram ---- */
+    /* BUCK[i] is the EXCLUSIVE upper bound of the interval labelled LBL[i], so
+       the two arrays stay index-aligned. Starting the bounds at 0 instead would
+       make bucket 0 empty and shift every label one to the left. */
+    var BUCK = [60, 120, 180, 240, 300, 420, 600, 900, 1800, Infinity];
+    var LBL = ["0-1", "1-2", "2-3", "3-4", "4-5", "5-7", "7-10", "10-15", "15-30", "30+"];
+    var cnt = new Array(LBL.length).fill(0);
+    all.forEach(function (v) {
+      for (var i = 0; i < BUCK.length; i++) if (v < BUCK[i]) { cnt[i]++; return; }
+    });
+    var cmax = Math.max.apply(null, cnt) || 1;
+    var gHist = q("#gHist"), gHistX = q("#gHistX");
+    gHist.textContent = "";
+    gHistX.textContent = "";
+    var csum = 0;
+    cnt.forEach(function (c, i) {
+      csum += c;
+      var cls = (BUCK[i] > under * 2) ? "hot" : (BUCK[i] > under) ? "warm" : "";
+      var bar = el("div", cls ? "b " + cls : "b", gHist);
+      bar.title = LBL[i] + " min: " + c + " gaps";
+      var barI = el("i", "", bar);
+      barI.style.height = (c / cmax * 100).toFixed(1) + "%";
+      el("span", "", gHistX).textContent = LBL[i];
+    });
+    q("#gHistN").textContent = csum + " headways in " + cnt.length + " buckets";
+
+    /* ---- day profile ---- */
+    var b0 = Math.floor(w0 / 900) * 900, buckets = [];
+    for (var t3 = b0; t3 < w1; t3 += 900) buckets.push(t3);
+    var series = { dn: [], up: [] };
+    ["dn", "up"].forEach(function (dir) {
+      for (var z = 0; z < buckets.length; z++) series[dir][z] = 0;
+      DATA.tables[TID][dir].forEach(function (tr) {
+        var a = tr.t[tr.a], b = tr.t[tr.b];
+        for (var i2 = 0; i2 < buckets.length; i2++) {
+          if (buckets[i2] >= a && buckets[i2] <= b) series[dir][i2]++;
+        }
+      });
+    });
+    var dmax = 1;
+    buckets.forEach(function (_, i) { dmax = Math.max(dmax, series.dn[i], series.up[i]); });
+    var gDay = q("#gDay"), gDayX = q("#gDayX");
+    gDay.textContent = "";
+    gDayX.textContent = "";
+    buckets.forEach(function (_, i) {
+      var col = el("div", "col", gDay);
+      var dnI = el("i", "", col);
+      dnI.style.height = (series.dn[i] / dmax * 100).toFixed(1) + "%";
+      dnI.title = "DN " + series.dn[i] + " trains";
+      var upI = el("i", "", col);
+      upI.style.height = (series.up[i] / dmax * 100).toFixed(1) + "%";
+      upI.title = "UP " + series.up[i] + " trains";
+    });
+    var step = Math.max(1, Math.round(buckets.length / 10));
+    for (var i3 = 0; i3 < buckets.length; i3 += step) {
+      el("span", "", gDayX).textContent = hm(buckets[i3]);
+    }
+
+    /* ---- under-served list ---- */
+    var gUnderTbl = q("#gUnderTbl");
+    gUnderTbl.textContent = "";
+    var uTab = el("table", "", gUnderTbl);
+    var uHead = el("thead", "", uTab);
+    var uHtr = el("tr", "", uHead);
+    ["#", "STATION", "DIR", "NO SERVICE FROM", "GAP"]
+      .forEach(function (label) { el("th", "", uHtr).textContent = label; });
+    var uBody = el("tbody", "", uTab);
+    underList.slice(0, 400).forEach(function (r, i) {
+      var tr = el("tr", "", uBody);
+      el("td", "dim", tr).textContent = i + 1;
+      el("td", "stn", tr).textContent = STOPS[r.k];
+      el("td", r.dir + "v", tr).textContent = r.dir.toUpperCase();
+      el("td", "", tr).textContent = hms(r.at);
+      el("td", "", tr).textContent = hms(r.gap).slice(0, 5);
+    });
+    if (underList.length > 400) {
+      var uNote = el("div", "note", gUnderTbl);
+      uNote.style.padding = "7px 8px";
+      uNote.textContent = "showing first 400 of " + underList.length;
+    }
+
+    q("#gMsg").textContent = underList.length + " gaps over " + (under / 60) +
+      " min; computed in " + Math.round(performance.now() - t0) + " ms";
+  }
+  ["gDir", "gUnder", "gTight"].forEach(function (id) {
+    q("#" + id).addEventListener("change", runGaps);
+  });
+  /* The timetable selector is the one control that decides WHAT is analysed,
+     so changing it re-derives every gap figure rather than only repainting. */
+  q("#gTable").addEventListener("change", function () { TID = this.value; runGaps(); });
+  q("#gRun").addEventListener("click", runGaps);
+
+  /* ================= boot ================= */
+  function boot() {
+    var tb = DATA.tables[TID];
+    var tbOk = !!(tb && tb.loaded);
+    q("#hSub").textContent = (CONF.corridor || "DMRC LINE 7") + "  \u00b7  " + STOPS.length +
+      " STATION SLOTS  \u00b7  DATA EXTRACTED " + DATA.meta.built;
+    var cd = q("#cData");
+    cd.textContent = LOADED.length + " OF " + DATA.order.length + " TIMETABLES LOADED";
+    cd.className = "chip " + (LOADED.length === DATA.order.length ? "ok" : "wn");
+    q("#cRing").textContent = RING ? "RING \u00b7 " + STOPS[0] + " \u2192 " + STOPS[NS] : "OPEN LINE";
+    q("#cBuild").textContent = "BUILD " + DATA.meta.built;
+    q("#fSrc").textContent = tbOk ? "SOURCE SHEET " + tb.sheet : "NO SERVICE DATA LOADED";
+    q("#fWin").textContent = tbOk
+      ? "WINDOW " + hm(tb.window[0]) + " - " + hms(tb.window[1]) : "WINDOW -";
+    q("#fSlots").textContent = STOPS.length + " SLOTS / " + (STOPS.length - 1) + " LINKS";
+    if (Object.prototype.toString.call(CONF.program) !== "[object Array]") CONF.program = [];
+    renderMeta();
+    renderProg();
+    renderExp();
+    /* The gaps view is built lazily, but its timetable selector has to carry
+       the loaded/unloaded state from the first paint, not only after the view
+       is opened. */
+    syncGapsTable();
+    show("meta");
+  }
+
+  /* ---------------- test hook (development only) ----------------
+     Mirrors window.__L7 in the end-user page. l7-test.html uses it to reach
+     the upload engine and the export pipeline without triggering a browser
+     download, because the download path (a blob URL plus a synthetic <a>) is
+     not something a test page can observe. It exposes live references and the
+     existing builders only; no UI path calls it. The shipped end-user file is
+     built from BASE_HTML, not from this page, so the hook can never appear in
+     a viewer an operator publishes. */
+  window.__L7_ADMIN = {
+    data: function () { return DATA; },
+    conf: function () { return CONF; },
+    upload: window.L7_UPLOAD,
+    dirty: function () { return DATA_DIRTY; },
+    baseHtml: function () { return BASE_HTML; },
+    buildEndUser: buildEndUser,
+    metaJSON: metaJSON,
+    addEntry: addEntry,
+    conflictWith: conflictWith,
+    validateProgram: validateProgram,
+    progList: progList,
+    isoDate: isoDate,
+    tableOrder: function () { return DATA.order.slice(); },
+    /* Upload staging, exposed so the regression suite can prove the atomicity
+       contract: a mismatched or incomplete selection is rejected without any
+       of DATA changing. */
+    upResults: function () { return UP.results; },
+    stageApply: stageApply,
+    /* Headway view: the selector, its cache and its compute entry point are
+       exposed so the regression suite can prove the cache is keyed by table and
+       cleared when the data underneath it changes. */
+    gTable: function () { return q("#gTable"); },
+    syncGapsTable: syncGapsTable,
+    callsFor: callsFor,
+    callsCache: function () { return CALLS; },
+    runGaps: runGaps
+  };
+})();
+</script>
+</body>
+</html>

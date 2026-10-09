@@ -1,0 +1,31 @@
+{
+  "corridor": "DMRC LINE 7 - PINK CORRIDOR",
+  "authority": "",
+  "tables": {
+    "weekday": {
+      "label": "WEEKDAY",
+      "wef": "2026-09-24",
+      "weto": "",
+      "note": ""
+    },
+    "saturday": {
+      "label": "SATURDAY",
+      "wef": "",
+      "weto": "",
+      "note": "No Saturday service data supplied."
+    },
+    "sunday": {
+      "label": "SUNDAY",
+      "wef": "",
+      "weto": "",
+      "note": "No Sunday service data supplied."
+    },
+    "special": {
+      "label": "SPECIAL",
+      "wef": "",
+      "weto": "",
+      "note": "No special / holiday service data supplied."
+    }
+  },
+  "program": []
+}

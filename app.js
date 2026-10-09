@@ -168,6 +168,21 @@ function showPage(pageId) {
     }
 }
 
+// Line 7 Time Table View. The viewer and its admin console are self-contained
+// pages under timetableview/. They are large, so the frames are loaded lazily:
+// only when the user opens the page or the admin tab.
+function loadTimetableFrame(id, url) {
+    const frame = document.getElementById(id);
+    if (frame && !frame.getAttribute('src')) frame.setAttribute('src', url);
+}
+function showTimetable() {
+    loadTimetableFrame('ttViewerFrame', 'timetableview/line7-timetable-timesync.html');
+    showPage('pageTimetable');
+}
+function ensureTimetableAdmin() {
+    loadTimetableFrame('ttAdminFrame', 'timetableview/line7-timetable-admin.html');
+}
+
 function timeToMins(timeStr) {
     if (!timeStr || typeof timeStr !== 'string' || timeStr.indexOf(':') === -1) return -1;
     const parts = timeStr.split(':');
@@ -682,6 +697,7 @@ function switchAdminTab(tabName) {
     if (tabName === 'km' || tabName === 'chart') loadKmData();
     if (tabName === 'users') loadUserManagementData();
     if (tabName === 'chart') initSeriesGrid();
+    if (tabName === 'timetable') ensureTimetableAdmin();
 }
 
 // SESSION MANAGEMENT
