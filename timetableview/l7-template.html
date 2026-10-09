@@ -109,7 +109,10 @@
 /*L7_META_END*/
 </script>
 <script>
-(function () {
+/*__L7_SUPA__*/
+</script>
+<script>
+window.__L7start = function (candidateData, candidateMeta) {
   "use strict";
 
   /* ---------------- boot-time schema guard ----------------
@@ -258,6 +261,18 @@
      that protects the viewer can be run against a candidate payload without a
      second copy of the rules drifting out of step with this one. */
   window.L7_SCHEMA = schemaError;
+
+  /* Prefer the timetable the online-sync bootstrap fetched from Supabase when
+     it is structurally sound; otherwise keep the copy baked into this file. The
+     same guard used just below decides, so a bad online payload can never
+     displace a working offline one -- it is simply ignored. */
+  if (candidateData && !schemaError(candidateData, candidateMeta)) {
+    window.L7_DATA = candidateData;
+    if (candidateMeta) window.L7_META = candidateMeta;
+    window.__L7_SOURCE = "online";
+  } else {
+    window.__L7_SOURCE = "embedded";
+  }
 
   var DATA_ERR = schemaError(window.L7_DATA, window.L7_META);
   /* Published unconditionally, including when it is null, so a test can assert
@@ -1297,6 +1312,45 @@
       return tt;
     }
   };
+};
+/* ---------------- online sync ----------------
+   Supabase is the source of truth when it is reachable. The board still boots
+   from the payload baked into this file -- that is what lets it open from disk
+   with no network -- but when window.L7_SUPA is configured, over http(s), and a
+   current row exists, that row is preferred instead. Any failure (offline, no
+   table yet, schema mismatch) falls back to the baked-in copy, so the file is
+   never worse off for trying. */
+(function () {
+  var cfg = window.L7_SUPA;
+  function boot(d, m) { window.__L7start(d, m); }
+  var offline = !!window.__L7_NO_SYNC;
+  try { offline = offline || location.protocol === "file:"; } catch (e) {}
+  if (!cfg || !cfg.url || !window.fetch || offline) { boot(); return; }
+  var done = false;
+  /* Cap the wait: if Supabase does not answer quickly, show the baked-in board
+     rather than leave the operator staring at a blank page. */
+  var timer = setTimeout(function () { if (!done) { done = true; boot(); } }, 1500);
+  var url = String(cfg.url).replace(/\/+$/, "") + "/rest/v1/" +
+            encodeURIComponent(cfg.table || "l7_timetable") +
+            "?is_current=eq.true&select=data,meta&limit=1";
+  try {
+    fetch(url, { headers: {
+        apikey: cfg.anonKey || "",
+        Authorization: "Bearer " + (cfg.anonKey || "")
+      } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (rows) {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        var row = rows && rows[0];
+        boot(row && row.data, row && row.meta);
+      })
+      .catch(function () {
+        if (!done) { done = true; clearTimeout(timer); boot(); }
+      });
+  } catch (e) {
+    if (!done) { done = true; clearTimeout(timer); boot(); }
+  }
 })();
 </script>
 </body>

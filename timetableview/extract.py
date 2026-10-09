@@ -43,6 +43,8 @@ UPLOAD_MARKER = "/*__L7_UPLOAD__*/"
 UPLOAD_JS = os.path.join(HERE, "l7-upload.js")
 CSS_MARKER = "/*__L7_CSS__*/"
 STYLE_CSS = os.path.join(HERE, "style.css")
+SUPA_MARKER = "/*__L7_SUPA__*/"
+SUPA_JSON = os.path.join(HERE, "l7-supa.json")
 
 # Timetable registry. The source workbook holds exactly ONE timetable
 # (sheet 07WDC09_24092026 = Thursday 24-Sep-2026), so saturday / sunday /
@@ -143,6 +145,33 @@ def clean_program(raw, tables):
         out.append({"date": d, "table": t, "annual": annual})
     out.sort(key=lambda x: (x["date"], x["table"]))
     return out
+
+
+def load_supa():
+    """Optional online-sync config from l7-supa.json.
+
+    When the file is absent or malformed the generated pages carry
+    window.L7_SUPA = null and stay fully offline, exactly as before. When it is
+    present the endpoint it names is the ONLY external host the build gate will
+    tolerate; every other URL still fails the build.
+    """
+    if not os.path.exists(SUPA_JSON):
+        return None
+    try:
+        with io.open(SUPA_JSON, encoding="utf8") as fh:
+            cfg = json.load(fh)
+    except Exception as exc:
+        print("WARNING: %s is unreadable (%s), online sync disabled"
+              % (SUPA_JSON, exc))
+        return None
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("url"), str) or not cfg["url"].strip():
+        return None
+    return {
+        "url": cfg["url"].strip().rstrip("/"),
+        "anonKey": str(cfg.get("anonKey") or ""),
+        "table": str(cfg.get("table") or "l7_timetable"),
+    }
+
 
 FIRST_COL = 3           # C -- column A holds labels, B is a spacer
 LAST_COL = 194          # GL -- real data stops here
@@ -426,9 +455,17 @@ def main():
     with io.open(os.path.join(HERE, "l7-meta.js"), "w", encoding="utf8") as fh:
         fh.write(mjs)
 
+    supa = load_supa()
+    supa_js = ("window.L7_SUPA = " + js_literal(supa) + ";\n" if supa
+               else "window.L7_SUPA = null;\n")
+    if supa:
+        print("online sync: enabled -> %s (table %s)" % (supa["url"], supa["table"]))
+    else:
+        print("online sync: not configured (builds stay fully offline)")
+
     tpl = io.open(TEMPLATE, encoding="ascii").read()
     for mk, what in ((MARKER, "L7_DATA"), (META_MARKER, "L7_META"),
-                     (CSS_MARKER, "L7_CSS")):
+                     (CSS_MARKER, "L7_CSS"), (SUPA_MARKER, "L7_SUPA")):
         if mk not in tpl:
             raise SystemExit("template is missing the %s marker (%s)" % (mk, what))
 
@@ -456,7 +493,7 @@ def main():
           % (len(css.splitlines()), len(css_all.splitlines()) - len(css.splitlines())))
 
     html = (tpl.replace(MARKER, js, 1).replace(META_MARKER, mjs, 1)
-               .replace(CSS_MARKER, css, 1))
+               .replace(CSS_MARKER, css, 1).replace(SUPA_MARKER, supa_js, 1))
     with io.open(OUT_HTML, "w", encoding="utf8") as fh:
         fh.write(html)
     print("\nwrote %s  (%.1f KB)" % (OUT_HTML, os.path.getsize(OUT_HTML) / 1024.0))
@@ -479,6 +516,8 @@ def main():
     atpl = io.open(ADMIN_TEMPLATE, encoding="ascii").read()
     if BASE_MARKER not in atpl:
         raise SystemExit("admin template is missing the %s marker" % BASE_MARKER)
+    if SUPA_MARKER not in atpl:
+        raise SystemExit("admin template is missing the %s marker" % SUPA_MARKER)
 
     # The upload engine lives in its own file so it can be gated on its own and
     # so the parsing rules stay readable. It must remain dependency-free: the
@@ -491,7 +530,8 @@ def main():
     print("upload engine: %d bytes, self-contained" % len(engine))
 
     b64 = base64.b64encode(html.encode("utf8")).decode("ascii")
-    ahtml = atpl.replace(UPLOAD_MARKER, engine, 1).replace(BASE_MARKER, b64, 1)
+    ahtml = (atpl.replace(UPLOAD_MARKER, engine, 1).replace(BASE_MARKER, b64, 1)
+                  .replace(SUPA_MARKER, supa_js, 1))
     with io.open(OUT_ADMIN, "w", encoding="utf8") as fh:
         fh.write(ahtml)
     print("wrote %s  (%.1f KB)" % (OUT_ADMIN, os.path.getsize(OUT_ADMIN) / 1024.0))
@@ -508,6 +548,13 @@ def gate(path):
         # to be recognised by the assignment it sits in and blanked, not by
         # splitting on a marker that is no longer there.
         html = re.sub(r'window\.L7_BASE = "[^"]*";', 'window.L7_BASE = "";', html)
+    # Online sync (if configured) names exactly one permitted host. Blank it
+    # before the network scan so the endpoint passes while every other external
+    # URL still fails the gate.
+    supa = load_supa()
+    if supa:
+        for token in (supa["url"], supa["url"].replace("https://", "http://", 1)):
+            html = html.replace(token, "SUPA_ENDPOINT")
     problems = []
 
     for pat, why in ((r"https?://", "external URL"),
@@ -529,7 +576,9 @@ def gate(path):
         for p in problems[:20]:
             print("   " + p)
         raise SystemExit(1)
-    print("gate       : OK  (self-contained, no ATS branding)")
+    print("gate       : OK  (self-contained; %s, no ATS branding)"
+          % ("only the configured sync endpoint is external"
+             if load_supa() else "no network"))
 
 
 if __name__ == "__main__":

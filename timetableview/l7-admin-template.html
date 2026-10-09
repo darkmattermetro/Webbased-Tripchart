@@ -432,10 +432,10 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
     <section class="view" id="v-exp">
       <h2 class="vt">EXPORT END-USER FILE</h2>
       <p class="note" style="max-width:940px">The admin console rebuilds the end-user page with the
-        metadata above baked in, then hands you the file. This is deliberately the <b>only</b> update
-        path: a shared-storage overlay would silently fail when the page is opened straight from disk,
-        because browsers block local storage for <span style="color:var(--text)">file://</span> pages.
-        One mechanism that works everywhere beats two where one is unreliable.</p>
+        metadata above baked in, then hands you the file. That file still opens straight from disk
+        with no network. When this build is configured with online sync, you can also
+        <b>publish it to Supabase</b>, and every end-user viewer that is online picks it up with no
+        redeploy &mdash; the copy baked into the file stays as the offline fallback.</p>
       <div class="hr"></div>
       <div class="exportbox">
         <div class="stat"><div class="k">TIMETABLES WITH DATA</div><div class="v" id="eLoaded">--</div></div>
@@ -459,6 +459,10 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
         <button id="eCopy">COPY CONFIG JSON</button>
         <span class="note" id="eMsg"></span>
       </div>
+      <div class="rowb" id="ePubRow">
+        <button class="go" id="ePub">PUBLISH ONLINE (SUPABASE)</button>
+        <span class="note" id="ePubMsg"></span>
+      </div>
       <div class="note" id="eAudit" style="margin-top:6px"></div>
       <h3 class="st">PREVIEW</h3>
       <p class="note" id="ePrevNote">Press build to render the file exactly as the end user will see it.</p>
@@ -478,6 +482,9 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
 <div id="tip"></div>
 <script>
 window.L7_BASE = "/*__L7_BASE__*/";
+</script>
+<script>
+/*__L7_SUPA__*/
 </script>
 <script>
 (function () {
@@ -1734,6 +1741,68 @@ window.L7_BASE = "/*__L7_BASE__*/";
     }
   });
 
+  /* ================= online publishing (Supabase) =================
+     Writes the current build to public.l7_timetable as the single is_current
+     row. The end-user viewer reads that row at runtime and falls back to its own
+     baked-in copy whenever the request fails, so publishing is an accelerator,
+     never a dependency. No-ops cleanly when the build has no sync config. */
+  function supaConfig() {
+    var c = window.L7_SUPA;
+    if (!c || !c.url || !c.anonKey) return null;
+    return c;
+  }
+  function supaHeaders() {
+    var c = supaConfig();
+    return {
+      apikey: c.anonKey,
+      Authorization: "Bearer " + c.anonKey,
+      "Content-Type": "application/json"
+    };
+  }
+  function isoDateOrNull(s) {
+    return (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s)) ? s : null;
+  }
+  function publishPayload() {
+    var loaded = DATA.order.filter(function (id) { return DATA.tables[id].loaded; });
+    var first = DATA.tables[loaded[0]] || {};
+    return {
+      p_version: new Date().toISOString(),
+      p_source: DATA.meta.source || "",
+      p_valid_for: isoDateOrNull(first.validFor || DATA.meta.validFor),
+      p_label: first.label || "",
+      p_data: DATA,
+      p_meta: JSON.parse(metaJSON()),
+      p_by: null
+    };
+  }
+  async function publishOnline() {
+    var box = q("#ePubMsg");
+    if (!supaConfig()) {
+      if (box) box.textContent = "Online sync is not configured in this build.";
+      return null;
+    }
+    var body = publishPayload();
+    if (box) box.textContent = "Publishing " + body.p_version + " \u2026";
+    try {
+      var r = await fetch(supaConfig().url.replace(/\/+$/, "") + "/rest/v1/rpc/l7_publish", {
+        method: "POST", headers: supaHeaders(), body: JSON.stringify(body)
+      });
+      var txt = await r.text();
+      if (!r.ok) {
+        if (box) box.textContent = "PUBLISH FAILED (" + r.status + "): " + txt.slice(0, 200);
+        return null;
+      }
+      var id = null;
+      try { id = JSON.parse(txt); } catch (e) {}
+      if (box) box.textContent = "Published online." + (id != null ? " Build #" + id + "." : "");
+      return id;
+    } catch (e) {
+      if (box) box.textContent = "PUBLISH FAILED: " + e.message;
+      return null;
+    }
+  }
+  q("#ePub").addEventListener("click", function () { publishOnline(); });
+
   /* ================= service gaps / headways ================= */
   /* Slot k holds the booked times at corridor position k. The DN table walks
      the corridor forwards, the UP table walks it backwards, so the two need
@@ -2035,7 +2104,11 @@ window.L7_BASE = "/*__L7_BASE__*/";
     syncGapsTable: syncGapsTable,
     callsFor: callsFor,
     callsCache: function () { return CALLS; },
-    runGaps: runGaps
+    runGaps: runGaps,
+    /* Online publish, exposed so the regression suite can inspect the exact
+       payload without a live network round-trip. */
+    publishPayload: publishPayload,
+    publishOnline: publishOnline
   };
 })();
 </script>

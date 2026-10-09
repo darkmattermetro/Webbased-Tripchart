@@ -187,7 +187,7 @@ async function fetchText(url) {
    visible in devtools, and the suite can see whether the page subscribes to
    visibility changes. */
 var CATCH =
-  '<script>window.__ERRS=[];window.__CERR=[];window.__EVT=[];' +
+  '<script>window.__L7_NO_SYNC=1;window.__ERRS=[];window.__CERR=[];window.__EVT=[];' +
   'window.onerror=function(m){window.__ERRS.push(String(m));return true;};' +
   '(function(){var o=console.error;console.error=function(){' +
   'try{window.__CERR.push(Array.prototype.join.call(arguments," "));}catch(e){}' +
