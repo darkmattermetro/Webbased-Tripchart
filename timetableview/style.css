@@ -213,8 +213,13 @@ background:rgba(4,8,14,.9);border:1px solid currentColor;
 }
 .train.dn .duty{color:var(--dn-lt)}
 .train.up .duty{color:var(--up-lt)}
-/* no crew assigned to this rake at this time */
-.train .duty.none{color:var(--amber)}
+/* no crew assigned to this rake at this time: a filled amber badge with a dark
+   bold X reads far better at this size than amber text on the dark chip. The
+   dark border keeps it distinct from the yellow DN train beneath it. */
+.train .duty.none{
+background:var(--amber);border-color:#7c2d12;color:#231a00;
+font-weight:900;font-size:9px;padding:1px 5px;
+}
 .train.cont-up,.train.cont-down{opacity:.58}
 .cont{position:absolute;left:50%;margin-left:-5px;font-size:10px;line-height:1;font-style:normal;
     display:none;color:rgba(138,180,248,.95);pointer-events:none}
