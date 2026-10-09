@@ -684,7 +684,7 @@ function updateAdminUI(accessLevel) {
 
 function switchAdminTab(tabName) {
     const isAdmin = currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin';
-    const restrictedTabs = ['messages', 'upload', 'users', 'form'];
+    const restrictedTabs = ['messages', 'upload', 'users', 'form', 'timetable'];
     if (!isAdmin && restrictedTabs.indexOf(tabName) !== -1) {
         alert('Admin access required for this section!');
         return;

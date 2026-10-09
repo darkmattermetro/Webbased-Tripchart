@@ -5,7 +5,8 @@ Standalone, self-contained timetable viewer and admin console for the DMRC Line 
 
 This folder is embedded into the main `index.html` app (see the root `README`/project
 notes): the viewer is shown from a **Time Table View** link on the home page, and the
-admin console is available as a **Time Table** tab in the admin console.
+admin console is a **Time Table** tab in the admin console, restricted to admin-level
+users.
 
 ## Files
 
