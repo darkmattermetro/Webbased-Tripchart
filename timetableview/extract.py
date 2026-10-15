@@ -108,7 +108,7 @@ def load_meta():
     return m
 
 
-def clean_program(raw, tables):
+def clean_program(raw, tables, view="weekday"):
     """Keep only entries that can actually resolve, and say what was dropped.
 
     Ambiguity is a collision of specificity: two exact rules on one date, or two
@@ -116,6 +116,12 @@ def clean_program(raw, tables):
     here rather than left for the viewer's table-id tie-break to decide. An exact
     date and an annual recurrence that share a calendar day are different rules
     and both survive -- the exact one is the more specific and wins.
+
+    ``view`` is the service type the built page can display. Entries pointing at
+    any other service type are dropped with a message, because the viewer would
+    silently ignore them and the operator would never learn the file is dead.
+    The reserved ``hidden`` value always survives: it draws no board at all and
+    needs no table data.
     """
     out = []
     for e in (raw if isinstance(raw, list) else []):
@@ -125,8 +131,13 @@ def clean_program(raw, tables):
         if not isinstance(d, str) or not re.match(r"^\d{4}-\d{2}-\d{2}$", d):
             print("   programme: dropped %r -- date must be YYYY-MM-DD" % (d,))
             continue
-        if t not in tables:
-            print("   programme: dropped %s -> %r -- no such timetable" % (d, t))
+        if t == "hidden":
+            pass
+        elif t == view and t in tables:
+            pass
+        else:
+            print("   programme: dropped %s -> %r -- this build shows the %s service only"
+                  % (d, t, view))
             continue
         annual = bool(e.get("annual"))
         clash = None
@@ -508,6 +519,7 @@ def main():
                                            "(annually)" if e["annual"] else ""))
     else:
         print("   programme : none, the end user follows the day of the week")
+        print("               (Mon-Fri weekday; Sat and Sun are hidden automatically)")
     gate(OUT_HTML)
 
     # The admin file carries a base64 copy of the finished end-user page. That

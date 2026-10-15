@@ -4,7 +4,7 @@ Run: 2026-10-15 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**30 / 30 checks passed** — 511 assertions pass, 0 fail, 0 skip.
+**30 / 30 checks passed** — 546 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -22,7 +22,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 8 | Time engine | Dwell intervals immediately below, at, and above 300 seconds | PASS |
 | 9 | Time engine | Forward and backward time jumps | PASS |
 | 10 | Time engine | Wrap disabled, first wrap, and repeated wraps | PASS |
-| 11 | Date programming | Weekday, Saturday, and Sunday selection | PASS |
+| 11 | Date programming | Weekday auto-select, weekend hide, and a programmed hidden date | PASS |
 | 12 | Date programming | Exact-date override versus annual recurrence | PASS |
 | 13 | Date programming | Duplicate dates and unloaded target tables | PASS |
 | 14 | Date programming | Leap day and device timezone changes | PASS |
@@ -39,8 +39,8 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 25 | Performance and usability | No uncaught console errors during playback | PASS |
 | 26 | Time engine | Service clock across midnight and the after-midnight tail | PASS |
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
-| 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
-| 29 | Admin and export | Upload re-map, shifted grids, anchor tolerance, and tolerant WEF dates | PASS |
+| 28 | Service tabs | AUTO / WEEKDAY view selection and the hidden state | PASS |
+| 29 | Admin and export | Upload re-map by station name and tolerant WEF dates | PASS |
 | 30 | Admin and export | UP block on the reversed corridor and the shifted Saturday/Sunday head | PASS |
 
 ## Fixes covered by the suite
@@ -133,13 +133,52 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   disabled, so the board draws exactly as before and no chip appears. Covered by
   check 27.
 
+### Weekday-only view with hidden dates (this pass)
+
+- **The automatic rule.** `resolveTable(now)` returns `weekday` for Monday to
+  Friday and the reserved `hidden` id for Saturday and Sunday, labelled
+  `WEEKEND`. The weekend hide is unconditional: it applies even when a weekend
+  workbook has been loaded into the file, so no weekend date can put a
+  non-weekday board in front of a viewer.
+- **A hidden date.** The date programme can name `hidden` for any date. A
+  programmed entry is decided *before* the day-of-week rule, so it overrides the
+  automatic weekend hide in both directions: `hidden` on a Monday hides that
+  Monday, `weekday` on a Saturday shows the weekday board. The reason is reported
+  honestly either way (`DATE OVERRIDE` for a programme entry, `WEEKEND` for the
+  automatic rule).
+- **Hidden is a whole-board state, not a notice on a table.** `loadTable("hidden")`
+  clears the trips, `buildSections()` empties the board, the readouts report
+  `NO TIMETABLE` / `--` / `0`, the header label reads `NO TIMETABLE (HIDDEN AT
+  THE WEEKEND)` or `NO TIMETABLE (HIDDEN FOR THIS DATE)`, and the body carries
+  `nl hid`. The service clock and date keep running underneath.
+- **Two entry points, one restriction.** The console's *SHOW* dropdown offers
+  exactly **SHOW THE WEEKDAY TIMETABLE** and **HIDE THE VIEW (NO TIMETABLE)** (a
+  **HIDE TODAY** button adds today in one press), and `addEntry()` /
+  `validateProgram()` / the `l7-meta.json` import / `extract.py`'s
+  `clean_program()` all accept `weekday` and `hidden` and name the reason for
+  refusing anything else. That keeps the viewer's fallback and strict machinery
+  intact while making it impossible to author a programme this build cannot show.
+- **Leap-day check.** Check 14 used to prove the annual 29-Feb rule does not fire
+  a day early by reading 28 Feb 2027; that date is a Sunday and now hides by the
+  automatic rule, so the "does not apply on 28 Feb" assertion is pinned to
+  **28 Feb 2030** (a Wednesday) and 28 Feb 2027 is asserted to hide like any
+  other Sunday.
+- Covered by check 11 (weekend hide, programmed hide, a programme overriding the
+  weekend, hiding a weekday, clearing the programme again) and check 13 (the
+  two-choice contract, every refusal, and the export validator).
+
 ### Service tabs (this pass)
 
-- **View by service type.** The header now carries **AUTO · WEEKDAY · SATURDAY ·
-  SUNDAY · SPECIAL** tabs. **AUTO** is the default and folds away to the date
-  programme; picking a service type overrides only that client's view for the
-  session — it never rewrites the programme and is not persisted or read from the
-  URL. A green dot marks types with data in the build.
+- **Two tabs.** The header now carries **AUTO · WEEKDAY**; the SATURDAY, SUNDAY
+  and SPECIAL tabs are gone because the date rule never selects them on this
+  page. **AUTO** is the default and folds away to the date programme; picking a
+  service type overrides only that client's view for the session — it never
+  rewrites the programme and is not persisted or read from the URL. A green dot
+  marks types with data in the build.
+- **A tab cannot reveal a hidden day.** The date rule decides whether a board
+  exists at all; a tab only chooses *which* board is drawn. On a hidden day every
+  tab stays deselected and AUTO keeps the highlight (`HIDDEN_NOW`), because the
+  board is not showing a service type.
 - **Same honesty as a programmed date.** Picking an unloaded type falls back (or
   refuses in strict mode) and labels it `FALLBACK` / `SHOWN FOR` / `NOT LOADED`,
   so substitute service is always flagged, never silently presented.

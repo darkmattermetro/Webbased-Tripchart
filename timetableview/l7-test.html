@@ -66,7 +66,7 @@ iframe{border:0}
 
    The suite is organised around a 30-item regression checklist. Each assertion is
    tagged with the checklist item it belongs to, so the top of the page reports
-   "N / 28 checked" rather than only a raw assertion count. A checklist item is
+   "N / 30 checked" rather than only a raw assertion count. A checklist item is
    checked only when every assertion under it passes; one failure unchecks it.
    Skips are reported but do not by themselves uncheck an item. */
 
@@ -88,7 +88,7 @@ var CHECKS = [
   ["Time engine", "Forward and backward time jumps"],
   ["Time engine", "Wrap disabled, first wrap, and repeated wraps"],
 
-  ["Date programming", "Weekday, Saturday, and Sunday selection"],
+  ["Date programming", "Weekday auto-select, weekend hide, and a programmed hidden date"],
   ["Date programming", "Exact-date override versus annual recurrence"],
   ["Date programming", "Duplicate dates and unloaded target tables"],
   ["Date programming", "Leap day and device timezone changes"],
@@ -107,7 +107,7 @@ var CHECKS = [
   ["Performance and usability", "No uncaught console errors during playback"],
   ["Time engine", "Service clock across midnight and the after-midnight tail"],
   ["Duty roster", "Duty number or X shown above each train for the displayed time"],
-  ["Service tabs", "AUTO and weekday / Saturday / Sunday / Special view selection"],
+  ["Service tabs", "AUTO / WEEKDAY view selection and the hidden state"],
   ["Admin and export", "Upload re-map by station name and tolerant WEF dates"],
   ["Admin and export", "UP block on the reversed corridor and the shifted Saturday/Sunday head"]
 ];
@@ -284,6 +284,11 @@ var T = {};
 /* 1: live payload passes the guard and the board really starts. */
 T.schema = async function (W) {
   var d = W.document, L = W.__L7, g = "A. schema guard (live data)";
+  /* The board boots on the device's own date, and this view hides the whole
+     board at the weekend. Pin it onto a known weekday before asserting that
+     trips are loaded, so the suite's verdict does not depend on the day it
+     happens to be run. */
+  if (L && L.at) L.at(21600, new Date(2026, 8, 24, 12));
   C(1);
   eq(g, "guard reports no error", W.__L7_DATA_ERROR, null, "valid payload must pass silently");
   eq(g, "no banner element", d.querySelectorAll("div.dataerr").length, 0);
@@ -371,16 +376,78 @@ T.faults = async function (src) {
 T.dates = async function (W) {
   var L = W.__L7, d = W.document;
   function R(y, mo, da, h) { return L.resolveTable(new Date(y, mo, da, h === undefined ? 12 : h)); }
+  function hiddenBoard() { return d.getElementById("tblName").textContent === "NO TIMETABLE"; }
 
   C(11);
-  var g = "C. day-of-week selection";
+  var g = "C. weekday auto-select, weekend hide, and programmed hide";
   eq(g, "Thu 24 Sep 2026 -> weekday", R(2026, 8, 24).id, "weekday");
   eq(g, "Fri -> weekday", R(2026, 8, 25).id, "weekday");
   eq(g, "Mon -> weekday", R(2026, 8, 28).id, "weekday");
-  eq(g, "Sat 26 Sep 2026 -> saturday", R(2026, 8, 26).id, "saturday");
-  eq(g, "Sun 27 Sep 2026 -> sunday", R(2026, 8, 27).id, "sunday");
-  eq(g, "day-of-week path is labelled AUTO", R(2026, 8, 26).how, "AUTO");
-  eq(g, "saturday never auto-selects special", R(2026, 8, 26).id !== "special", true);
+  eq(g, "Sat 26 Sep 2026 -> hidden", R(2026, 8, 26).id, "hidden");
+  eq(g, "Sun 27 Sep 2026 -> hidden", R(2026, 8, 27).id, "hidden");
+  eq(g, "the weekday path is labelled AUTO", R(2026, 8, 24).how, "AUTO");
+  eq(g, "the weekend path is labelled WEEKEND", R(2026, 8, 26).how, "WEEKEND");
+  eq(g, "a weekend never resolves to a real timetable", R(2026, 8, 26).id !== "saturday" &&
+     R(2026, 8, 26).id !== "special", true);
+
+  /* The rule is not only a resolution: the board really goes off, whatever
+     other tables the file may happen to carry. */
+  L.setProgram([]);
+  L.setView("auto");
+  L.at(21600, new Date(2026, 8, 26, 12));           /* Saturday */
+  eq(g, "a Saturday board shows no timetable name", d.getElementById("tblName").textContent,
+     "NO TIMETABLE");
+  eq(g, "the notice title explains the weekend", d.getElementById("nlTitle").textContent,
+     "NO TIMETABLE TODAY");
+  ok(g, "the notice says the weekend is automatic",
+     /Saturday and Sunday/.test(d.getElementById("nlBody").textContent),
+     d.getElementById("nlBody").textContent);
+  ok(g, "the board is marked hidden", /\bnl\b/.test(d.body.className) &&
+     /\bhid\b/.test(d.body.className), d.body.className);
+  eq(g, "no trains are drawn on a weekend", d.querySelectorAll("#sections .train").length, 0);
+  eq(g, "the trip count reads zero", d.getElementById("fTrips").textContent, "0");
+  ok(g, "the fixed readout names the weekend rule",
+     /HIDDEN AT THE WEEKEND/.test(d.getElementById("selFixed").textContent),
+     d.getElementById("selFixed").textContent);
+  var lw = L.last();
+  eq(g, "the decision records the hidden id", lw && lw.id, "hidden");
+  eq(g, "the decision records WEEKEND", lw && lw.how, "WEEKEND");
+  eq(g, "a weekend is not reported as a fallback", !!(lw && lw.fallback), false);
+  L.at(21600, new Date(2026, 8, 27, 12));           /* Sunday */
+  eq(g, "a Sunday board is hidden too", hiddenBoard(), true);
+
+  /* An explicit programme entry is an instruction, and it is decided before the
+     automatic rule -- so the console can put a working Saturday on show. */
+  L.setProgram([{ date: "2026-09-26", table: "weekday", annual: false }]);
+  L.at(21600, new Date(2026, 8, 26, 12));
+  eq(g, "an explicit programme entry overrides the weekend hide",
+     d.getElementById("tblName").textContent, "WEEKDAY");
+  eq(g, "it is reported as a programme entry", d.getElementById("tblHow").textContent,
+     "DATE OVERRIDE");
+  L.setProgram([]);
+
+  /* The same knob in the other direction: a weekday the console hid. */
+  L.setProgram([{ date: "2026-09-24", table: "hidden", annual: false }]);
+  L.at(21600, new Date(2026, 8, 24, 12));
+  eq(g, "a programmed hidden date hides a weekday board", hiddenBoard(), true);
+  eq(g, "the notice title is the same one", d.getElementById("nlTitle").textContent,
+     "NO TIMETABLE TODAY");
+  ok(g, "the notice says the date was programmed",
+     /programmed in the administration console/i.test(d.getElementById("nlBody").textContent),
+     d.getElementById("nlBody").textContent);
+  ok(g, "the hidden date keeps the sections on the page",
+     d.querySelectorAll("#sections .sec").length > 0,
+     d.querySelectorAll("#sections .sec").length + " sections");
+  var lh = L.last();
+  eq(g, "a programmed hide is reported as a DATE OVERRIDE", lh && lh.how, "DATE OVERRIDE");
+  eq(g, "a programmed hide still resolves to the hidden id", lh && lh.id, "hidden");
+  ok(g, "the fixed readout names the programmed hide",
+     /HIDDEN FOR THIS DATE/.test(d.getElementById("selFixed").textContent),
+     d.getElementById("selFixed").textContent);
+  L.setProgram([]);
+  L.at(21600, new Date(2026, 8, 24, 12));
+  eq(g, "clearing the programme brings the board back", d.getElementById("tblName").textContent,
+     "WEEKDAY");
 
   C(12);
   g = "C. exact-date override vs annual recurrence";
@@ -452,7 +519,11 @@ T.dates = async function (W) {
   eq(g, "annual 29-Feb matches in leap year 2028", R(2028, 1, 29).how, "DATE OVERRIDE");
   eq(g, "annual 29-Feb matches in leap year 2032", R(2032, 1, 29).how, "DATE OVERRIDE");
   eq(g, "annual 29-Feb does NOT apply on 1 Mar 2027", R(2027, 2, 1).how, "AUTO");
-  eq(g, "annual 29-Feb does NOT apply on 28 Feb 2027", R(2027, 1, 28).how, "AUTO");
+  /* 28 Feb 2027 is a Sunday, so it hides by the day-of-week rule; 28 Feb 2030
+     is a Wednesday, so the automatic weekday path can be seen refusing to run
+     a 29-Feb entry on the wrong day. */
+  eq(g, "annual 29-Feb does NOT apply on 28 Feb 2030", R(2030, 1, 28).how, "AUTO");
+  eq(g, "28 Feb 2027 hides like any other Sunday", R(2027, 1, 28).id, "hidden");
   L.setProgram([]);
   /* Midnight-anchored: the matcher must read LOCAL date parts. A switch to
      toISOString() would read UTC and shift the day for a +05:30 zone, matching
@@ -467,10 +538,15 @@ T.dates = async function (W) {
      a device timezone or clock change moves. */
   [[2026, 2, 8], [2026, 8, 24], [2026, 9, 25], [2026, 11, 31]].forEach(function (dt) {
     var local = new Date(dt[0], dt[1], dt[2]).getDay();
-    var expect = local === 0 ? "sunday" : local === 6 ? "saturday" : "weekday";
+    /* The automatic rule is weekday or hidden now, so the calendar decides
+       which of those two it is -- and it must be the same for every local hour
+       of that date. */
+    var expect = (local === 0 || local === 6) ? "hidden" : "weekday";
     var same = R(dt[0], dt[1], dt[2], 0).id === R(dt[0], dt[1], dt[2], 23).id;
     eq(g, "local day stable across the whole day " + dt.join("-"), same, true);
     eq(g, "local day matches the device calendar " + dt.join("-"), R(dt[0], dt[1], dt[2]).id, expect);
+    if (expect === "hidden")
+      eq(g, "that date hides for being a weekend " + dt.join("-"), R(dt[0], dt[1], dt[2]).how, "WEEKEND");
   });
   var rolled = new Date(2027, 1, 29, 12);
   eq(g, "JS rolls 29 Feb 2027 to 1 Mar, and the viewer agrees", rolled.getDate(), 1);
@@ -614,9 +690,13 @@ T.midnight = async function (W) {
 /* 15: a build with no loaded timetable must degrade, not throw. */
 T.noTable = async function (W) {
   C(15);
-  var g = "C. no valid timetable available", d = W.document;
+  var L = W.__L7, g = "C. no valid timetable available", d = W.document;
+  /* Same reason as T.schema: the variant boots on the device date, and a
+     weekend would hide the board for a different reason than this check is
+     about. Pin it onto a weekday so "NOT LOADED" is the state under test. */
+  if (L && L.at) L.at(21600, new Date(2026, 8, 24, 12));
   eq(g, "the guard stays quiet (an unloaded table is legal)", W.__L7_DATA_ERROR, null);
-  ok(g, "the board did not throw while booting", !!W.__L7);
+  ok(g, "the board did not throw while booting", !!L);
   eq(g, "the notice reports NOT LOADED", d.getElementById("nlTitle").textContent, "NOT LOADED");
   eq(g, "no trains are drawn", d.querySelectorAll("#sections .train").length, 0);
   eq(g, "no uncaught errors", (W.__ERRS || []).length, 0, (W.__ERRS || []).join(" | "));
@@ -956,6 +1036,9 @@ T.admin = async function (WA) {
   eq(g, "the exported file's data guard is quiet", W2.__L7_DATA_ERROR, null);
   ok(g, "the exported board is visible",
      getComputedStyle(W2.document.getElementById("board")).display !== "none");
+  /* The exported file boots on the device date like every other copy, so pin it
+     to a weekday before asking whether it loaded trips. */
+  if (booted && W2.__L7 && W2.__L7.at) W2.__L7.at(21600, new Date(2026, 8, 24, 12));
   ok(g, "the exported board loaded trips", booted && W2.__L7.trips().length > 0,
      booted ? W2.__L7.trips().length + " trips" : "(not booted)");
   eq(g, "the exported file raises no uncaught errors", (W2.__ERRS || []).length, 0, (W2.__ERRS || []).join(" | "));
@@ -1199,30 +1282,61 @@ T.admin = async function (WA) {
 
   /* C13: the admin refuses to create two rules of the SAME specificity on one
      day, while allowing an exact date and an annual recurrence to share one --
-     they are different rules and the exact one is the more specific. */
+     they are different rules and the exact one is the more specific. The only
+     two choices it offers are SHOW THE WEEKDAY TIMETABLE and HIDE THE VIEW, so
+     nothing else is accepted either into the programme or into an export. */
   C(13);
   g = "F. admin date programme conflicts";
+  var progSel = doc.getElementById("prTable");
+  ok(g, "the SHOW dropdown exists", !!progSel);
+  /* The console is passphrase-gated and boot() is what renders the <select>, so
+     in this iframe the control is empty. Assert the list the dropdown is built
+     from, and additionally assert the rendered options whenever they exist. */
+  var choices = A.progChoices();
+  eq(g, "the SHOW dropdown is built from exactly two choices", choices.length, 2);
+  eq(g, "one choice is the weekday timetable", choices[0].value, "weekday");
+  eq(g, "the other choice is hiding the view", choices[1].value, "hidden");
+  ok(g, "the hiding choice is labelled for what it does",
+     /HIDE/i.test(choices[1].label), choices[1].label);
+  ok(g, "no choice names a service type the weekday-only view never shows",
+     choices.every(function (c) { return c.value === "weekday" || c.value === "hidden"; }),
+     choices.map(function (c) { return c.value; }).join(","));
+  if (progSel && progSel.options.length) {
+    eq(g, "the rendered dropdown matches the two choices", progSel.options.length, 2);
+    eq(g, "the rendered first option is the weekday choice", progSel.options[0].value, "weekday");
+    eq(g, "the rendered second option is the hide choice", progSel.options[1].value, "hidden");
+  }
   var savedProgram = JSON.stringify(A.conf().program);
   A.conf().program = [];
-  A.addEntry("2030-09-24", "saturday", false);
+  A.addEntry("2030-09-24", "weekday", false);
   eq(g, "the first exact entry is accepted", A.conf().program.length, 1);
-  A.addEntry("2031-09-24", "sunday", true);
+  A.addEntry("2031-09-24", "hidden", true);
   eq(g, "an annual rule on the same MM-DD is allowed beside the exact one", A.conf().program.length, 2);
-  A.addEntry("2030-09-24", "special", false);
+  A.addEntry("2030-09-24", "hidden", false);
   eq(g, "a second exact rule on one date is refused", A.conf().program.length, 2);
   ok(g, "the refusal explains the clash",
      /already programmed/.test(WA.document.getElementById("prErr").textContent),
      WA.document.getElementById("prErr").textContent);
-  A.addEntry("2032-09-24", "special", true);
+  A.addEntry("2032-09-24", "hidden", true);
   eq(g, "a second annual rule on one MM-DD is refused", A.conf().program.length, 2);
-  A.addEntry("2031-09-24", "sunday", true);
+  A.addEntry("2031-09-24", "hidden", true);
   eq(g, "a duplicate annual rule is refused", A.conf().program.length, 2);
-  var vp = A.validateProgram([{ date: "2034-01-01", table: "saturday", annual: false },
-                              { date: "2034-01-01", table: "special", annual: false }]);
+  A.addEntry("2033-09-24", "saturday", false);
+  eq(g, "a service type the weekday-only view never shows is refused", A.conf().program.length, 2);
+  ok(g, "the refusal says the choice was invalid",
+     /valid choice/.test(WA.document.getElementById("prErr").textContent),
+     WA.document.getElementById("prErr").textContent);
+  var vp = A.validateProgram([{ date: "2034-01-01", table: "weekday", annual: false },
+                               { date: "2034-01-01", table: "hidden", annual: false }]);
   ok(g, "the export validator rejects two exact rules on one date", vp.length > 0, vp.join("; "));
-  var vp2 = A.validateProgram([{ date: "2034-01-01", table: "saturday", annual: false },
-                               { date: "2000-01-01", table: "special", annual: true }]);
+  var vp2 = A.validateProgram([{ date: "2034-01-01", table: "hidden", annual: false },
+                                { date: "2000-01-01", table: "weekday", annual: true }]);
   eq(g, "the export validator accepts an exact plus an annual rule", vp2.length, 0, vp2.join("; "));
+  var vp3 = A.validateProgram([{ date: "2034-01-01", table: "sunday", annual: false }]);
+  ok(g, "the export validator refuses an entry for a service this build never shows",
+     vp3.length > 0, vp3.join("; "));
+  var vp4 = A.validateProgram([{ date: "2034-01-01", table: "hidden", annual: false }]);
+  eq(g, "the export validator accepts a hide entry", vp4.length, 0, vp4.join("; "));
   A.conf().program = JSON.parse(savedProgram);
 
   /* C18: operator-typed metadata is serialised into the built file's script
@@ -1272,6 +1386,9 @@ T.specials = async function (W) {
   var d = W.document, L = W.__L7, g = "F. special characters";
   ok(g, "the special-character build still boots", !!L);
   eq(g, "the guard accepts special characters in strings", W.__L7_DATA_ERROR, null);
+  /* Pin the board onto a weekday so the label under test is actually the one
+     on show -- a weekend boot would be hiding the board instead. */
+  if (L && L.at) L.at(21600, new Date(2026, 8, 24, 12));
   var label = d.getElementById("tblName");
   eq(g, "a metadata label with markup is shown literally", label.textContent, 'L<&">B');
   eq(g, "a metadata label does not create elements", label.children.length, 0);
@@ -1402,12 +1519,15 @@ T.tabs = async function (W) {
   };
 
   var btns = Array.prototype.slice.call(d.querySelectorAll("#tblTabs .tab"));
-  eq(g, "four service tabs plus AUTO", btns.length, 5);
+  eq(g, "the weekday-only view offers exactly two tabs", btns.length, 2);
+  ok(g, "the Saturday, Sunday and Special tabs are gone",
+     !tab("saturday") && !tab("sunday") && !tab("special"),
+     d.getElementById("tblTabs").textContent.trim());
   eq(g, "AUTO is the initial highlight", tab("auto").classList.contains("on"), true);
   eq(g, "weekday carries the loaded marker", tab("weekday").classList.contains("has"), true);
-  eq(g, "saturday has no loaded marker", tab("saturday").classList.contains("has"), false);
 
   /* Pinning the loaded table is a clean pick: the readouts say SELECTED. */
+  L.at(21600, new Date(2026, 8, 24, 12));
   clickTab("weekday");
   eq(g, "view() follows the click", L.view(), "weekday");
   eq(g, "the weekday tab is highlighted", tab("weekday").classList.contains("on"), true);
@@ -1417,25 +1537,25 @@ T.tabs = async function (W) {
      d.getElementById("selFixed").textContent || "(readout empty)");
   eq(g, "the how readout says MANUAL", d.getElementById("tblHow").textContent, "MANUAL");
 
-  /* Pinning an unloaded type is the same honest fallback as a programmed date:
-     the board shows weekday and the banner explains that the pick has no data. */
-  clickTab("saturday");
-  eq(g, "view() reports saturday", L.view(), "saturday");
-  ok(g, "the readout says SHOWN FOR",
-     (d.getElementById("selFixed").textContent || "").indexOf("SHOWN FOR") !== -1,
-     d.getElementById("selFixed").textContent || "(readout empty)");
-  eq(g, "the how readout says FALLBACK", d.getElementById("tblHow").textContent, "FALLBACK");
-  ok(g, "the fallback banner is open",
-     !!d.getElementById("nlTitle") &&
-       d.getElementById("nlTitle").textContent.indexOf("NOT LOADED") !== -1,
-     d.getElementById("nlTitle").textContent || "(banner closed)");
-  ok(g, "weekday services are still drawn", L.secs().length > 0, "no sections rebuilt");
+  /* A hidden day is not something a tab pick can undo: the date rule owns
+     whether the board is on at all, so the pick is accepted on the model and
+     the board stays hidden, with the highlight left on AUTO. */
+  L.at(21600, new Date(2026, 8, 26, 12));           /* Saturday */
+  eq(g, "a manual weekday pick cannot reveal a hidden weekend",
+     d.getElementById("tblName").textContent, "NO TIMETABLE");
+  eq(g, "the notice stays up on a hidden day", d.getElementById("nlTitle").textContent,
+     "NO TIMETABLE TODAY");
+  eq(g, "the weekday tab is not highlighted while hidden",
+     tab("weekday").classList.contains("on"), false);
+  eq(g, "AUTO stays highlighted while hidden", tab("auto").classList.contains("on"), true);
+  ok(g, "the board really is hidden", /\bhid\b/.test(d.body.className), d.body.className);
 
   /* AUTO folds the override away and the board follows the date rule again. */
   clickTab("auto");
   eq(g, "AUTO clears the override", L.view(), "auto");
+  L.at(21600, new Date(2026, 8, 24, 12));
   eq(g, "AUTO is highlighted again", tab("auto").classList.contains("on"), true);
-  eq(g, "saturday no longer highlighted", tab("saturday").classList.contains("on"), false);
+  eq(g, "the weekday board comes back", d.getElementById("tblName").textContent, "WEEKDAY");
 };
 
 /* ---------------- main ---------------- */

@@ -97,21 +97,64 @@ published through that feature show up without a rebuild.
 - The join is on the rake number, so it does not depend on the two datasets sharing
   station names.
 
+## Weekday-only view (availability rule)
+
+The build is a **weekday view**: the board is only drawn Monday to Friday.
+
+| Today | Board | Header reason (`tblHow`) |
+|---|---|---|
+| Mon–Fri | Weekday timetable | `AUTO` |
+| Sat / Sun | Nothing — notice **NO TIMETABLE TODAY** | `WEEKEND` |
+| Any date the console hid | Nothing — notice **NO TIMETABLE TODAY** | `DATE OVERRIDE` |
+
+The weekend hide is automatic and unconditional: it applies even when a Saturday
+or Sunday workbook has been loaded into the file, so a loaded weekend table can
+never appear on the end-user page by itself.
+
+The decision is taken in `resolveTable(now)`, in two ordered steps:
+
+1. **a programmed date matching today → `DATE OVERRIDE`.** An explicit entry is
+   an instruction, so it is decided before the day-of-week rule and can therefore
+   override the automatic weekend hide in either direction: an entry naming
+   `weekday` on a Saturday shows the weekday board, an entry naming `hidden` on a
+   Monday hides that Monday.
+2. **otherwise the day of the week → `AUTO`.** Monday–Friday = weekday,
+   Saturday/Sunday = hidden.
+
+`hidden` is a reserved value in the date programme — not a timetable. The
+administration console's **DATE PROGRAMME** *SHOW* dropdown offers exactly two
+choices, **SHOW THE WEEKDAY TIMETABLE** and **HIDE THE VIEW (NO TIMETABLE)**,
+and a **HIDE TODAY** button adds today in one press. The same restriction is
+enforced at every entry point: `addEntry()`, `validateProgram()` (which also runs
+inside the export build), the `l7-meta.json` import (dropped entries are named,
+not silently kept) and `extract.py`'s `clean_program()`, which prints a reason
+for anything that is not `weekday` or `hidden`. The reserved `hidden` value needs
+no table data, so it always survives the build.
+
+Hidden is a whole-board state, not a notice bolted onto a table: the service
+clock and date keep running, but `loadTable("hidden")` clears the trips, sections
+are emptied, the readouts report `NO TIMETABLE` / `--` / `0`, and the header
+label reads `NO TIMETABLE (HIDDEN AT THE WEEKEND)` or `NO TIMETABLE (HIDDEN FOR
+THIS DATE)`. Covered by check 11.
+
 ## Service tabs (viewer)
 
-The header shows five tabs: **AUTO**, **WEEKDAY**, **SATURDAY**, **SUNDAY** and
-**SPECIAL**. **AUTO** (the default) follows the administration's date programme —
-the same rule that picks the timetable when nobody touches a tab. Clicking a
-service type pins the board onto that type for the session: the pick never rewrites
-the date programme, nothing is read from the URL or local storage, and a reload
-starts on **AUTO** again.
+The header shows two tabs: **AUTO** and **WEEKDAY**. **AUTO** (the default)
+follows the date programme and the day of the week described above. Clicking
+**WEEKDAY** pins the board onto the weekday table for the session: the pick never
+rewrites the date programme, nothing is read from the URL or local storage, and a
+reload starts on **AUTO** again.
 
-A green dot marks service types that actually carry data in this build. Picking a
-type with no data is handled exactly like a programmed date landing on an empty
-table: the board draws the fallback services (or refuses in strict mode) and labels
-the readouts `FALLBACK` / `SHOWN FOR` / `NOT LOADED`, for all the same reasons a
-viewer must never mistake substitute service for the requested type. Covered by
-check 28.
+A tab chooses *which* timetable is drawn — it can never resurrect a day the date
+rule hides. On a hidden day every tab stays deselected and **AUTO** keeps the
+highlight, because the board is not showing a service type at all.
+
+A green dot marks a service type that actually carries data in this build (here,
+**WEEKDAY**; **AUTO** always applies). Picking a type with no data is handled
+exactly like a programmed date landing on an empty table: the board draws the
+fallback services (or refuses in strict mode) and labels the readouts
+`FALLBACK` / `SHOWN FOR` / `NOT LOADED`, for all the same reasons a viewer must
+never mistake substitute service for the requested type. Covered by check 28.
 
 ## Uploading one timetable beside another (admin)
 

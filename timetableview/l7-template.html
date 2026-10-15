@@ -47,9 +47,6 @@
       <span class="tabs" id="tblTabs" role="tablist" aria-label="Service type">
         <button type="button" class="tab" data-tbl="auto" role="tab"><i class="dot"></i>AUTO</button>
         <button type="button" class="tab" data-tbl="weekday" role="tab"><i class="dot"></i>WEEKDAY</button>
-        <button type="button" class="tab" data-tbl="saturday" role="tab"><i class="dot"></i>SATURDAY</button>
-        <button type="button" class="tab" data-tbl="sunday" role="tab"><i class="dot"></i>SUNDAY</button>
-        <button type="button" class="tab" data-tbl="special" role="tab"><i class="dot"></i>SPECIAL</button>
       </span>
     </div>
     <div class="spacer"></div>
@@ -344,6 +341,11 @@ window.__L7start = function (candidateData, candidateMeta) {
      data still falls back / refuses exactly as the date rule does. */
   var MANUAL = null;
 
+  /* Set by render() each frame: true when the date rule (weekend or a
+     programmed hide) has switched the whole board off. The tab highlight reads
+     it so AUTO stays lit on a hidden day even after a failed manual pick. */
+  var HIDDEN_NOW = false;
+
   /* ---------------- formatting ---------------- */
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
   /* A trip's times are forward-filled at build time, so a null inside a trip's
@@ -434,24 +436,32 @@ window.__L7start = function (candidateData, candidateMeta) {
   }
 
 
-  /* ---------------- which timetable is in force ----------------
-     The administration console writes the date programme into the file's
-     metadata block at export time, and the two rules below are the whole
-     automatic decision:
+  /* ---------------- which timetable is shown ----------------
+     This build is a WEEKDAY view. The administration console writes the date
+     programme into the file's metadata block at export time, and the rules
+     below are the whole automatic decision:
 
        1. a programmed date matching today  -> DATE OVERRIDE
-       2. otherwise the day of the week     -> AUTO   (SPECIAL is never auto)
+          (the entry may name the weekday table, or the reserved "hidden"
+           value that draws no board at all)
+       2. otherwise the day of the week     -> AUTO
+          (Monday to Friday = weekday; Saturday and Sunday = HIDDEN, always,
+           even when a weekend timetable has been loaded)
 
+     A programmed date is an explicit instruction, so it is decided before the
+     day-of-week rule and can therefore override the automatic weekend hide.
      The service tabs let a viewer pin the board onto a specific service type;
-     that pick never rewrites this programme, so AUTO keeps following it once
-     the pick is cleared. Nothing is read from the URL, the query string or
+     that pick chooses WHICH timetable is displayed, but it can never reveal a
+     day the rule hides. Nothing is read from the URL, the query string or
      local storage, and a pick is never persisted across a reload. */
+  var HID = "hidden";
   var PROGRAM = (function () {
     var a = CONF.program, out = [], i;
     if (Object.prototype.toString.call(a) !== "[object Array]") return out;
     for (i = 0; i < a.length; i++) {
       var e = a[i];
-      if (e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && TABLES[e.table]) {
+      if (e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) &&
+          (TABLES[e.table] || e.table === HID)) {
         out.push({ date: e.date, table: e.table, annual: !!e.annual });
       }
     }
@@ -515,8 +525,9 @@ window.__L7start = function (candidateData, candidateMeta) {
     if (pick !== null)
       return { id: pick, how: "DATE OVERRIDE", leapSkip: null };
     var dow = now.getDay();
-    var id = dow === 0 ? "sunday" : dow === 6 ? "saturday" : "weekday";
-    return { id: id, how: "AUTO", leapSkip: leapSkipped(now) };
+    if (dow === 0 || dow === 6)
+      return { id: HID, how: "WEEKEND", leapSkip: null };
+    return { id: "weekday", how: "AUTO", leapSkip: leapSkipped(now) };
   }
 
   function loadedIds() {
@@ -535,6 +546,10 @@ window.__L7start = function (candidateData, candidateMeta) {
      than implied by whichever table happens to be first in D.order. */
   function pickTable(res) {
     var requested = res.id;
+    /* A hidden day names no timetable, so there is nothing to load or fall
+       back to; the board is drawn empty and the notice explains why. */
+    if (requested === HID)
+      return { id: HID, requested: HID, fallback: null, refused: false };
     if (TABLES[requested].loaded)
       return { id: requested, requested: requested, fallback: null, refused: false };
     if (STRICT)
@@ -837,6 +852,44 @@ window.__L7start = function (candidateData, candidateMeta) {
 
   /* ---------------- notice above the board ---------------- */
   function renderNotice(res, loaded, inWin) {
+    if (res.hidden) {
+      /* The board is deliberately off: say why plainly, give a short detail
+         line and stop. Do not carry over any other notice state. */
+      var hidKey = "H" + res.how;
+      if (hidKey === prevNl) return;
+      prevNl = hidKey;
+      var hdet = document.querySelector("#notload .nldet");
+      if (hdet) hdet.open = false;
+      var T2 = document.getElementById("nlTitle"),
+          B2 = document.getElementById("nlBody"),
+          M2 = document.getElementById("nlMore"),
+          S2 = document.getElementById("nlSrc"),
+          K2 = document.getElementById("nlBtns");
+      var weekend = res.how === "WEEKEND";
+      T2.textContent = "NO TIMETABLE TODAY";
+      var l2 = [], p2 = [];
+      if (weekend) {
+        l2.push(textNode("The Line 7 timetable view runs on "), strong("weekdays"),
+          textNode(" only. "), strong("Saturday and Sunday"), textNode(" are hidden automatically."));
+        p2.push(textNode("This build shows the weekday service only, so the board is hidden " +
+          "at the weekend. Even if a Saturday or Sunday timetable has been loaded into " +
+          "this file, none of it is shown; no services are invented for the weekend."));
+      } else {
+        l2.push(textNode("The timetable view is "), strong("hidden"),
+          textNode(" for this date (programmed in the administration console)."));
+        p2.push(textNode("An entry in the date programme has marked this date as HIDDEN, so " +
+          "the train board deliberately shows nothing. Remove that entry in the " +
+          "administration console and re-export the file to show the weekday board again."));
+      }
+      setRich(B2, l2);
+      setRich(M2, p2);
+      S2.textContent = weekend
+        ? "WEEKDAY SERVICE ONLY \u2014 SATURDAY AND SUNDAY ARE NOT SHOWN"
+        : "HIDDEN BY THE ADMINISTRATION CONSOLE \u2014 REMOVE THE PROGRAMME ENTRY TO SHOW THE BOARD";
+      K2.textContent = "The timetable in force is set by the administration console.";
+      return;
+    }
+
     var fb = !!res.fallback, refused = !!res.refused;
     var key = !loaded ? (refused ? "R" : "L") + res.id
             : fb ? "F" + res.fallback + (inWin ? "1" : "0") +
@@ -885,6 +938,12 @@ window.__L7start = function (candidateData, candidateMeta) {
             "No services are invented for it \u2014 load the real timetable and it appears here " +
             "with no code change.")]);
       }
+      S.textContent = "AVAILABLE IN THIS BUILD: " + loadedIds().map(function (id) {
+        return TABLES[id].label + " (sheet " + TABLES[id].sheet + ", WEF " + wefText(id) + ")";
+      }).join("  |  ");
+      K.textContent = "The timetable in force is set by the administration console. To change it, "
+        + "program the date there and re-export this file.";
+      return;
     } else {
       if (fb) {
         T.textContent = asked + " DATA NOT LOADED";
@@ -932,11 +991,12 @@ window.__L7start = function (candidateData, candidateMeta) {
           textNode(" \u2014 that programmed service is not run.")];
       }
       para([textNode("An annual programme entry sets "), strong("29 February"), textNode(" to "),
-        strong(TABLES[res.leapSkip.table].label), textNode(", but " + ly +
-          " is not a leap year and the date does not exist. The entry is "), strong("skipped"),
-        textNode(" this year rather than moved to 28 Feb or 1 Mar, because running it on a " +
-          "neighbouring date would put a service on the line that nobody programmed, and it " +
-          "would look identical to a real one. It applies again in the next leap year.")]);
+        strong(TABLES[res.leapSkip.table] && TABLES[res.leapSkip.table].label
+               ? TABLES[res.leapSkip.table].label : String(res.leapSkip.table)),
+        textNode(", but " + ly + " is not a leap year and the date does not exist. The entry is "),
+        strong("skipped"), textNode(" this year rather than moved to 28 Feb or 1 Mar, because " +
+          "running it on a neighbouring date would put a service on the line that nobody programmed, " +
+          "and it would look identical to a real one. It applies again in the next leap year.")]);
     }
     setRich(B, line);
     setRich(More, parts);
@@ -945,8 +1005,10 @@ window.__L7start = function (candidateData, candidateMeta) {
       S.textContent = "SOURCE: sheet " + TBL.sheet + "  |  WEF: " + wefText(TBL_ID) +
         "  |  " + TBL.dn.length + " DN + " + TBL.up.length + " UP SERVICES";
       K.textContent = "";
-      K.appendChild(jumpButton(TBL.window[0] + 900, "JUMP TO FIRST SERVICE"));
-      K.appendChild(jumpButton(TBL.window[0] + 2.5 * 3600, "JUMP TO PEAK"));
+      if (TBL && TBL.window && TBL.window[0] != null) {
+        K.appendChild(jumpButton(TBL.window[0] + 900, "JUMP TO FIRST SERVICE"));
+        K.appendChild(jumpButton(TBL.window[0] + 2.5 * 3600, "JUMP TO PEAK"));
+      }
       K.appendChild(jumpButton(0, "BACK TO 00:00"));
     } else {
       S.textContent = "AVAILABLE IN THIS BUILD: " + loadedIds().map(function (id) {
@@ -959,36 +1021,59 @@ window.__L7start = function (candidateData, candidateMeta) {
 
   /* ---------------- frame ---------------- */
   function render(S, now) {
-    /* A tab pick overrides the date rule for which table to display; the date
-       still drives the service clock and the "today resolves to" reporting. */
-    var want = MANUAL
+    /* The date rule decides whether the board shows at all. A hidden day (the
+       weekend, or a date the console programmed as hidden) draws nothing; a
+       service tab can only choose WHICH table is shown, never resurrect a day
+       the rule hides. The date still drives the service clock and the "today
+       resolves to" reporting. */
+    var auto = resolveTable(now);
+    var hiddenDay = auto.id === HID;
+    var want = (MANUAL && !hiddenDay)
       ? { id: MANUAL, how: "MANUAL", leapSkip: null }
-      : resolveTable(now);
-    var res = pickTable(want);
-    res.how = res.refused ? "REFUSED" : res.fallback ? "FALLBACK" : want.how;
-    res.asked = want.id;
-    /* keep the pre-fallback reason: a day can be programmed to a table that has
-       no data, and the notice must still say "programmed", not "automatic" */
-    res.why = want.how;
-    /* requested and displayed are tracked separately on purpose: a fallback
-       means the file shows one timetable's services for a day that asked for
-       another, and an audit has to be able to tell that from a real match. */
-    res.requested = want.id;
-    res.displayed = res.id;
-    /* pickTable() builds a fresh object, so the skip report has to be carried
-       across explicitly or the notice never sees it. */
-    res.leapSkip = want.leapSkip;
-    if (res.id !== TBL_ID) {
-      loadTable(res.id);
-      buildSections();
-      syncSel(res);
-      document.getElementById("fTrips").textContent = TRIPS.length;
-      document.getElementById("fWin").textContent =
-        (TBL && TBL.loaded) ? hm(TBL.window[0]) + "-" + hms(TBL.window[1]) : "--";
+      : auto;
+    var res, loaded, inWin;
+    if (hiddenDay) {
+      /* A hidden day names no table, so there is nothing to load and nothing to
+         fall back to: the decision is built by hand rather than run through
+         pickTable(), and the board is simply emptied. */
+      res = {
+        id: HID, how: want.how, why: want.how, asked: HID, requested: HID,
+        displayed: HID, fallback: null, refused: false, leapSkip: null, hidden: true
+      };
+      if (TBL_ID !== HID) {
+        loadTable(HID);
+        buildSections();
+        document.getElementById("fTrips").textContent = "0";
+        document.getElementById("fWin").textContent = "--";
+      }
+      loaded = false;
+      inWin = false;
+    } else {
+      res = pickTable(want);
+      res.how = res.refused ? "REFUSED" : res.fallback ? "FALLBACK" : want.how;
+      res.asked = want.id;
+      /* keep the pre-fallback reason: a day can be programmed to a table that has
+         no data, and the notice must still say "programmed", not "automatic" */
+      res.why = want.how;
+      /* requested and displayed are tracked separately on purpose: a fallback
+         means the file shows one timetable's services for a day that asked for
+         another, and an audit has to be able to tell that from a real match. */
+      res.requested = want.id;
+      res.displayed = res.id;
+      /* pickTable() builds a fresh object, so the skip report has to be carried
+         across explicitly or the notice never sees it. */
+      res.leapSkip = want.leapSkip;
+      if (res.id !== TBL_ID) {
+        loadTable(res.id);
+        buildSections();
+        syncSel(res);
+        document.getElementById("fTrips").textContent = TRIPS.length;
+        document.getElementById("fWin").textContent =
+          (TBL && TBL.loaded) ? hm(TBL.window[0]) + "-" + hms(TBL.window[1]) : "--";
+      }
+      loaded = !!(TBL && TBL.loaded);
+      inWin = loaded && S >= TBL.window[0] && S <= TBL.window[1];
     }
-
-    var loaded = !!(TBL && TBL.loaded);
-    var inWin = loaded && S >= TBL.window[0] && S <= TBL.window[1];
 
     for (var m = 0; m < marked.length; m++) {
       marked[m].className = marked[m].classList.contains("led") ? "led" : "node";
@@ -1014,7 +1099,7 @@ window.__L7start = function (candidateData, candidateMeta) {
       document.getElementById("simclk").textContent = c;
       prevClock = c;
     }
-    var nm = TABLES[res.id].label;
+    var nm = res.hidden ? "NO TIMETABLE" : TABLES[res.id].label;
     if (nm !== prevName) {
       document.getElementById("tblName").textContent = nm;
       prevName = nm;
@@ -1032,11 +1117,13 @@ window.__L7start = function (candidateData, candidateMeta) {
       prevForce = fs;
     }
     selFixed(res);
+    HIDDEN_NOW = hiddenDay;
     syncTabs();
     if (res.how !== prevHow) {
       var h = document.getElementById("tblHow");
       h.textContent = res.how;
-      h.className = "how " + (res.how === "AUTO" ? "auto"
+      h.className = "how " + (res.hidden ? "bad"
+        : res.how === "AUTO" ? "auto"
         : res.how === "FALLBACK" ? "fb"
         : res.how === "REFUSED" ? "bad"
         : res.how === "MANUAL" ? "man" : "date");
@@ -1057,6 +1144,7 @@ window.__L7start = function (candidateData, candidateMeta) {
     document.body.classList.toggle("nlw", loaded && !inWin && !res.fallback);
     document.body.classList.toggle("fb", !!res.fallback);
     document.body.classList.toggle("strict", !!res.refused);
+    document.body.classList.toggle("hid", !!res.hidden);
     LAST_RES = res;
     renderNotice(res, loaded, inWin);
   }
@@ -1121,7 +1209,12 @@ window.__L7start = function (candidateData, candidateMeta) {
   function selFixed(res) {
     var e = document.getElementById("selFixed");
     var txt;
-    if (res.refused) {
+    if (res.hidden) {
+      /* The whole board is off, so there is no timetable label to show; name the
+         state instead of printing a table that is not in force. */
+      txt = res.how === "WEEKEND" ? "NO TIMETABLE  (HIDDEN AT THE WEEKEND)"
+                                  : "NO TIMETABLE  (HIDDEN FOR THIS DATE)";
+    } else if (res.refused) {
       txt = TABLES[res.id].label + "  (STRICT: NOT SUBSTITUTED)";
     } else if (res.fallback) {
       txt = TABLES[res.id].label + "  SHOWN FOR " + TABLES[res.fallback].label;
@@ -1134,12 +1227,16 @@ window.__L7start = function (candidateData, candidateMeta) {
     e.textContent = txt;
     /* The title spells out requested vs displayed, so the substitution is
        legible even to someone who only hovers the readout. */
-    e.title = res.refused
-      ? TABLES[res.id].label + " was requested but has no data; strict mode refuses to substitute"
-      : res.fallback
-        ? "Displaying " + TABLES[res.id].label + "; " + TABLES[res.fallback].label +
-          " was requested but has no data"
-        : TABLES[res.id].label + " is in force";
+    e.title = res.hidden
+      ? (res.how === "WEEKEND"
+          ? "This view carries the weekday service only; Saturday and Sunday are hidden automatically"
+          : "The administration programmed this date as hidden, so no timetable is drawn")
+      : res.refused
+        ? TABLES[res.id].label + " was requested but has no data; strict mode refuses to substitute"
+        : res.fallback
+          ? "Displaying " + TABLES[res.id].label + "; " + TABLES[res.fallback].label +
+            " was requested but has no data"
+          : TABLES[res.id].label + " is in force";
     prevFixed = txt;
   }
   function syncSel(res) {
@@ -1151,7 +1248,7 @@ window.__L7start = function (candidateData, candidateMeta) {
      "SHOWN FOR"/"SELECTED" readouts keep honest when it falls back. */
   var prevTab = null;
   function syncTabs() {
-    var active = MANUAL || "auto";
+    var active = (MANUAL && !HIDDEN_NOW) ? MANUAL : "auto";
     if (active === prevTab) return;
     prevTab = active;
     var host = document.getElementById("tblTabs");
@@ -1197,6 +1294,9 @@ window.__L7start = function (candidateData, candidateMeta) {
     var b = e.target.closest ? e.target.closest("button[data-tbl]") : null;
     if (!b) return;
     var id = b.getAttribute("data-tbl");
+    /* A hidden day cannot be un-hidden by picking a service tab: the date rule
+       wins, so such a pick is accepted on the model but the board stays off
+       and the highlight remains AUTO. The user message already says why. */
     MANUAL = (id === "auto") ? null : id;
     syncTabs();
     paint();
@@ -1346,7 +1446,7 @@ window.__L7start = function (candidateData, candidateMeta) {
     var b = document.createElement("b");
     b.textContent = PROGRAM.length
       ? PROGRAM.length + " DATE" + (PROGRAM.length > 1 ? "S" : "")
-      : "NONE - FOLLOWS DAY OF WEEK";
+      : "NONE - WEEKDAY SERVICE ONLY";
     fp.appendChild(b);
   })();
   lastPer = perSection();
@@ -1355,7 +1455,8 @@ window.__L7start = function (candidateData, candidateMeta) {
   // just inside it so the board is never blank on first paint.
   (function seed() {
     var tt = tickTable(new Date());
-    var tb = TABLES[resolveTable(tt.date).id];
+    var auto = resolveTable(tt.date);
+    var tb = TABLES[auto.id];
     if (!tb || !tb.loaded) return;
     var w = tt.sec;
     if (w < tb.window[0] - 3600 || w > tb.window[1] + 3600) {
@@ -1377,11 +1478,15 @@ window.__L7start = function (candidateData, candidateMeta) {
       var id = btns[i].getAttribute("data-tbl");
       var tb = TABLES[id] || null;
       if (id === "auto" || (tb && tb.loaded)) btns[i].className += " has";
-      btns[i].title = id === "auto"
-        ? "Follow the programmed date"
-        : tb && tb.loaded
-          ? "View the " + tb.label + " timetable"
-          : tb.label + " has no data in this build; selecting it falls back";
+      if (id === "auto") {
+        btns[i].title = "Follow the programmed date";
+      } else if (tb && tb.loaded) {
+        btns[i].title = "View the " + tb.label + " timetable";
+      } else if (tb) {
+        btns[i].title = tb.label + " has no data in this build; selecting it falls back";
+      } else {
+        btns[i].title = id.toUpperCase() + " has no data in this build; selecting it falls back";
+      }
     }
     syncTabs();
   })();

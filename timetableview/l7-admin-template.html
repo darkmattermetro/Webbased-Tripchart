@@ -164,6 +164,8 @@ td.dim{color:var(--dim)}
 .prgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px;max-width:1180px}
 .prgrid .dcard{border:1px solid var(--border);border-radius:2px;background:#0a1220;padding:7px 9px}
 .prgrid .dcard.ov{border-color:var(--dn);background:rgba(251,191,36,.07)}
+.prgrid .dcard.weekend{border-color:rgba(245,158,11,.22)}
+.prgrid .dcard.hid .dt{color:var(--amber)}
 .prgrid .dd{font-size:8.5px;color:var(--dim);letter-spacing:.09em}
 .prgrid .dw{font-size:8.5px;color:var(--up);letter-spacing:.09em}
 .prgrid .dt{font-size:11.5px;color:var(--bright);letter-spacing:.1em;margin-top:2px}
@@ -307,22 +309,22 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
 
     <section class="view" id="v-prog">
       <h2 class="vt">DATE PROGRAMME</h2>
-      <p class="note" style="max-width:960px">Assign a timetable to a specific date. A programmed date
-        always wins over the automatic weekday / Saturday / Sunday rule, so this is how a Sunday service
-        or a special holiday timetable ever gets shown. <b>The end user cannot change any of this</b>
-        &mdash; there is no selector on their view, they only ever see which timetable is running.
-        Press build on the export tab to push these into the file.</p>
+      <p class="note" style="max-width:960px">Assign a timetable to a specific date. <b>This build is a
+        weekday-only view.</b> By default it shows the weekday timetable on Monday&ndash;Friday and <b>hides the
+        entire board on Saturday and Sunday</b>. Use this page to hide the view on any weekday, or to show
+        the weekday timetable on a weekend (an explicit override), or to stop showing it on a future date.
+        The end user cannot change any of this. Press build on the export tab to push these into the file.</p>
       <div class="hr"></div>
       <div class="progform">
         <div><label>APPLIES ON</label><input type="date" id="prDate"></div>
-        <div><label>SHOW TIMETABLE</label><select id="prTable"></select></div>
+        <div><label>SHOW</label><select id="prTable"></select></div>
         <div class="chkwrap">
           <label class="chk"><input type="checkbox" id="prAnnual"> Repeat every year on this date</label>
           <div class="note" id="prWhat">&nbsp;</div>
         </div>
         <div class="prbtns">
           <button class="go" id="prAdd">ADD TO PROGRAMME</button>
-          <button id="prToday">TODAY AS SPECIAL</button>
+          <button id="prToday">HIDE TODAY</button>
         </div>
       </div>
       <div class="note warn" id="prErr" style="min-height:14px">&nbsp;</div>
@@ -333,8 +335,10 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
         <span class="note" id="prCount"></span>
       </div>
       <h3 class="st">WHAT THE END USER WILL SEE &mdash; NEXT 21 DAYS</h3>
-      <p class="note" style="margin-bottom:8px">Resolved from today's date using the same two rules the
-        end-user page uses. This is a preview of their header, not a live view of the board.</p>
+      <p class="note" style="margin-bottom:8px">Resolved from today's date using the same rules the
+        end-user page uses: a programmed date wins, otherwise Monday&ndash;Friday show the weekday
+        timetable and Saturday/Sunday are hidden. This is a preview of their header, not a live view of
+        the board.</p>
       <div class="prgrid" id="prGrid"></div>
     </section>
 
@@ -815,7 +819,11 @@ window.L7_BASE = "/*__L7_BASE__*/";
             if (!e || typeof e.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
               dropped.push("an entry with an invalid date (" + (e && e.date) + ")"); return;
             }
-            if (!CONF.tables[e.table]) {
+            if (e.table !== "hidden" && e.table !== "weekday") {
+              dropped.push(fmtD(e.date) + " points at " + e.table
+                + ", which this weekday-only view never shows"); return;
+            }
+            if (e.table !== "hidden" && !CONF.tables[e.table]) {
               dropped.push(fmtD(e.date) + " points at unknown timetable " + e.table); return;
             }
             var why = conflictWith(kept, e.date, e.table, !!e.annual);
@@ -869,7 +877,8 @@ window.L7_BASE = "/*__L7_BASE__*/";
     return Object.prototype.toString.call(CONF.program) === "[object Array]" ? CONF.program : [];
   }
   function prErr(msg) { q("#prErr").textContent = msg || "\u00a0"; }
-  function lbl(table) { return (CONF.tables[table] || {}).label || String(table).toUpperCase(); }
+  function lbl(table) { return table === "hidden" ? "HIDE VIEW (NO TIMETABLE)"
+    : (CONF.tables[table] || {}).label || String(table).toUpperCase(); }
 
   /* Ambiguity is a collision of SPECIFICITY, not merely of a shared date. An
      exact date and an annual recurrence that land on the same calendar day are
@@ -900,13 +909,25 @@ window.L7_BASE = "/*__L7_BASE__*/";
 
   function addEntry(date, table, annual) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return prErr("Pick a date first.");
-    if (!CONF.tables[table]) return prErr("Pick a timetable.");
-    var why = conflictWith(progList(), date, table, !!annual);
+    if (!(table === "hidden" || table === "weekday")) return prErr("Pick a valid choice from the SHOW dropdown.");
+    var t = table;
+    if (t !== "hidden" && !CONF.tables[t]) return prErr("The selected timetable has no configuration.");
+    var L = progList();
+    var why = conflictWith(L, date, t, !!annual);
     if (why) return prErr(why);
-    CONF.program.push({ date: date, table: table, annual: !!annual });
-    CONF.program.sort(function (a, b) {
-      return a.date === b.date ? a.table.localeCompare(b.table) : a.date.localeCompare(b.date);
+    L.push({ date: date, table: t, annual: !!annual });
+    L.sort(function (a, b) {
+      var aa = a.annual ? a.date.slice(5) : a.date;
+      var bb = b.annual ? b.date.slice(5) : b.date;
+      if (aa < bb) return -1; if (aa > bb) return 1;
+      if (a.date < b.date) return -1; if (a.date > b.date) return 1;
+      if (a.table < b.table) return -1; if (a.table > b.table) return 1;
+      return 0;
     });
+    CONF.program = L;
+    q("#prTable").value = "weekday";
+    q("#prDate").value = isoToday();
+    q("#prAnnual").checked = false;
     prErr("");
     renderProg();
     renderExp();
@@ -932,6 +953,11 @@ window.L7_BASE = "/*__L7_BASE__*/";
     return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d ? dt : null;
   }
 
+  var PROG_CHOICES = [
+    ["weekday", "SHOW THE WEEKDAY TIMETABLE"],
+    ["hidden", "HIDE THE VIEW (NO TIMETABLE)"]
+  ];
+
   function renderProg() {
     var P = progList(), today = new Date();
     var todayISO = isoToday();
@@ -939,10 +965,10 @@ window.L7_BASE = "/*__L7_BASE__*/";
 
     if (!q("#prDate").value) q("#prDate").value = todayISO;
     if (!q("#prTable").options.length) {
-      DATA.order.forEach(function (id) {
+      PROG_CHOICES.forEach(function (pair) {
         var o = document.createElement("option");
-        o.value = id;
-        o.textContent = (CONF.tables[id] && CONF.tables[id].label) || id.toUpperCase();
+        o.value = pair[0];
+        o.textContent = pair[1];
         q("#prTable").appendChild(o);
       });
     }
@@ -953,21 +979,58 @@ window.L7_BASE = "/*__L7_BASE__*/";
       var dt = isoDate(d);
       var pw = q("#prWhat");
       if (!dt) { pw.textContent = "\u00a0"; return; }
-      var auto = dt.getDay() === 0 ? "sunday" : dt.getDay() === 6 ? "saturday" : "weekday";
-      var diff = t !== auto;
+      var weekend = dt.getDay() === 0 || dt.getDay() === 6;
+      /* An entry already sitting on this date is what will actually be in
+         force, so report that instead of whatever the SHOW dropdown currently
+         says -- otherwise adding a hide would leave the note above contradicting
+         the list below it. Exact dates resolve before annual recurrences and the
+         lowest table id breaks a tie, exactly as the grid below resolves them. */
+      var hit = null, hj;
+      for (hj = 0; hj < P.length; hj++) {
+        if (!P[hj].annual && P[hj].date === d && (!hit || P[hj].table < hit.table)) hit = P[hj];
+      }
+      if (!hit) {
+        for (hj = 0; hj < P.length; hj++) {
+          if (P[hj].annual && P[hj].date.slice(5) === d.slice(5)
+              && (!hit || P[hj].table < hit.table)) hit = P[hj];
+        }
+      }
       pw.textContent = "";
-      pw.appendChild(document.createTextNode(fmtD(d) + " is a " + dowName(dt) +
-        " \u2192 auto rule picks "));
-      var b1 = document.createElement("b");
-      b1.style.color = "var(--text)";
-      b1.textContent = (CONF.tables[auto] || {}).label || auto;
-      pw.appendChild(b1);
-      if (diff) {
-        pw.appendChild(document.createTextNode(" \u00b7 you are choosing "));
-        var b2 = document.createElement("b");
-        b2.style.color = "var(--dn)";
-        b2.textContent = (CONF.tables[t] || {}).label || t;
-        pw.appendChild(b2);
+      pw.appendChild(document.createTextNode(fmtD(d) + " is a " + dowName(dt) + " \u2192 "));
+      if (weekend) {
+        pw.appendChild(document.createTextNode("the view is "));
+        var bw = document.createElement("b");
+        bw.style.color = "var(--amber)";
+        bw.textContent = "HIDDEN";
+        pw.appendChild(bw);
+        pw.appendChild(document.createTextNode(" automatically"));
+      } else {
+        pw.appendChild(document.createTextNode("auto rule picks "));
+        var b1 = document.createElement("b");
+        b1.style.color = "var(--text)";
+        b1.textContent = "WEEKDAY";
+        pw.appendChild(b1);
+      }
+      if (hit) {
+        pw.appendChild(document.createTextNode(" \u00b7 already programmed to "));
+        var bi = document.createElement("b");
+        bi.style.color = "var(--dn)";
+        bi.textContent = hit.table === "hidden"
+          ? "HIDE THE VIEW (that entry wins)"
+          : "SHOW THE WEEKDAY TIMETABLE (that entry wins)";
+        pw.appendChild(bi);
+      } else if (t === "hidden") {
+        pw.appendChild(document.createTextNode(" \u00b7 you are choosing to "));
+        var b3 = document.createElement("b");
+        b3.style.color = "var(--dn)";
+        b3.textContent = "HIDE the view";
+        pw.appendChild(b3);
+      } else if (t === "weekday" && weekend) {
+        pw.appendChild(document.createTextNode(" \u00b7 you are choosing to "));
+        var b4 = document.createElement("b");
+        b4.style.color = "var(--dn)";
+        b4.textContent = "SHOW the weekday timetable anyway";
+        pw.appendChild(b4);
       } else {
         pw.appendChild(document.createTextNode(" \u00b7 same as auto"));
       }
@@ -978,14 +1041,19 @@ window.L7_BASE = "/*__L7_BASE__*/";
     if (!P.length) {
       var e0 = el("div", "none", host);
       e0.textContent = "NOTHING PROGRAMMED - the end user follows the day of the week "
-        + "(Mon-Fri weekday, Sat, Sun). Program a date to override that.";
+        + "(Mon-Fri weekday; Saturday and Sunday are hidden automatically). Program a date to override that.";
     } else {
       P.forEach(function (e, i) {
         var isToday = e.annual ? e.date.slice(5) === md : e.date === todayISO;
         var box = el("div", "row" + (e.annual ? " annual" : "") + (isToday ? " today" : ""), host);
         el("span", "d", box).textContent = fmtD(e.date) + (e.annual ? " every year" : "");
-        el("span", "t", box).textContent = (CONF.tables[e.table] || {}).label || e.table;
-        if (e.annual) el("span", "a", box).textContent = "ANNUAL";
+        el("span", "t", box).textContent = e.table === "hidden"
+          ? "HIDE VIEW (NO TIMETABLE)"
+          : ((CONF.tables[e.table] && CONF.tables[e.table].label) || e.table.toUpperCase());
+        var badges = [];
+        if (e.annual) badges.push("ANNUAL");
+        if (e.table === "hidden") badges.push("HIDDEN");
+        if (badges.length) el("span", "a", box).textContent = badges.join(" \u00b7 ");
         if (isToday) el("span", "flagd", box).textContent = "IN FORCE TODAY";
         var del = el("button", "", box);
         del.setAttribute("data-del", i);
@@ -1015,13 +1083,14 @@ window.L7_BASE = "/*__L7_BASE__*/";
           if (P[j].annual && P[j].date.slice(5) === dmd && (!hit || P[j].table < hit.table)) hit = P[j];
         }
       }
-      var auto = dd.getDay() === 0 ? "sunday" : dd.getDay() === 6 ? "saturday" : "weekday";
-      var card = el("div", "dcard" + (hit ? " ov" : ""), g);
+      var weekend = dd.getDay() === 0 || dd.getDay() === 6;
+      var auto = weekend ? "hidden" : "weekday";
+      var card = el("div", "dcard" + (hit ? " ov" : (weekend ? " weekend" : ""))
+        + ((hit ? hit.table === "hidden" : auto === "hidden") ? " hid" : ""), g);
       el("div", "dd", card).textContent = fmtD(iso) + " " + dowName(dd);
-      el("div", "dt", card).textContent =
-        ((hit ? hit.table : auto) || "").toUpperCase();
+      el("div", "dt", card).textContent = ((hit ? hit.table : auto) || "").toUpperCase();
       var h = el("div", "dh " + (hit ? "ovr" : "auto"), card);
-      h.textContent = hit ? "DATE OVERRIDE" : "AUTO";
+      h.textContent = hit ? "DATE OVERRIDE" : (auto === "hidden" ? "WEEKEND" : "AUTO");
     }
   }
 
@@ -1030,7 +1099,7 @@ window.L7_BASE = "/*__L7_BASE__*/";
   });
   q("#prToday").addEventListener("click", function () {
     q("#prDate").value = isoToday();
-    addEntry(q("#prDate").value, "special", false);
+    addEntry(q("#prDate").value, "hidden", false);
   });
   q("#prDate").addEventListener("change", renderProg);
   q("#prTable").addEventListener("change", renderProg);
@@ -1781,9 +1850,13 @@ window.L7_BASE = "/*__L7_BASE__*/";
         problems.push("programme date " + e.date + " is not YYYY-MM-DD");
         return;
       }
-      if (!CONF.tables[e.table])
+      if (e.table === "hidden") return;   /* a hidden entry needs no table data */
+      if (e.table !== "weekday")
+        problems.push("programme entry " + e.date + " points at " + e.table
+          + "; this build is a weekday-only view and never shows other service types");
+      else if (!CONF.tables[e.table])
         problems.push("programme entry " + e.date + " points at unknown timetable " + e.table);
-      if (!DATA.tables[e.table])
+      else if (!DATA.tables[e.table])
         problems.push("programme entry " + e.date + " points at timetable " + e.table +
           ", which is not in the data block");
     });
@@ -1917,7 +1990,8 @@ window.L7_BASE = "/*__L7_BASE__*/";
     el("div", "v", host).textContent = pc
       ? pc + " programmed date" + (pc > 1 ? "s" : "") + ": " +
         progList().map(function (e) {
-          return fmtD(e.date) + (e.annual ? "*" : "") + " \u2192 " + e.table;
+          return fmtD(e.date) + (e.annual ? "*" : "") + " \u2192 "
+            + (e.table === "hidden" ? "HIDDEN" : e.table);
         }).join(", ")
       : "none";
 
@@ -2331,6 +2405,12 @@ window.L7_BASE = "/*__L7_BASE__*/";
     conflictWith: conflictWith,
     validateProgram: validateProgram,
     progList: progList,
+    /* The date-programme dropdown is rendered from this two-entry list when the
+       console is unlocked. Exposing the list lets the suite assert exactly what
+       the operator is offered without holding the console passphrase. */
+    progChoices: function () {
+      return PROG_CHOICES.map(function (p) { return { value: p[0], label: p[1] }; });
+    },
     isoDate: isoDate,
     tableOrder: function () { return DATA.order.slice(); },
     /* Upload staging, exposed so the regression suite can prove the atomicity

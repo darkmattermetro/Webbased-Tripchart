@@ -304,10 +304,13 @@ body.fb .nlbar b{color:#fb923c}
 body.strict .notload{border-color:rgba(239,68,68,.8);background:rgba(239,68,68,.1);
  box-shadow:inset 4px 0 0 var(--red)}
 body.strict .nlbar b{color:var(--red)}
-body.fb .notload,body.strict .notload{animation:fbpulse 2.4s ease-in-out infinite}
+body.hid .notload{border-color:rgba(251,191,36,.55);background:rgba(251,191,36,.07);
+  box-shadow:inset 4px 0 0 var(--amber)}
+body.hid .nlbar b{color:var(--amber)}
+body.fb .notload,body.strict .notload,body.hid .notload{animation:fbpulse 2.4s ease-in-out infinite}
 @keyframes fbpulse{0%,100%{opacity:1}50%{opacity:.76}}
 @media (prefers-reduced-motion:reduce){
- body.fb .notload,body.strict .notload{animation:none}
+ body.fb .notload,body.strict .notload,body.hid .notload{animation:none}
 }
 
 .note{font-size:9.5px;line-height:1.65;color:var(--dim);letter-spacing:.04em}
