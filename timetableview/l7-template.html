@@ -648,7 +648,9 @@ window.__L7start = function (candidateData, candidateMeta) {
     e.setAttribute("data-no", no);
     e.dutyEl = el("span", "duty", e);        // crew number, drawn above
     e.dutyEl.style.display = "none";
-    el("span", "", e).textContent = no;
+    /* The end-user board never discloses a trip/train ID: the marker is an
+       anonymous scheduled working. The number stays on data-no for scripting,
+       for the duty join, and for the admin console. */
     e.leadEl = el("i", "lead", e);
     e.contEl = el("i", "cont", e);
     e.style.display = "none";
@@ -1065,8 +1067,9 @@ window.__L7start = function (candidateData, candidateMeta) {
     var last = o.stop >= o.b;
     var nxt = last ? "TERMINUS" : stationAt(o.dir, o.stop + 1);
     var row = el("div", "row " + o.dir);
+    /* The first column is kept so the grid still lines up, but the trip/train
+       ID is not disclosed to the end user; only the parity flag, if any. */
     var no = el("div", "no", row);
-    no.appendChild(textNode(String(o.no)));
     if (o.flagged) {
       var fx = document.createElement("span");
       fx.className = "fx";
@@ -1255,7 +1258,7 @@ window.__L7start = function (candidateData, candidateMeta) {
       rows.push(lineBreak());
     }
     if (!rows.length) { rows.push(wSpan("no scheduled times in this window.")); rows.push(lineBreak()); }
-    var spec2 = [strong(o.dir.toUpperCase() + " \u00a0SERVICE " + String(o.no))];
+    var spec2 = [strong(o.dir.toUpperCase() + " \u00a0SERVICE")];
     if (o.flagged) { spec2.push(textNode(" "), wSpan("[PARITY FLAG]")); }
     spec2.push(rule());
     for (var ri = 0; ri < rows.length; ri++) spec2.push(rows[ri]);
