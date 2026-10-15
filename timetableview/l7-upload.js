@@ -298,21 +298,25 @@ window.L7_UPLOAD = (function () {
   }
 
   /* corridorRuns(): every contiguous spot where the reference station list
-     appears in a column, starting at the slot column's top. The DN block and the
-     UP block are each one run. Matches are accepted three ways:
+     appears in a column, starting at the slot column's top. Runs are sought in
+     BOTH orientations: the corridor as written (the DN grid walks MKPR, AZU,
+     ...) and the reversed corridor (the UP grid walks MKPR, BURI, ...). A run
+     carries rev:true when it matched the reversed reference, and the block built
+     on it is a UP block. Matches are accepted three ways:
        - verbatim (same text, same order, same count);
        - normalized (stray spaces, different case) -- the sheet's own names are
          still reported, but the corridor names win if the whole run only
          differs cosmetically;
-       - as a strict prefix of the corridor with >= ANCHOR_MIN slots (a sheet
+       - as a strict prefix of the reference with >= ANCHOR_MIN slots (a sheet
          that omits the closing MKPR ring row).
-     A run is recorded with the number of slots it actually matched; parseAnchored
+     A run is recorded with the number of slots it actually matched; buildAnchored
      indexes the grid to that length, so a shorter list still drives the corridor
      diff / RE-MAP flow in the admin rather than being mis-read. */
   function corridorRuns(cells, ref, maxCol, maxRow) {
     var out = [];
     maxCol = maxCol || 24; maxRow = maxRow || 1200;
     var refN = ref.map(normSt);
+    var refRev = ref.slice().reverse(), refRevN = refRev.map(normSt);
     var col, r, s, i, j;
     for (col = 1; col <= maxCol; col++) {
       var txt = [], rows = [], txtN = [];
@@ -323,22 +327,25 @@ window.L7_UPLOAD = (function () {
         }
       }
       if (txt.length < ANCHOR_MIN) continue;
-      for (i = 0; i + ANCHOR_MIN <= txt.length; i++) {
-        var k = 0, rawHits = 0;
-        for (j = 0; j < ref.length; j++) {
-          var rawHit = txt[i + j] === ref[j];
-          if (!rawHit && txtN[i + j] !== refN[j]) break;
-          k++;
-          if (rawHit) rawHits++;
+      [[ref, refN, false], [refRev, refRevN, true]].forEach(function (refs) {
+        var rref = refs[0], rrefN = refs[1], rev = refs[2];
+        for (i = 0; i + ANCHOR_MIN <= txt.length; i++) {
+          var k = 0, rawHits = 0;
+          for (j = 0; j < rref.length; j++) {
+            var rawHit = txt[i + j] === rref[j];
+            if (!rawHit && txtN[i + j] !== rrefN[j]) break;
+            k++;
+            if (rawHit) rawHits++;
+          }
+          if (k >= ANCHOR_MIN) {
+            out.push({ col: col, r0: rows[i], len: k, rev: rev,
+                       exact: k === rref.length && rawHits === k,
+                       full: k === rref.length,
+                       stops: txt.slice(i, i + k) });
+            i += k - 1;
+          }
         }
-        if (k >= ANCHOR_MIN) {
-          out.push({ col: col, r0: rows[i], len: k,
-                     exact: k === ref.length && rawHits === k,
-                     full: k === ref.length,
-                     stops: txt.slice(i, i + k) });
-          i += k - 1;
-        }
-      }
+      });
     }
     out.sort(function (x, y) { return x.r0 - y.r0; });
     return out;
@@ -452,42 +459,68 @@ window.L7_UPLOAD = (function () {
     return null;
   }
 
-  /* Anchor-based parse: the station list tells us where the grid lives, and
-     the block head (trip-number row, first trip column) is SEARCHED for in the
-     rows above each grid rather than assumed from the template. The depot and
-     midday rows sit one and two rows above either grid start ("basic structure
-     remains"), and are only used for the optional D/M flags. */
-  function buildAnchored(cells, runs, ref) {
-    var dn = runs[0], up = null, k;
-    for (k = 1; k < runs.length; k++) {
-      if (runs[k].r0 > dn.r0) { up = runs[k]; break; }
+  /* Depot-name and M/D rows sit in the gap between the trip-number row and the
+     grid. The build template puts them 6-7 rows above either grid; a shifted
+     sheet can put them just below the trip row instead. Search the whole gap
+     for the first row holding a depot-like name and the first holding an M/D
+     letter. These only feed the optional d/m display flags, so a near miss is
+     harmless; the template-relative rows are kept as the fallback. */
+  function findFlagRows(cells, tripRow, r0, firstCol) {
+    var depotR = r0 - 2, mdR = r0 - 1, foundD = false, foundM = false, r, c, v;
+    for (r = tripRow + 1; r <= r0 - 1 && !(foundD && foundM); r++) {
+      var dc = 0, mc = 0;
+      for (c = firstCol; c <= Math.min(firstCol + 90, UPL.LAST_COL); c++) {
+        v = cells[c + "," + r];
+        if (typeof v !== "string") continue;
+        var s = v.trim();
+        if (!s) continue;
+        if (s === "M" || s === "D") mc++;
+        else if (s.length >= 2) dc++;
+      }
+      if (!foundD && dc) { foundD = true; depotR = r; }
+      if (!foundM && mc) { foundM = true; mdR = r; }
     }
+    return { depotR: depotR, mdR: mdR };
+  }
+
+  /* Anchor-based parse: the station list tells us where each grid lives, and
+     the block head (trip-number row, first trip column) is SEARCHED for in the
+     rows above each grid rather than assumed from the template. Which grid is
+     DN and which is UP is read off its orientation: the grid that walks the
+     corridor as written is DN, the grid that walks it in reverse is UP -- the
+     viewer renders DN trips forward and mirrors UP trips, so the t[] arrays
+     stay in sheet order for both. Should a book print more than one grid of
+     one orientation (the same corridor listed twice), every grid of an
+     orientation contributes trips to that direction -- each is built on its
+     own head and grid rows, so nothing is silently dropped. */
+  function buildAnchored(cells, runs, ref) {
+    var groups = { dn: [], up: [] }, k;
+    for (k = 0; k < runs.length; k++) {
+      groups[runs[k].rev ? "up" : "dn"].push(runs[k]);
+    }
+    var anchor0 = groups.dn[0] || groups.up[0] || runs[0];
     var st = freshStats();
-    var dn0 = dn.r0, dn1 = dn0 + dn.stops.length - 1;
-    var dnHead = findBlockHead(cells, dn.col, dn0, dn1);
     var out = {
-      stops: (dn.full && !dn.exact) ? ref.slice() : dn.stops.slice(),
-      ring: dn.stops.length > 1 && dn.stops[0] === dn.stops[dn.stops.length - 1],
+      stops: (anchor0.full && !anchor0.exact) ? ref.slice() : anchor0.stops.slice(),
+      ring: anchor0.stops.length > 1 && anchor0.stops[0] === anchor0.stops[anchor0.stops.length - 1],
       dn: [], up: [],
-      anchor: { col: dn.col, r0: dn0, len: dn.stops.length, up: 0,
-                match: dn.exact ? "exact" : (dn.full ? "normalized" : "prefix"),
+      anchor: { col: anchor0.col, r0: anchor0.r0, len: anchor0.stops.length, up: 0,
+                match: anchor0.exact ? "exact" : (anchor0.full ? "normalized" : "prefix"),
                 dnTripRow: 0, upTripRow: 0 }
     };
-    if (dnHead) {
-      out.anchor.dnTripRow = dnHead.tripRow;
-      out.dn = buildBlock(cells, { tripR: dnHead.tripRow, depotR: dn0 - 2, mdR: dn0 - 1,
-        r0: dn0, r1: dn1, firstCol: dnHead.firstCol, label: "DN", key: "dn" }, st);
+    function buildOne(run, label, key) {
+      var r0 = run.r0, r1 = r0 + run.stops.length - 1;
+      var hd = findBlockHead(cells, run.col, r0, r1);
+      if (!hd) return [];
+      var fl = findFlagRows(cells, hd.tripRow, r0, hd.firstCol);
+      if (key === "up") {
+        if (!out.anchor.up) { out.anchor.up = r0; out.anchor.upTripRow = hd.tripRow; }
+      } else if (!out.anchor.dnTripRow) out.anchor.dnTripRow = hd.tripRow;
+      return buildBlock(cells, { tripR: hd.tripRow, depotR: fl.depotR, mdR: fl.mdR,
+        r0: r0, r1: r1, firstCol: hd.firstCol, label: label, key: key }, st);
     }
-    if (up) {
-      var up0 = up.r0, up1 = up0 + up.stops.length - 1;
-      var upHead = findBlockHead(cells, up.col, up0, up1);
-      if (upHead) {
-        out.anchor.up = up0;
-        out.anchor.upTripRow = upHead.tripRow;
-        out.up = buildBlock(cells, { tripR: upHead.tripRow, depotR: up0 - 2, mdR: up0 - 1,
-          r0: up0, r1: up1, firstCol: upHead.firstCol, label: "UP", key: "up" }, st);
-      }
-    }
+    groups.dn.forEach(function (run) { out.dn = out.dn.concat(buildOne(run, "DN", "dn")); });
+    groups.up.forEach(function (run) { out.up = out.up.concat(buildOne(run, "UP", "up")); });
     out._stats = st;
     return out;
   }

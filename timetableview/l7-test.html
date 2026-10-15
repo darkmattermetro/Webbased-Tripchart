@@ -64,7 +64,7 @@ iframe{border:0}
    Nothing here is part of a shipped viewer; this file is a development tool and
    is never inlined.
 
-   The suite is organised around a 28-item regression checklist. Each assertion is
+   The suite is organised around a 30-item regression checklist. Each assertion is
    tagged with the checklist item it belongs to, so the top of the page reports
    "N / 28 checked" rather than only a raw assertion count. A checklist item is
    checked only when every assertion under it passes; one failure unchecks it.
@@ -74,7 +74,7 @@ var R = { pass: 0, fail: 0, skip: 0, rows: [] };
 var VIEWER = "line7-timetable-timesync.html";
 var ADMIN  = "line7-timetable-admin.html";
 
-/* ---------------- the 29-item checklist ---------------- */
+/* ---------------- the 30-item checklist ---------------- */
 var CHECKS = [
   ["Data validation", "Missing L7_DATA or missing required properties"],
   ["Data validation", "Null or non-finite departure and terminal times"],
@@ -108,7 +108,8 @@ var CHECKS = [
   ["Time engine", "Service clock across midnight and the after-midnight tail"],
   ["Duty roster", "Duty number or X shown above each train for the displayed time"],
   ["Service tabs", "AUTO and weekday / Saturday / Sunday / Special view selection"],
-  ["Admin and export", "Upload re-map by station name and tolerant WEF dates"]
+  ["Admin and export", "Upload re-map by station name and tolerant WEF dates"],
+  ["Admin and export", "UP block on the reversed corridor and the shifted Saturday/Sunday head"]
 ];
 var NCHECK = CHECKS.length;
 
@@ -1033,7 +1034,9 @@ T.admin = async function (WA) {
     cS[ckw + ",11"] = "M";
     for (qi = 0; qi < ttS.length; qi++) cS[ckw + "," + (12 + qi)] = ttS[qi] / 86400;
   }
-  corridor0.forEach(function (s, i) { cS[scC + "," + (71 + i)] = s; });
+  /* The lower block lists the corridor in reverse -- how both real books
+     print their UP grid -- so it anchors as the UP line. */
+  corridor0.slice().reverse().forEach(function (s, i) { cS[scC + "," + (71 + i)] = s; });
   cS[(scC + 2) + ",65"] = 201;
   cS[(scC + 2) + ",69"] = "DEPOT";
   cS[(scC + 2) + ",70"] = "D";
@@ -1122,6 +1125,77 @@ T.admin = async function (WA) {
   eq(g, "the shorter list is kept (open, no ring row)",
      sh5.stops.length + ":" + sh5.ring, "43:false");
   eq(g, "prefix-grid trips parse", sh5.dn.length + ":" + sh5.dn[1].n, "2:62");
+
+  /* C30: two-block sheets like the Saturday book keep the classic anatomy -- a
+     forward DN grid above a REVERSED UP grid -- but shift the whole grid up and
+     cram the block head (trip-number, depot, M/D rows) into the few rows just
+     below the trip row. Both grids must anchor: the UP grid runs UP the reversed
+     corridor, and each trip only lands in a direction whose grid really faces
+     that way. */
+  C(30);
+  g = "F. reversed UP grid and the shifted Saturday head";
+  var cB = {}, tcB, qi2;
+  corridor0.forEach(function (s, i) { cB["1," + (7 + i)] = s; });
+  corridor0.slice().reverse().forEach(function (s, i) { cB["1," + (62 + i)] = s; });
+  var ttB = [21600, 22800, 24000, 25200, 26400];
+  for (tcB = 0; tcB < 3; tcB++) {
+    var cbw = 3 + tcB;
+    cB[cbw + ",1"] = 701 + 2 * tcB;
+    cB[cbw + ",2"] = "VND";
+    cB[cbw + ",4"] = "M";
+    for (qi2 = 0; qi2 < ttB.length; qi2++) cB[cbw + "," + (7 + qi2)] = (ttB[qi2] + 600 * tcB) / 86400;
+  }
+  for (tcB = 0; tcB < 2; tcB++) {
+    var cuw = 7 + tcB;
+    cB[cuw + ",57"] = 702 + 2 * tcB;
+    cB[cuw + ",58"] = "DDSC SDG";
+    cB[cuw + ",60"] = "D";
+    for (qi2 = 0; qi2 < ttB.length; qi2++) cB[cuw + "," + (62 + qi2)] = (ttB[qi2] + 900 * tcB) / 86400;
+  }
+  var shB = U.buildFromCells(cB, { corridor: corridor0 });
+  var dnB0 = shB.dn[0] || {}, upB0 = shB.up[0] || {};
+  ok(g, "both grids anchor (DN rows 7..50, UP rows 62..105)",
+     !!(shB.anchor && shB.anchor.col === 1 && shB.anchor.r0 === 7 &&
+       shB.anchor.up === 62 && shB.anchor.dnTripRow === 1 &&
+       shB.anchor.upTripRow === 57), JSON.stringify(shB.anchor));
+  eq(g, "trips split into DN and UP by grid orientation",
+     shB.dn.length + ":" + shB.up.length + ":" + dnB0.n + ":" + upB0.n,
+     "3:2:701:702");
+  eq(g, "the same corridor comes out of both grids",
+     shB.stops.join("|"), corridor0.join("|"));
+  eq(g, "UP times read the reversed grid in sheet order",
+     (upB0.t ? upB0.t[0] + "," + upB0.t[4] : "none"), "21600,26400");
+  eq(g, "a reversed-grid UP trip is not parity-flagged",
+     upB0.x === 1, false);
+  eq(g, "the shifted DN head supplies depot and M/D flags",
+     dnB0.d + "|" + dnB0.m, "VND|M");
+  eq(g, "the shifted UP head supplies depot and M/D flags",
+     upB0.d + "|" + upB0.m, "DDSC SDG|D");
+
+  /* A sheet that lists ONLY the reversed corridor is read as UP service, never
+     silently forced onto the DN rail, and the reversed anchor is reported on
+     its own grid. */
+  var cRv = {}, tcRv;
+  corridor0.slice().reverse().forEach(function (s, i) { cRv["4," + (30 + i)] = s; });
+  for (tcRv = 0; tcRv < 2; tcRv++) {
+    var crw = 7 + tcRv;
+    cRv[crw + ",22"] = 706 + 2 * tcRv;
+    cRv[crw + ",23"] = "VND";
+    cRv[crw + ",24"] = "M";
+    for (qi2 = 0; qi2 < ttB.length; qi2++) cRv[crw + "," + (30 + qi2)] = (ttB[qi2] + 300 * tcRv) / 86400;
+  }
+  var shRv = U.buildFromCells(cRv, { corridor: corridor0 });
+  eq(g, "a reversed-only grid yields UP trips and no DN trips",
+     shRv.dn.length + ":" + shRv.up.length, "0:2");
+  eq(g, "the reversed anchor is reported on its own grid",
+     shRv.anchor ? shRv.anchor.r0 + ":" + shRv.anchor.len : "no-anchor", "30:44");
+
+  /* The UP block is found as a reversed-corridor RUN, not by guessing: with the
+     forward corridor alone the scan never produces the lower grid. */
+  var rruns = U.corridorRuns(cB, corridor0);
+  ok(g, "the UP grid surfaced as a reversed-corridor run",
+     rruns.some(function (r) { return r.rev && r.r0 === 62; }),
+     rruns.map(function (r) { return r.r0 + (r.rev ? "R" : ""); }).join(","));
 
   /* C13: the admin refuses to create two rules of the SAME specificity on one
      day, while allowing an exact date and an annual recurrence to share one --

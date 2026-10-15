@@ -30,7 +30,7 @@ whenever this folder is rebuilt so browsers fetch the new copy.
 | `l7-data.js`, `l7-meta.js` | Generated: the `window.L7_DATA` / `window.L7_META` payloads. |
 | `line7-timetable-timesync.html` | **Generated** deployable viewer. |
 | `line7-timetable-admin.html` | **Generated** deployable admin console. |
-| `l7-test.html` | Browser regression suite (29 checks). Drives the generated files in hidden iframes. |
+| `l7-test.html` | Browser regression suite (30 checks). Drives the generated files in hidden iframes. |
 | `l7-test-results.md` | Latest recorded suite result. |
 
 ## Build
@@ -80,7 +80,8 @@ tightening the `l7_write` policy, as described in the SQL file.
 ## Duty display (optional)
 
 Each train on the board can show the crew (duty) number working that rake at the
-displayed time, in a small chip just above the train number. This reads the app's
+displayed time, in a small chip on the train marker. (The viewer never discloses
+the trip/rake number itself; the marker is an anonymous scheduled working.) This reads the app's
 existing Supabase `trip_data` table (`Rake Num`, `Duty No`, `Start Time`, `End Time`,
 `day_type`), where the Duty Finder lives — so it needs no new table, and duties
 published through that feature show up without a rebuild.

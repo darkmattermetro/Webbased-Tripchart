@@ -1,10 +1,10 @@
 # L7 regression suite — result
 
-Run: 2026-10-09 (local)
+Run: 2026-10-15 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**29 / 29 checks passed** — 501 assertions pass, 0 fail, 0 skip.
+**30 / 30 checks passed** — 511 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 
@@ -41,6 +41,7 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
 | 27 | Duty roster | Duty number or X shown above each train for the displayed time | PASS |
 | 28 | Service tabs | AUTO and weekday / Saturday / Sunday / Special view selection | PASS |
 | 29 | Admin and export | Upload re-map, shifted grids, anchor tolerance, and tolerant WEF dates | PASS |
+| 30 | Admin and export | UP block on the reversed corridor and the shifted Saturday/Sunday head | PASS |
 
 ## Fixes covered by the suite
 
@@ -193,6 +194,20 @@ The generated files were rebuilt from the templates (`python extract.py`) immedi
   match mode), whether a DN trip-number row could be located, and how many
   DN/UP trips were read, instead of the bare error line. Covered by check 29 (8
   new assertions).
+- **The UP grid runs the corridor *backwards*.** Both real books print the lower
+  (UP) block with the station list in reverse — MKPR, BURI, JRMR, … — while the
+  upper (DN) block lists it forwards. The anchor scan now searches for the
+  reversed reference as well, and each grid is placed in a direction by its
+  **orientation**, not by whether it happens to be the second thing found: a
+  forward list is DN, a reversed list is UP (the viewer mirrors UP trips via
+  `kOf()`, so both directions keep their `t[]` in sheet order). A book that
+  prints a second grid of the same orientation contributes its trips to that
+  direction rather than losing them. The block head is no longer assumed to sit
+  at a fixed offset: the trip-number row is searched, and the depot-name and
+  M/D rows are found by scanning the gap between that row and the grid, so a
+  book whose head is compressed right under the trip row (the real Saturday
+  workbook: trip 1, depot 2, M/D 4; UP trip 57, depot 58, M/D 60) parses with
+  correct `d`/`m` flags. Covered by check 30.
 
 ## How to run
 
@@ -201,7 +216,7 @@ python -m http.server 8765 --bind 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8765/timetableview/l7-test.html`. The page drives the real built files
-in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/29
+in hidden iframes and reports PASS/FAIL/SKIP per assertion, plus the "N/30
 checks" summary. `window.__TEST_RESULT` holds the machine-readable result
 (`pass`, `fail`, `skip`, `checked`, `total`, `rows[]`, `checklist[]`).
 
