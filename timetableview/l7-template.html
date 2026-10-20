@@ -663,9 +663,10 @@ window.__L7start = function (candidateData, candidateMeta) {
     e.setAttribute("data-no", no);
     e.dutyEl = el("span", "duty", e);        // crew number, drawn above
     e.dutyEl.style.display = "none";
-    /* The end-user board never discloses a trip/train ID: the marker is an
-       anonymous scheduled working. The number stays on data-no for scripting,
-       for the duty join, and for the admin console. */
+    /* The marker itself stays anonymous: the trip/train ID is printed in the
+       service heading the marker opens, not on the board. The number also
+       stays on data-no for scripting, for the duty join, and for the admin
+       console. */
     e.leadEl = el("i", "lead", e);
     e.contEl = el("i", "cont", e);
     e.style.display = "none";
@@ -1358,7 +1359,7 @@ window.__L7start = function (candidateData, candidateMeta) {
       rows.push(lineBreak());
     }
     if (!rows.length) { rows.push(wSpan("no scheduled times in this window.")); rows.push(lineBreak()); }
-    var spec2 = [strong(o.dir.toUpperCase() + " \u00a0SERVICE")];
+    var spec2 = [strong(o.dir.toUpperCase() + " \u00a0SERVICE " + String(o.no))];
     if (o.flagged) { spec2.push(textNode(" "), wSpan("[PARITY FLAG]")); }
     spec2.push(rule());
     for (var ri = 0; ri < rows.length; ri++) spec2.push(rows[ri]);
