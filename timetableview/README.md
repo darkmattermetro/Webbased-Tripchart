@@ -80,10 +80,10 @@ tightening the `l7_write` policy, as described in the SQL file.
 ## Duty display (optional)
 
 Each train on the board can show the crew (duty) number working that rake at the
-displayed time, in a small chip on the train marker. (The marker itself never
-carries the trip/rake number — it stays an anonymous scheduled working, and the
-number also stays hidden in the per-stop detail list; only the service heading
-the marker opens on hover prints it, as `DN SERVICE <n>`.) This reads the app's
+displayed time, in a small chip on the train marker. (The trip/rake number is
+printed on the marker itself and in the service heading the marker opens, as
+`DN SERVICE <n>`; only the per-stop detail list keeps that column anonymous,
+showing just the parity flag.) This reads the app's
 existing Supabase `trip_data` table (`Rake Num`, `Duty No`, `Start Time`, `End Time`,
 `day_type`), where the Duty Finder lives — so it needs no new table, and duties
 published through that feature show up without a rebuild.

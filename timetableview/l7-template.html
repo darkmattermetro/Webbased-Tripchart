@@ -663,10 +663,12 @@ window.__L7start = function (candidateData, candidateMeta) {
     e.setAttribute("data-no", no);
     e.dutyEl = el("span", "duty", e);        // crew number, drawn above
     e.dutyEl.style.display = "none";
-    /* The marker itself stays anonymous: the trip/train ID is printed in the
-       service heading the marker opens, not on the board. The number also
-       stays on data-no for scripting, for the duty join, and for the admin
-       console. */
+    /* The trip/train number sits inside the marker, centred by the marker's
+       flex box. The duty chip is absolutely positioned above it and the
+       continuation arrow above or below, so the three never collide. The
+       number is also kept on data-no for scripting, for the duty join, and
+       for the admin console. */
+    el("span", "", e).textContent = no;
     e.leadEl = el("i", "lead", e);
     e.contEl = el("i", "cont", e);
     e.style.display = "none";
