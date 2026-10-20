@@ -77,6 +77,35 @@ login, so Postgres RLS cannot tell admins from visitors and the shipped policies
 permissive (writes are gated by the app). Harden later by moving to Supabase Auth and
 tightening the `l7_write` policy, as described in the SQL file.
 
+## Hiding the view from the main page (admin)
+
+The **Export** tab carries a **MAIN PAGE VISIBILITY** control. Pressing
+**HIDE TIME TABLE VIEW ON MAIN PAGE** pulls the `🗓️ Time Table View` entry off the
+app's home page for **every** user at once, for as long as it stays hidden — for a
+wrong workbook or any other urgency. **SHOW TIME TABLE VIEW ON MAIN PAGE** puts it
+back.
+
+- **Where the flag lives.** `app_config.TimetableVisible`, the same Supabase
+  key/value table the app already uses for `FormActive`, `UserMessage` and
+  `PopupMessage`. No new table, no new SQL, no rebuild — but it does need
+  `l7-supa.json` to be configured, and without it the control says so and changes
+  nothing.
+- **Both ends fail open.** Absent row or unreachable Supabase both leave the entry
+  visible; the flag has to read exactly `"false"` to hide it. An outage can never
+  make the timetable vanish on its own.
+- **What hiding does.** The home-page button is removed, and `showTimetable()`
+  stops fetching the viewer entirely — a stray or bookmarked call lands on the
+  page showing a `TIME TABLE VIEW UNAVAILABLE` notice with an iframe that was never
+  requested. The main app's own **Time Table** admin tab is untouched, so an
+  operator can always switch it back.
+- **How fast.** The main page re-reads the flag every 60 seconds, so a user with
+  the page already open sees the change within about a minute; otherwise on their
+  next load.
+
+The flag is read with the public anon key, so anyone holding that key could write
+it — the same trust model as the rest of this app (see the caveat under *Online
+sync* above).
+
 ## Duty display (optional)
 
 Each train on the board can show the crew (duty) number working that rake at the

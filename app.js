@@ -177,11 +177,38 @@ function loadTimetableFrame(id, url) {
 }
 // Bump this whenever the built pages under timetableview/ are regenerated, so
 // browsers fetch the new copy instead of a cached one.
-const L7_TT_VERSION = '20261020b';
+const L7_TT_VERSION = '20261020c';
 function l7TtUrl(path) { return path + '?v=' + L7_TT_VERSION; }
+// Whether the home-page "Time Table View" entry is shown. The Time Table admin
+// console flips app_config.TimetableVisible for every user at once; this side
+// fails OPEN, so a missing row or an unreachable Supabase always leaves the
+// entry visible rather than silently taking the timetable away.
+let L7_TT_VISIBLE = true;
 function showTimetable() {
-    loadTimetableFrame('ttViewerFrame', l7TtUrl('timetableview/line7-timetable-timesync.html'));
+    // Guarded so a hidden view can never be reached even by a stray call or a
+    // stale bookmark: the frame is simply not fetched, and the page shows the
+    // notice applyTimetableVisibility() already put in place.
+    if (L7_TT_VISIBLE) loadTimetableFrame('ttViewerFrame', l7TtUrl('timetableview/line7-timetable-timesync.html'));
     showPage('pageTimetable');
+}
+async function refreshTimetableVisibility() {
+    try {
+        const { data } = await sb.from('app_config')
+            .select('config_value').eq('config_key', 'TimetableVisible').single();
+        L7_TT_VISIBLE = !(data && data.config_value === 'false');
+    } catch (e) {
+        L7_TT_VISIBLE = true; // no flag stored, or Supabase unreachable -> visible
+    }
+    applyTimetableVisibility();
+    return L7_TT_VISIBLE;
+}
+function applyTimetableVisibility() {
+    const btn = document.getElementById('ttViewBtn');
+    if (btn) btn.style.display = L7_TT_VISIBLE ? '' : 'none';
+    const frame = document.getElementById('ttViewerFrame');
+    const notice = document.getElementById('ttHiddenNotice');
+    if (frame) frame.style.display = L7_TT_VISIBLE ? '' : 'none';
+    if (notice) notice.style.display = L7_TT_VISIBLE ? 'none' : 'flex';
 }
 function ensureTimetableAdmin() {
     const frame = document.getElementById('ttAdminFrame');
@@ -1551,6 +1578,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadKmData();
     updateDateTime();
     await loadPopupMessage();
+    // Awaited like the messages above so a hidden entry never flashes first.
+    // A failure inside leaves the entry visible, which is the safe default.
+    await refreshTimetableVisibility();
+    // Pick the flag up while a page is already open, not only on reload, so an
+    // emergency hide reaches users who never navigate away. Same 60s cadence
+    // as the other keep-alive intervals further down.
+    setInterval(refreshTimetableVisibility, 60000);
     if (!currentUser) await loadUserMessages();
     const page = document.querySelector('.page.active');
     if (page && page.id) trackVisit(page.id, 'pageview');

@@ -473,6 +473,22 @@ iframe{width:100%;height:560px;border:1px solid var(--border);border-radius:3px;
         <button class="go" id="ePub">PUBLISH ONLINE (SUPABASE)</button>
         <span class="note" id="ePubMsg"></span>
       </div>
+      <div class="mt" style="max-width:760px">
+        <div class="hd"><b>MAIN PAGE VISIBILITY</b><span class="sub">EMERGENCY HIDE</span></div>
+        <p class="note" style="margin:0 0 8px">
+          Pulls the <b>Time Table View</b> entry off the main page for <b>every</b> user until
+          it is switched back on &mdash; for a wrong workbook or any other urgency. The flag
+          lives in the app's Supabase <b>app_config</b> table, so it is global rather than
+          local to this browser. Both ends fail open: with no such row, or when Supabase
+          cannot be reached, the entry stays visible, so an outage can never make the
+          timetable vanish on its own. A user with the page already open picks the change up
+          within about a minute; otherwise on their next load.
+        </p>
+      </div>
+      <div class="rowb" id="eVisRow">
+        <button class="go" id="eVis">HIDE TIME TABLE VIEW ON MAIN PAGE</button>
+        <span class="note" id="eVisMsg">checking current state &hellip;</span>
+      </div>
       <div class="note" id="eAudit" style="margin-top:6px"></div>
       <h3 class="st">PREVIEW</h3>
       <p class="note" id="ePrevNote">Press build to render the file exactly as the end user will see it.</p>
@@ -2118,6 +2134,95 @@ window.L7_BASE = "/*__L7_BASE__*/";
   }
   q("#ePub").addEventListener("click", function () { publishOnline(); });
 
+  /* ================= main-page visibility =================
+     The main page reads app_config.TimetableVisible on load and drops its
+     "Time Table View" entry when it is exactly "false". The row is absent on a
+     normal install, and both ends treat absent or unreachable as VISIBLE, so
+     losing Supabase can never take the timetable away from users by itself. */
+  var VIS_KEY = "TimetableVisible";
+  var VIS_HIDDEN = false;
+  function visUrl() {
+    var c = supaConfig();
+    if (!c) return null;
+    return c.url.replace(/\/+$/, "") + "/rest/v1/app_config";
+  }
+  /* Returns the stored value, or null when it could not be read at all. Those
+     two are different on purpose: "false" hides, null never does. */
+  async function visRead() {
+    var u = visUrl();
+    if (!u) return null;
+    try {
+      var r = await fetch(u + "?config_key=eq." + VIS_KEY + "&select=config_value", { headers: supaHeaders() });
+      if (!r.ok) return null;
+      var rows = await r.json();
+      if (!rows || !rows.length) return null;
+      return rows[0].config_value == null ? "" : String(rows[0].config_value);
+    } catch (e) { return null; }
+  }
+  async function visWrite(value) {
+    var u = visUrl();
+    if (!u) throw new Error("online sync is not configured in this build");
+    var stamp = new Date().toISOString();
+    var p = await fetch(u + "?config_key=eq." + VIS_KEY, {
+      method: "PATCH",
+      headers: { apikey: supaConfig().anonKey, Authorization: "Bearer " + supaConfig().anonKey,
+        "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify({ config_value: value, updated_at: stamp })
+    });
+    if (!p.ok) throw new Error("update failed (" + p.status + "): " + (await p.text()).slice(0, 160));
+    var done = [];
+    try { done = await p.json(); } catch (e) {}
+    if (done && done.length) return true;
+    var n = await fetch(u, {
+      method: "POST",
+      headers: { apikey: supaConfig().anonKey, Authorization: "Bearer " + supaConfig().anonKey,
+        "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify([{ config_key: VIS_KEY, config_value: value, updated_at: stamp }])
+    });
+    if (!n.ok) throw new Error("insert failed (" + n.status + "): " + (await n.text()).slice(0, 160));
+    return true;
+  }
+  /* Paints the button only; callers own the status line so each one can say
+     what it just did rather than a generic message. */
+  function visPaint(hidden) {
+    VIS_HIDDEN = !!hidden;
+    var b = q("#eVis");
+    if (b) b.textContent = VIS_HIDDEN
+      ? "SHOW TIME TABLE VIEW ON MAIN PAGE"
+      : "HIDE TIME TABLE VIEW ON MAIN PAGE";
+  }
+  async function visRefresh() {
+    var m = q("#eVisMsg");
+    var v = await visRead();
+    if (v === null) {
+      visPaint(false);
+      if (m) m.textContent = "No flag stored \u2014 the view is VISIBLE (default).";
+      return false;
+    }
+    visPaint(v === "false");
+    if (m) m.textContent = (VIS_HIDDEN ? "HIDDEN from the main page" : "VISIBLE on the main page")
+      + " \u00b7 stored flag \u201c" + v + "\u201d.";
+    return VIS_HIDDEN;
+  }
+  q("#eVis").addEventListener("click", async function () {
+    var b = q("#eVis"), m = q("#eVisMsg");
+    if (!visUrl()) { if (m) m.textContent = "Online sync is not configured in this build."; return; }
+    var next = VIS_HIDDEN ? "true" : "false";
+    b.disabled = true;
+    if (m) m.textContent = (next === "false" ? "Showing" : "Hiding") + " \u2026";
+    try {
+      await visWrite(next);
+      await visRefresh();
+      if (m) m.textContent = (VIS_HIDDEN
+        ? "HIDDEN from the main page for every user"
+        : "VISIBLE on the main page again")
+        + " \u00b7 takes effect on their next load (about a minute if their page is open).";
+    } catch (e) {
+      if (m) m.textContent = "COULD NOT CHANGE: " + e.message;
+    }
+    b.disabled = false;
+  });
+
   /* ================= service gaps / headways ================= */
   /* Slot k holds the booked times at corridor position k. The DN table walks
      the corridor forwards, the UP table walks it backwards, so the two need
@@ -2383,6 +2488,9 @@ window.L7_BASE = "/*__L7_BASE__*/";
        is opened. */
     syncGapsTable();
     show("meta");
+    /* Async and deliberately not awaited: the console is usable immediately and
+       the visibility control repaints when the flag arrives. */
+    visRefresh();
   }
 
   /* ---------------- test hook (development only) ----------------
