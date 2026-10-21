@@ -435,9 +435,13 @@ T.dates = async function (W) {
   ok(g, "the notice says the date was programmed",
      /programmed in the administration console/i.test(d.getElementById("nlBody").textContent),
      d.getElementById("nlBody").textContent);
-  ok(g, "the hidden date keeps the sections on the page",
+  /* The DOM is never cleared for a hidden day, only not drawn, so the stations
+     stay put; but the board itself must show nothing at all. */
+  ok(g, "the hidden date keeps the sections in the DOM",
      d.querySelectorAll("#sections .sec").length > 0,
      d.querySelectorAll("#sections .sec").length + " sections");
+  eq(g, "but the station grid is not drawn",
+     getComputedStyle(d.getElementById("sections")).display, "none");
   var lh = L.last();
   eq(g, "a programmed hide is reported as a DATE OVERRIDE", lh && lh.how, "DATE OVERRIDE");
   eq(g, "a programmed hide still resolves to the hidden id", lh && lh.id, "hidden");

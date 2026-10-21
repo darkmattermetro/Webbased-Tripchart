@@ -1,10 +1,10 @@
 # L7 regression suite — result
 
-Run: 2026-10-15 (local)
+Run: 2026-10-21 (local)
 Viewer under test: `line7-timetable-timesync.html`  |  Admin under test: `line7-timetable-admin.html`
 Suite: `l7-test.html`
 
-**30 / 30 checks passed** — 546 assertions pass, 0 fail, 0 skip.
+**30 / 30 checks passed** — 547 assertions pass, 0 fail, 0 skip.
 
 The generated files were rebuilt from the templates (`python extract.py`) immediately before this run.
 

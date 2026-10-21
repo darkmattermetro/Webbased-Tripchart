@@ -163,10 +163,27 @@ for anything that is not `weekday` or `hidden`. The reserved `hidden` value need
 no table data, so it always survives the build.
 
 Hidden is a whole-board state, not a notice bolted onto a table: the service
-clock and date keep running, but `loadTable("hidden")` clears the trips, sections
-are emptied, the readouts report `NO TIMETABLE` / `--` / `0`, and the header
-label reads `NO TIMETABLE (HIDDEN AT THE WEEKEND)` or `NO TIMETABLE (HIDDEN FOR
-THIS DATE)`. Covered by check 11.
+clock and date keep running, `loadTable("hidden")` clears the trips, the
+readouts report `NO TIMETABLE` / `--` / `0`, and the header label reads
+`NO TIMETABLE (HIDDEN AT THE WEEKEND)` or `NO TIMETABLE (HIDDEN FOR THIS DATE)`.
+
+The station grid goes with them. Under `body.hid`, `#sections` is set to
+`display:none` and the notice card becomes the whole board, so on a hidden day
+the end user sees **NO TIMETABLE TODAY** and the reason for it — and nothing
+else. The grid used to stay on screen at full opacity under a 32px notice bar,
+which read as a broken page rather than a deliberate one; there are no times on
+it either way, but a blank board leaves no room to misread anything.
+
+Two things about that rule:
+
+- It is scoped to `body.hid` on purpose. A fallback or a strict refusal still
+  draws its board, because a wrong day is better than no day at all (the note on
+  `body.nl .row` says the same).
+- Only the *drawing* is suppressed — the sections stay in the DOM — so anything
+  that counts them is unaffected.
+
+Covered by check 11, which asserts both halves: the sections are still in the
+DOM, and the grid is not drawn.
 
 ## Service tabs (viewer)
 

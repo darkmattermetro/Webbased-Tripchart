@@ -177,7 +177,7 @@ function loadTimetableFrame(id, url) {
 }
 // Bump this whenever the built pages under timetableview/ are regenerated, so
 // browsers fetch the new copy instead of a cached one.
-const L7_TT_VERSION = '20261020c';
+const L7_TT_VERSION = '20261021a';
 function l7TtUrl(path) { return path + '?v=' + L7_TT_VERSION; }
 // Whether the home-page "Time Table View" entry is shown. The Time Table admin
 // console flips app_config.TimetableVisible for every user at once; this side

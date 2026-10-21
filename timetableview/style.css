@@ -307,6 +307,21 @@ body.strict .nlbar b{color:var(--red)}
 body.hid .notload{border-color:rgba(251,191,36,.55);background:rgba(251,191,36,.07);
   box-shadow:inset 4px 0 0 var(--amber)}
 body.hid .nlbar b{color:var(--amber)}
+/* A hidden day is not a board with missing trains -- it is no board at all.
+   Every other notice state keeps the diagram on screen, because the wrong day
+   is still better than none (see the note on body.nl .row above), but a hidden
+   day has to leave nothing that could be read as a service: the station grid
+   comes off the page and the notice becomes the whole board. Scoped to .hid so
+   a fallback or a strict refusal still shows its board. The DOM is untouched,
+   the sections are only not drawn, so nothing that counts them changes. */
+body.hid #sections{display:none}
+body.hid #board{display:flex;flex-direction:column}
+/* margin:auto rather than justify-content:center -- auto margins do not clip a
+   tall notice inside a scrolling board. */
+body.hid .notload{display:flex;align-items:center;margin:auto 0}
+body.hid .nlbar{flex:1 1 auto;padding:16px 20px;gap:14px}
+body.hid .nlbar b{font-size:13px}
+body.hid .nlbar #nlBody{font-size:11.5px;flex:1 1 320px}
 body.fb .notload,body.strict .notload,body.hid .notload{animation:fbpulse 2.4s ease-in-out infinite}
 @keyframes fbpulse{0%,100%{opacity:1}50%{opacity:.76}}
 @media (prefers-reduced-motion:reduce){
