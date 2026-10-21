@@ -709,6 +709,68 @@ async function clearData(type) {
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
+async function downloadTripData(type) {
+    try {
+        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', type).order('id', { ascending: true });
+        if (error) {
+            alert('Error fetching data: ' + error.message);
+            return;
+        }
+        if (!data || data.length === 0) {
+            alert('No data found for ' + type);
+            return;
+        }
+        const headers = ["Duty No", "Sign On Time", "Sign On Loc", "Sign Off Loc", "Sign Off Time", "Driving Hrs", "Duty Hrs", "Same Jurisdiction", "Rake Num", "Start Stn", "Start Time", "End Stn", "End Time", "Service Duration", "Break", "StepBack Rake"];
+        let csv = headers.join(',') + '\n';
+        data.forEach(row => {
+            const values = [
+                row["Duty No"] || '',
+                row["Sign On Time"] || '',
+                row["Sign On Loc"] || '',
+                row["Sign Off Loc"] || '',
+                row["Sign Off Time"] || '',
+                row["Driving Hrs"] || '',
+                row["Duty Hrs"] || '',
+                row["Same Jurisdiction"] || '',
+                row["Rake Num"] || '',
+                row["Start Stn"] || '',
+                row["Start Time"] || '',
+                row["End Stn"] || '',
+                row["End Time"] || '',
+                row["Service Duration"] || '',
+                row["Break"] || '',
+                row["StepBack Rake"] || ''
+            ].map(v => {
+                const s = String(v);
+                if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                    return '"' + s.replace(/"/g, '""') + '"';
+                }
+                return s;
+            });
+            csv += values.join(',') + '\n';
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', type + '_trip_data.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        alert('Error: ' + e.toString());
+    }
+}
+
+async function downloadTripDataAll() {
+    const types = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+    for (const type of types) {
+        await downloadTripData(type);
+        await new Promise(r => setTimeout(r, 500));
+    }
+}
+
 function updateAdminUI(accessLevel) {
     const adminTabs = document.querySelectorAll('.admin-only-tab');
     const usersTab = document.getElementById('tabUsers');

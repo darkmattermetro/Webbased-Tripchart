@@ -286,6 +286,17 @@
                         <div class="section-icon">📤</div>
                         <div class="section-title">Data Upload</div>
                     </div>
+                    <div style="margin-bottom:15px;padding:10px;background:rgba(0,212,255,0.1);border-radius:8px;border-left:3px solid var(--cyan);">
+                        <div style="font-size:11px;color:var(--cyan);margin-bottom:8px;font-weight:600;">📥 DOWNLOAD FROM DATABASE</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button onclick="downloadTripData('Weekday')" class="jarvis-btn btn-sm" style="background:linear-gradient(135deg,var(--cyan),#0099cc);font-size:10px;padding:6px 12px;">Download Weekday CSV</button>
+                            <button onclick="downloadTripData('Saturday')" class="jarvis-btn btn-sm" style="background:linear-gradient(135deg,var(--cyan),#0099cc);font-size:10px;padding:6px 12px;">Download Saturday CSV</button>
+                            <button onclick="downloadTripData('Sunday')" class="jarvis-btn btn-sm" style="background:linear-gradient(135deg,var(--cyan),#0099cc);font-size:10px;padding:6px 12px;">Download Sunday CSV</button>
+                            <button onclick="downloadTripData('Special')" class="jarvis-btn btn-sm" style="background:linear-gradient(135deg,var(--cyan),#0099cc);font-size:10px;padding:6px 12px;">Download Special CSV</button>
+                            <button onclick="downloadTripDataAll()" class="jarvis-btn btn-sm" style="background:linear-gradient(135deg,var(--green),#15803d);font-size:10px;padding:6px 12px;">Download All CSVs</button>
+                        </div>
+                        <div style="font-size:9px;color:rgba(255,255,255,0.5);margin-top:6px;">Download the uploaded trip data from database, edit it in Excel/CSV editor, and re-upload below.</div>
+                    </div>
                     <div class="table-wrap">
                         <table class="data-table" style="font-size:11px; min-width:500px;">
                             <tr><th>Day</th><th>WEF</th><th>Remarks</th><th>File</th><th></th></tr>
