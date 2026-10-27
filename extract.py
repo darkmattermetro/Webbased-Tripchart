@@ -30,6 +30,8 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 XLSX = os.path.join(HERE, "timetable.xlsx")
+XLSX_SAT = os.path.join(HERE, "Webbased-Tripchart", "timetableview", "sattimetable.xlsx")
+XLSX_SUN = os.path.join(HERE, "Webbased-Tripchart", "timetableview", "suntimetable.xlsx")
 OUT_JS = os.path.join(HERE, "l7-data.js")
 TEMPLATE = os.path.join(HERE, "l7-template.html")
 OUT_HTML = os.path.join(HERE, "line7-timetable-timesync.html")
@@ -44,10 +46,7 @@ UPLOAD_JS = os.path.join(HERE, "l7-upload.js")
 CSS_MARKER = "/*__L7_CSS__*/"
 STYLE_CSS = os.path.join(HERE, "style.css")
 
-# Timetable registry. The source workbook holds exactly ONE timetable
-# (sheet 07WDC09_24092026 = Thursday 24-Sep-2026), so saturday / sunday /
-# special ship as honest "not loaded" stubs rather than invented services.
-# Dropping a real extraction into one of these slots needs no template change.
+# Timetable registry.
 TABLE_ORDER = ["weekday", "saturday", "sunday", "special"]
 TABLE_LABEL = {"weekday": "WEEKDAY", "saturday": "SATURDAY",
                "sunday": "SUNDAY", "special": "SPECIAL"}
@@ -360,12 +359,30 @@ def active_at(trips, T):
 
 
 def main():
-    data = build(load_sheet(XLSX))
-    st = data["_stats"]
-    dn, up = data["dn"], data["up"]
+    def load_table(path):
+        data = build(load_sheet(path))
+        st = data["_stats"]
+        dn_t, up_t = data["dn"], data["up"]
+        lo_t = min(t["t"][t["a"]] for t in dn_t + up_t)
+        hi_t = max(t["t"][t["b"]] for t in dn_t + up_t)
+        return {
+            "stops": data["stops"],
+            "ring": data["ring"],
+            "dn": dn_t, "up": up_t,
+            "window": [lo_t, hi_t],
+            "sheet": SOURCE_SHEET,
+            "dow": SOURCE_DOW,
+            "validFor": SOURCE_DATE,
+            "stats": st
+        }
 
-    print("corridor   : %d slots  %s" % (len(data["stops"]), "RING" if data["ring"] else "open"))
-    print("              %s -> ... -> %s" % (data["stops"][0], data["stops"][-1]))
+    wkd = load_table(XLSX)
+    data = build(load_sheet(XLSX))  # for stats/printing parity
+    st = data["_stats"]
+    dn, up = wkd["dn"], wkd["up"]
+
+    print("corridor   : %d slots  %s" % (len(wkd["stops"]), "RING" if wkd["ring"] else "open"))
+    print("              %s -> ... -> %s" % (wkd["stops"][0], wkd["stops"][-1]))
     print("DN trips   : %d      UP trips : %d      total %d"
           % (len(dn), len(up), len(dn) + len(up)))
     print("partial    : %d (inducted / short-turn workings)" % st["partial"])
@@ -375,8 +392,8 @@ def main():
           % st["zero"])
     print("parity     : %d flagged  %s" % (len(st["parity"]), st["parity"][:10]))
 
-    lo = min(t["t"][t["a"]] for t in dn + up)
-    hi = max(t["t"][t["b"]] for t in dn + up)
+    lo = wkd["window"][0]
+    hi = wkd["window"][1]
     print("window     : %s .. %s" % (hhmmss(lo), hhmmss(hi)))
     for hhmm in ("05:30", "07:30", "12:00", "18:00", "22:00"):
         h, m = (int(x) for x in hhmm.split(":"))
@@ -384,9 +401,24 @@ def main():
         print("   %s  DN %2d   UP %2d   total %2d"
               % (hhmm, active_at(dn, T), active_at(up, T), active_at(dn, T) + active_at(up, T)))
 
+    sat = None
+    sun = None
+    if os.path.exists(XLSX_SAT):
+        try:
+            sat = load_table(XLSX_SAT)
+            print("loaded SAT %s" % XLSX_SAT)
+        except Exception as e:
+            print("SAT load failed: %s" % e)
+    if os.path.exists(XLSX_SUN):
+        try:
+            sun = load_table(XLSX_SUN)
+            print("loaded SUN %s" % XLSX_SUN)
+        except Exception as e:
+            print("SUN load failed: %s" % e)
+
     payload = {
         "meta": {
-            "corridor": data["stops"],
+            "corridor": wkd["stops"],
             "source": SOURCE_SHEET,
             "validFor": SOURCE_DATE,
             "dow": SOURCE_DOW,
@@ -399,9 +431,15 @@ def main():
                 "dow": SOURCE_DOW, "window": [lo, hi],
                 "dn": dn, "up": up,
             },
-            "saturday": {"loaded": False, "label": TABLE_LABEL["saturday"]},
-            "sunday":   {"loaded": False, "label": TABLE_LABEL["sunday"]},
-            "special":  {"loaded": False, "label": TABLE_LABEL["special"]},
+            "saturday": {
+                "loaded": bool(sat), "label": TABLE_LABEL["saturday"],
+                **({"sheet": sat["sheet"], "validFor": sat["validFor"], "dow": 6, "window": sat["window"], "dn": sat["dn"], "up": sat["up"]} if sat else {})
+            },
+            "sunday": {
+                "loaded": bool(sun), "label": TABLE_LABEL["sunday"],
+                **({"sheet": sun["sheet"], "validFor": sun["validFor"], "dow": 0, "window": sun["window"], "dn": sun["dn"], "up": sun["up"]} if sun else {})
+            },
+            "special": {"loaded": False, "label": TABLE_LABEL["special"]},
         },
         "order": TABLE_ORDER,
     }

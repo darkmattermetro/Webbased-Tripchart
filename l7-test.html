@@ -397,28 +397,28 @@ T.dates = async function (W) {
 
   C(13);
   g = "C. duplicate dates and unloaded target tables";
-  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false },
-                { date: "2026-09-24", table: "special", annual: false }]);
-  var d1 = R(2026, 8, 24).id;
   L.setProgram([{ date: "2026-09-24", table: "special", annual: false },
                 { date: "2026-09-24", table: "saturday", annual: false }]);
+  var d1 = R(2026, 8, 24).id;
+  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false },
+                { date: "2026-09-24", table: "special", annual: false }]);
   var d2 = R(2026, 8, 24).id;
   eq(g, "two entries on one date resolve the same way in either order", d1, d2,
      "first order gave " + d1 + ", reversed gave " + d2);
   /* An override to a table with no data must fall back, and say so. */
-  L.setProgram([{ date: "2026-09-24", table: "saturday", annual: false }]);
+  L.setProgram([{ date: "2026-09-24", table: "special", annual: false }]);
   L.at(21600, new Date(2026, 8, 24, 12));
   eq(g, "an override to an unloaded table falls back", d.getElementById("tblHow").textContent, "FALLBACK");
   eq(g, "the fallback shows a table that is loaded", d.getElementById("tblName").textContent, "WEEKDAY");
   eq(g, "the notice is raised for the substitution", /\bnl\b/.test(d.body.className), true);
   var lrf = L.last();
-  eq(g, "the fallback records the requested table", lrf && lrf.requested, "saturday",
+  eq(g, "the fallback records the requested table", lrf && lrf.requested, "special",
      "requested = " + (lrf && lrf.requested));
   eq(g, "the fallback records the displayed table", lrf && lrf.displayed, "weekday",
      "displayed = " + (lrf && lrf.displayed));
   eq(g, "the fallback is not reported as a refusal", !!(lrf && lrf.refused), false);
   eq(g, "the fixed readout pairs displayed with requested",
-     d.getElementById("selFixed").textContent, "WEEKDAY  SHOWN FOR SATURDAY");
+     d.getElementById("selFixed").textContent, "WEEKDAY  SHOWN FOR SPECIAL");
   /* Strict mode is the opposite decision: refuse rather than substitute. */
   L.setStrict(true);
   L.at(21600, new Date(2026, 8, 24, 12));
