@@ -1,0 +1,259 @@
+# Line 7 — Time Table View
+
+Standalone, self-contained timetable viewer and admin console for the DMRC Line 7
+(Pink Corridor) timetable, plus the build tooling that generates them.
+
+This folder is embedded into the main `index.html` app (see the root `README`/project
+notes): the viewer is shown from a **Time Table View** link on the home page, and the
+admin console is a **Time Table** tab in the admin console, restricted to admin-level
+users.
+
+When the console is opened from that tab the main app has already logged the operator
+in, so the app sends the frame an `L7_ADMIN_UNLOCK` `postMessage` and the console skips
+its own passphrase. Opened directly (standalone) it stays locked. The app loads both
+pages with a `?v=<L7_TT_VERSION>` query: bump `L7_TT_VERSION` in the root `app.js`
+whenever this folder is rebuilt so browsers fetch the new copy.
+
+## Files
+
+| File | Role |
+|---|---|
+| `timetable.xlsx` | Source workbook (single sheet `07WDC09_24092026`). The only build input that changes with a new timetable. |
+| `extract.py` | Build script (Python 3, standard library only). Reads the workbook and writes everything below. |
+| `l7-template.html` | Viewer template. Markers `/*__L7_DATA__*/`, `/*__L7_META__*/`, `/*__L7_CSS__*/`, `/*__L7_SUPA__*/` are replaced at build time. |
+| `l7-admin-template.html` | Admin template. Carries `/*__L7_UPLOAD__*/`, `/*__L7_SUPA__*/` and a base64 copy of the built viewer (`/*__L7_BASE__*/`). |
+| `l7-supa.json` | Optional online-sync endpoint (`url`, `anonKey`, `table`). Delete it to build fully-offline pages. |
+| `supabase/l7_timetable.sql` | One-time Supabase migration: the `l7_timetable` table and `l7_publish()` used by online sync. |
+| `l7-upload.js` | Dependency-free browser XLSX engine used by the admin console. |
+| `style.css` | Viewer/admin stylesheet (inlined into both builds). |
+| `l7-meta.json` | Optional metadata overrides (corridor text, WEF/notes, date programme). Edited by the admin export. |
+| `l7-data.js`, `l7-meta.js` | Generated: the `window.L7_DATA` / `window.L7_META` payloads. |
+| `line7-timetable-timesync.html` | **Generated** deployable viewer. |
+| `line7-timetable-admin.html` | **Generated** deployable admin console. |
+| `l7-test.html` | Browser regression suite (30 checks). Drives the generated files in hidden iframes. |
+| `l7-test-results.md` | Latest recorded suite result. |
+
+## Build
+
+```
+python extract.py
+```
+
+It regenerates `l7-data.js`, `l7-meta.js`, `line7-timetable-timesync.html` and
+`line7-timetable-admin.html`, then runs a gate that refuses to ship a file which is
+not self-contained or that presents itself as an ATS. "Self-contained" means no
+external URLs, `<script src>`, `<link href>`, `@import` or non-`data:` `url()`, with
+one deliberate exception: when `l7-supa.json` names an online-sync endpoint, that
+single host is permitted and every other external URL still fails the build.
+
+## Test
+
+The suite fetches the generated files, so it must be served over HTTP (not `file://`):
+
+```
+python -m http.server 8765 --bind 127.0.0.1
+```
+
+Open `http://127.0.0.1:8765/timetableview/l7-test.html`. `window.__TEST_RESULT`
+holds the machine-readable result.
+
+## Online sync (optional)
+
+By default the timetable is baked into the file. To let the admin console publish a
+timetable that online viewers pick up without a redeploy:
+
+1. Run `supabase/l7_timetable.sql` once in the Supabase SQL editor.
+2. Rebuild. `extract.py` reads `l7-supa.json` and embeds `window.L7_SUPA` into both
+   pages; the endpoint it names becomes the one permitted external host.
+3. In the admin console's **Export** tab press **PUBLISH ONLINE**. This calls the
+   `l7_publish()` RPC, which clears the old `is_current` row and inserts the new one
+   atomically.
+4. End-user viewers served over http(s) fetch the current row on load and prefer it;
+   from `file://`, offline, or on any error they use their baked-in copy. The chosen
+   source is on `window.__L7_SOURCE` (`"online"` or `"embedded"`).
+
+Authentication caveat: the app uses the Supabase **anon** key with its own in-page
+login, so Postgres RLS cannot tell admins from visitors and the shipped policies are
+permissive (writes are gated by the app). Harden later by moving to Supabase Auth and
+tightening the `l7_write` policy, as described in the SQL file.
+
+## Hiding the view from the main page (admin)
+
+The **Export** tab carries a **MAIN PAGE VISIBILITY** control. Pressing
+**HIDE TIME TABLE VIEW ON MAIN PAGE** pulls the `🗓️ Time Table View` entry off the
+app's home page for **every** user at once, for as long as it stays hidden — for a
+wrong workbook or any other urgency. **SHOW TIME TABLE VIEW ON MAIN PAGE** puts it
+back.
+
+- **Where the flag lives.** `app_config.TimetableVisible`, the same Supabase
+  key/value table the app already uses for `FormActive`, `UserMessage` and
+  `PopupMessage`. No new table, no new SQL, no rebuild — but it does need
+  `l7-supa.json` to be configured, and without it the control says so and changes
+  nothing.
+- **Both ends fail open.** Absent row or unreachable Supabase both leave the entry
+  visible; the flag has to read exactly `"false"` to hide it. An outage can never
+  make the timetable vanish on its own.
+- **What hiding does.** The home-page button is removed, and `showTimetable()`
+  stops fetching the viewer entirely — a stray or bookmarked call lands on the
+  page showing a `TIME TABLE VIEW UNAVAILABLE` notice with an iframe that was never
+  requested. The main app's own **Time Table** admin tab is untouched, so an
+  operator can always switch it back.
+- **How fast.** The main page re-reads the flag every 60 seconds, so a user with
+  the page already open sees the change within about a minute; otherwise on their
+  next load.
+
+The flag is read with the public anon key, so anyone holding that key could write
+it — the same trust model as the rest of this app (see the caveat under *Online
+sync* above).
+
+## Duty display (optional)
+
+Each train on the board can show the crew (duty) number working that rake at the
+displayed time, in a small chip on the train marker. (The trip/rake number is
+printed on the marker itself and in the service heading the marker opens, as
+`DN SERVICE <n>`; only the per-stop detail list keeps that column anonymous,
+showing just the parity flag.) This reads the app's
+existing Supabase `trip_data` table (`Rake Num`, `Duty No`, `Start Time`, `End Time`,
+`day_type`), where the Duty Finder lives — so it needs no new table, and duties
+published through that feature show up without a rebuild.
+
+- A rake is handed between crews during the day, so the duty shown is the one whose
+  booked window (`Start Time`–`End Time`) contains the second the board is displaying,
+  for the day type currently selected (`Weekday`/`Saturday`/`Sunday`/`Special`). When
+  the roster is loaded but no duty covers that time the chip reads **X** (amber).
+  Hovering a train adds a `duty` line with the number and its window, or `X`.
+- The roster is fetched over http(s) only, paged past PostgREST's response cap, and
+  independently of the timetable fetch. From `file://`, offline, or if `trip_data`
+  is unreachable the board simply draws no chip, exactly as before this feature.
+- The join is on the rake number, so it does not depend on the two datasets sharing
+  station names.
+
+## Weekday-only view (availability rule)
+
+The build is a **weekday view**: the board is only drawn Monday to Friday.
+
+| Today | Board | Header reason (`tblHow`) |
+|---|---|---|
+| Mon–Fri | Weekday timetable | `AUTO` |
+| Sat / Sun | Nothing — notice **NO TIMETABLE TODAY** | `WEEKEND` |
+| Any date the console hid | Nothing — notice **NO TIMETABLE TODAY** | `DATE OVERRIDE` |
+
+The weekend hide is automatic and unconditional: it applies even when a Saturday
+or Sunday workbook has been loaded into the file, so a loaded weekend table can
+never appear on the end-user page by itself.
+
+The decision is taken in `resolveTable(now)`, in two ordered steps:
+
+1. **a programmed date matching today → `DATE OVERRIDE`.** An explicit entry is
+   an instruction, so it is decided before the day-of-week rule and can therefore
+   override the automatic weekend hide in either direction: an entry naming
+   `weekday` on a Saturday shows the weekday board, an entry naming `hidden` on a
+   Monday hides that Monday.
+2. **otherwise the day of the week → `AUTO`.** Monday–Friday = weekday,
+   Saturday/Sunday = hidden.
+
+`hidden` is a reserved value in the date programme — not a timetable. The
+administration console's **DATE PROGRAMME** *SHOW* dropdown offers exactly two
+choices, **SHOW THE WEEKDAY TIMETABLE** and **HIDE THE VIEW (NO TIMETABLE)**,
+and a **HIDE TODAY** button adds today in one press. The same restriction is
+enforced at every entry point: `addEntry()`, `validateProgram()` (which also runs
+inside the export build), the `l7-meta.json` import (dropped entries are named,
+not silently kept) and `extract.py`'s `clean_program()`, which prints a reason
+for anything that is not `weekday` or `hidden`. The reserved `hidden` value needs
+no table data, so it always survives the build.
+
+Hidden is a whole-board state, not a notice bolted onto a table: the service
+clock and date keep running, `loadTable("hidden")` clears the trips, the
+readouts report `NO TIMETABLE` / `--` / `0`, and the header label reads
+`NO TIMETABLE (HIDDEN AT THE WEEKEND)` or `NO TIMETABLE (HIDDEN FOR THIS DATE)`.
+
+The station grid goes with them. Under `body.hid`, `#sections` is set to
+`display:none` and the notice card becomes the whole board, so on a hidden day
+the end user sees **NO TIMETABLE TODAY** and the reason for it — and nothing
+else. The grid used to stay on screen at full opacity under a 32px notice bar,
+which read as a broken page rather than a deliberate one; there are no times on
+it either way, but a blank board leaves no room to misread anything.
+
+Two things about that rule:
+
+- It is scoped to `body.hid` on purpose. A fallback or a strict refusal still
+  draws its board, because a wrong day is better than no day at all (the note on
+  `body.nl .row` says the same).
+- Only the *drawing* is suppressed — the sections stay in the DOM — so anything
+  that counts them is unaffected.
+
+Covered by check 11, which asserts both halves: the sections are still in the
+DOM, and the grid is not drawn.
+
+## Service tabs (viewer)
+
+The header shows two tabs: **AUTO** and **WEEKDAY**. **AUTO** (the default)
+follows the date programme and the day of the week described above. Clicking
+**WEEKDAY** pins the board onto the weekday table for the session: the pick never
+rewrites the date programme, nothing is read from the URL or local storage, and a
+reload starts on **AUTO** again.
+
+A tab chooses *which* timetable is drawn — it can never resurrect a day the date
+rule hides. On a hidden day every tab stays deselected and **AUTO** keeps the
+highlight, because the board is not showing a service type at all.
+
+A green dot marks a service type that actually carries data in this build (here,
+**WEEKDAY**; **AUTO** always applies). Picking a type with no data is handled
+exactly like a programmed date landing on an empty table: the board draws the
+fallback services (or refuses in strict mode) and labels the readouts
+`FALLBACK` / `SHOWN FOR` / `NOT LOADED`, for all the same reasons a viewer must
+never mistake substitute service for the requested type. Covered by check 28.
+
+## Uploading one timetable beside another (admin)
+
+One board means one corridor, and every loaded timetable is indexed against it.
+The admin console now makes "add the Saturday book next to the weekday book" easy:
+
+- **Re-map a sheet onto the current station list.** When an imported sheet's
+  station list differs but appears inside the file's list *in the same order*
+  (typically shorter — a Saturday book built on a subset of the same stations,
+  ring closure included), its report card gains a **RE-MAP THIS SHEET ONTO THE
+  CURRENT STATION LIST (BY STATION NAME)** checkbox. Ticking it keeps the sheet
+  *and* every already-loaded timetable: no corridor change and no unload. Trips
+  are re-based by station name and interior gaps are filled exactly like blank
+  grid cells.
+- **Corridor change with a choice.** When a sheet genuinely changes the corridor
+  for every timetable, each incompatible loaded timetable now offers **UNLOAD**
+  or **RE-MAP ONTO THE NEW STATION LIST (BY STATION NAME)** radio buttons. Re-map
+  is offered only when the loaded table's stations appear in the new list in
+  order; otherwise it is disabled and the table must be unloaded.
+- **Exact diagnostics.** A differing sheet reports which slots the file has that
+  the sheet lacks and which the sheet has that the file lacks, so the workbook can
+  be aligned or the corridor change agreed on deliberately.
+- **Tolerant date entry.** WEF / VALID-TO (metadata tab) and VALID-FROM (upload
+  tab) are `yyyy-mm-dd` style fields that accept `24-09-2026`, `09/24/2026`,
+  `2026.09.24` and ISO, normalising to `yyyy-mm-dd` on blur/Enter. Partial typing
+  never wipes a stored date (the old native date input did). Covered by check 29.
+- **Sheets shifted a few rows or columns still load.** The weekday / Saturday /
+  Sunday books share one corridor — the same names, the same order, the same count —
+  but the grid can sit a few rows or columns further into the page than the
+  workbook this viewer was built from. The upload engine now anchors on the known
+  station list wherever it appears and re-locates the whole DN/UP block relative
+  to it, and the trip-number row is **searched for** in the rows above the grid
+  rather than assumed from the template — so a taller or shorter block header is
+  fine too. The corridor is matched verbatim, or case/space-insensitively (a
+  cosmetic-only match reuses the corridor names so the sheet applies cleanly), or
+  as a strict prefix of ≥ 20 slots when the sheet omits the closing MKPR ring
+  row (the shorter list then flows through the normal corridor diff / RE-MAP
+  decision). A shifted sheet that re-anchors onto the *same* corridor applies
+  alongside the loaded weekday table with no station-list conflict, and its card
+  prints a **GRID RE-ANCHORED** line naming the column, rows and trip-number rows
+  (only when the position differs from the template). If extraction still fails
+  for a sheet, its card explains **why**: whether the station list was found, at
+  which column/rows, whether a trip-number row was located, and how many DN/UP
+  trips were read. Covered by check 29.
+
+## Notes
+
+- The generated files open straight from disk with **no network**: the payload is
+  baked in, and the viewer only attempts its optional Supabase fetch over http(s),
+  never from `file://`. If that fetch fails, times out or returns nothing, it boots
+  the baked-in copy. Keep every other network reference out: the build gate rejects
+  any external URL other than the configured sync endpoint.
+- Operator-typed text is serialised with `<` escaped as `\u003c` and rendered with
+  `textContent`/DOM only — never `innerHTML`.

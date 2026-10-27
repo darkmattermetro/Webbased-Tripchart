@@ -168,6 +168,60 @@ function showPage(pageId) {
     }
 }
 
+// Line 7 Time Table View. The viewer and its admin console are self-contained
+// pages under timetableview/. They are large, so the frames are loaded lazily:
+// only when the user opens the page or the admin tab.
+function loadTimetableFrame(id, url) {
+    const frame = document.getElementById(id);
+    if (frame && !frame.getAttribute('src')) frame.setAttribute('src', url);
+}
+// Bump this whenever the built pages under timetableview/ are regenerated, so
+// browsers fetch the new copy instead of a cached one.
+const L7_TT_VERSION = '20261021a';
+function l7TtUrl(path) { return path + '?v=' + L7_TT_VERSION; }
+// Whether the home-page "Time Table View" entry is shown. The Time Table admin
+// console flips app_config.TimetableVisible for every user at once; this side
+// fails OPEN, so a missing row or an unreachable Supabase always leaves the
+// entry visible rather than silently taking the timetable away.
+let L7_TT_VISIBLE = true;
+function showTimetable() {
+    // Guarded so a hidden view can never be reached even by a stray call or a
+    // stale bookmark: the frame is simply not fetched, and the page shows the
+    // notice applyTimetableVisibility() already put in place.
+    if (L7_TT_VISIBLE) loadTimetableFrame('ttViewerFrame', l7TtUrl('timetableview/line7-timetable-timesync.html'));
+    showPage('pageTimetable');
+}
+async function refreshTimetableVisibility() {
+    try {
+        const { data } = await sb.from('app_config')
+            .select('config_value').eq('config_key', 'TimetableVisible').single();
+        L7_TT_VISIBLE = !(data && data.config_value === 'false');
+    } catch (e) {
+        L7_TT_VISIBLE = true; // no flag stored, or Supabase unreachable -> visible
+    }
+    applyTimetableVisibility();
+    return L7_TT_VISIBLE;
+}
+function applyTimetableVisibility() {
+    const btn = document.getElementById('ttViewBtn');
+    if (btn) btn.style.display = L7_TT_VISIBLE ? '' : 'none';
+    const frame = document.getElementById('ttViewerFrame');
+    const notice = document.getElementById('ttHiddenNotice');
+    if (frame) frame.style.display = L7_TT_VISIBLE ? '' : 'none';
+    if (notice) notice.style.display = L7_TT_VISIBLE ? 'none' : 'flex';
+}
+function ensureTimetableAdmin() {
+    const frame = document.getElementById('ttAdminFrame');
+    if (!frame || frame.getAttribute('src')) return;
+    // The console is admin-only and the operator has already logged in, so tell
+    // it to unlock rather than asking for its passphrase a second time. Sent on
+    // each load (so it survives an in-frame refresh) and only from here.
+    frame.addEventListener('load', function () {
+        try { frame.contentWindow.postMessage({ type: 'L7_ADMIN_UNLOCK' }, '*'); } catch (e) {}
+    });
+    frame.setAttribute('src', l7TtUrl('timetableview/line7-timetable-admin.html'));
+}
+
 function timeToMins(timeStr) {
     if (!timeStr || typeof timeStr !== 'string' || timeStr.indexOf(':') === -1) return -1;
     const parts = timeStr.split(':');
@@ -655,6 +709,68 @@ async function clearData(type) {
     } catch (e) { alert('Error: ' + e.toString()); }
 }
 
+async function downloadTripData(type) {
+    try {
+        const { data, error } = await sb.from('trip_data').select('*').eq('day_type', type).order('id', { ascending: true });
+        if (error) {
+            alert('Error fetching data: ' + error.message);
+            return;
+        }
+        if (!data || data.length === 0) {
+            alert('No data found for ' + type);
+            return;
+        }
+        const headers = ["Duty No", "Sign On Time", "Sign On Loc", "Sign Off Loc", "Sign Off Time", "Driving Hrs", "Duty Hrs", "Same Jurisdiction", "Rake Num", "Start Stn", "Start Time", "End Stn", "End Time", "Service Duration", "Break", "StepBack Rake"];
+        let csv = headers.join(',') + '\n';
+        data.forEach(row => {
+            const values = [
+                row["Duty No"] || '',
+                row["Sign On Time"] || '',
+                row["Sign On Loc"] || '',
+                row["Sign Off Loc"] || '',
+                row["Sign Off Time"] || '',
+                row["Driving Hrs"] || '',
+                row["Duty Hrs"] || '',
+                row["Same Jurisdiction"] || '',
+                row["Rake Num"] || '',
+                row["Start Stn"] || '',
+                row["Start Time"] || '',
+                row["End Stn"] || '',
+                row["End Time"] || '',
+                row["Service Duration"] || '',
+                row["Break"] || '',
+                row["StepBack Rake"] || ''
+            ].map(v => {
+                const s = String(v);
+                if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+                    return '"' + s.replace(/"/g, '""') + '"';
+                }
+                return s;
+            });
+            csv += values.join(',') + '\n';
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', type + '_trip_data.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        alert('Error: ' + e.toString());
+    }
+}
+
+async function downloadTripDataAll() {
+    const types = ['Weekday', 'Saturday', 'Sunday', 'Special'];
+    for (const type of types) {
+        await downloadTripData(type);
+        await new Promise(r => setTimeout(r, 500));
+    }
+}
+
 function updateAdminUI(accessLevel) {
     const adminTabs = document.querySelectorAll('.admin-only-tab');
     const usersTab = document.getElementById('tabUsers');
@@ -669,7 +785,7 @@ function updateAdminUI(accessLevel) {
 
 function switchAdminTab(tabName) {
     const isAdmin = currentUser && currentUser.accessLevel && currentUser.accessLevel.toLowerCase() === 'admin';
-    const restrictedTabs = ['messages', 'upload', 'users', 'form'];
+    const restrictedTabs = ['messages', 'upload', 'users', 'form', 'timetable'];
     if (!isAdmin && restrictedTabs.indexOf(tabName) !== -1) {
         alert('Admin access required for this section!');
         return;
@@ -682,6 +798,7 @@ function switchAdminTab(tabName) {
     if (tabName === 'km' || tabName === 'chart') loadKmData();
     if (tabName === 'users') loadUserManagementData();
     if (tabName === 'chart') initSeriesGrid();
+    if (tabName === 'timetable') ensureTimetableAdmin();
 }
 
 // SESSION MANAGEMENT
@@ -1523,6 +1640,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadKmData();
     updateDateTime();
     await loadPopupMessage();
+    // Awaited like the messages above so a hidden entry never flashes first.
+    // A failure inside leaves the entry visible, which is the safe default.
+    await refreshTimetableVisibility();
+    // Pick the flag up while a page is already open, not only on reload, so an
+    // emergency hide reaches users who never navigate away. Same 60s cadence
+    // as the other keep-alive intervals further down.
+    setInterval(refreshTimetableVisibility, 60000);
     if (!currentUser) await loadUserMessages();
     const page = document.querySelector('.page.active');
     if (page && page.id) trackVisit(page.id, 'pageview');
