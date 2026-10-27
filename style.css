@@ -1,0 +1,344 @@
+/* ============================================================================
+   DMRC LINE 7 - TIME SYNC VIEW
+   ----------------------------------------------------------------------------
+   This file is a BUILD INPUT, not a deliverable.
+
+   extract.py reads it and inlines the contents into the <style> block of
+   l7-template.html, which produces line7-timetable-timesync.html.
+
+   It stays a separate file so the stylesheet can be edited and reviewed on its
+   own. The shipped HTML must remain fully self-contained and open from file://
+   with no network, so it can never become an external <link> or an @import --
+   the build gate rejects both. Edit here, then run:  python extract.py
+   ============================================================================
+
+/* ==== CUT HERE ==== build input ends ==== */
+
+:root{
+--bg:#05090f; --text:#8ab4f8; --track:#334155; --station:#ffffff;
+/* DN amber / UP cyan: both high-contrast on near-black, and yellow-vs-cyan
+   survives red-green colour blindness, so direction never relies on hue. */
+--dn:#fbbf24; --dn-lt:#fde68a; --dn-glow:rgba(251,191,36,.55);
+--up:#22d3ee; --up-lt:#a5f3fc; --up-glow:rgba(34,211,238,.5);
+--green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+--panel:#0f172a; --border:#1e293b; --panel2:#0b1220;
+--dim:#5b7391; --bright:#e8f1fa;
+--mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,"DejaVu Sans Mono","Liberation Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;
+display:flex;flex-direction:column;overflow:hidden;
+}
+.panelbox{background:var(--panel);border:1px solid var(--border);box-shadow:inset 0 0 10px rgba(0,0,0,.5)}
+.glow{text-shadow:0 0 6px currentColor}
+button{
+font-family:var(--mono);font-size:11px;letter-spacing:.07em;color:var(--text);
+background:#111c2e;border:1px solid var(--border);padding:6px 10px;cursor:pointer;border-radius:2px;
+transition:background .12s,border-color .12s,color .12s;
+}
+button:hover{background:#18293f;border-color:#2f4a68;color:var(--bright)}
+button.on{background:#0d3324;border-color:var(--green);color:var(--green)}
+button:disabled{opacity:.4;cursor:not-allowed}
+select,input[type=date]{
+font-family:var(--mono);font-size:11px;background:#0a1220;color:var(--text);
+border:1px solid var(--border);padding:5px 7px;border-radius:2px;
+}
+
+/* ---------------- header ---------------- */
+header{
+flex:0 0 auto;background:linear-gradient(180deg,#0c1522,#070d16);
+border-bottom:1px solid var(--border);z-index:60;
+}
+.hrow{display:flex;align-items:center;gap:14px;padding:8px 14px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:1px;min-width:0}
+.brand h1{font-size:15px;letter-spacing:.16em;color:var(--bright);font-weight:700;white-space:nowrap}
+.brand h1 b{color:var(--dn)}
+.brand .sub{font-size:9.5px;letter-spacing:.11em;color:var(--dim);white-space:nowrap}
+.sep{width:1px;align-self:stretch;background:var(--border)}
+.spacer{flex:1 1 auto;min-width:4px}
+
+.badge{
+font-size:9.5px;letter-spacing:.11em;color:var(--amber);border:1px solid rgba(245,158,11,.5);
+background:rgba(245,158,11,.08);padding:5px 9px;border-radius:2px;line-height:1.5;max-width:270px;
+}
+.badge b{color:var(--bright);font-weight:400}
+
+.readout{display:flex;flex-direction:column;gap:2px;min-width:74px}
+.readout .k{font-size:8.5px;letter-spacing:.15em;color:var(--dim);white-space:nowrap}
+.readout .v{font-size:17px;font-weight:700;color:var(--bright);line-height:1.05;font-variant-numeric:tabular-nums}
+.readout.clock .v{color:var(--green);text-shadow:0 0 10px rgba(34,197,94,.45)}
+.readout.tbl .v{color:var(--dn);text-shadow:0 0 10px rgba(250,204,21,.35)}
+.readout .v.sm{font-size:12px;letter-spacing:.06em}
+.how{font-size:8.5px;letter-spacing:.13em;padding:1px 5px;border-radius:2px;display:inline-block}
+.how.auto{color:var(--dim);border:1px solid var(--border)}
+.how.date{color:var(--dn);border:1px solid rgba(250,204,21,.55)}
+.how.fb{color:#fb923c;border:1px solid rgba(251,146,60,.55)}
+.how.ok{color:var(--green);border:1px solid rgba(34,197,94,.5)}
+.how.bad{color:var(--red);border:1px solid rgba(239,68,68,.5)}
+
+/* timetable selector */
+.sel{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.sel .fixed{
+display:inline-block;padding:5px 11px;border:1px solid var(--border);border-radius:2px;
+background:#0a1220;color:var(--bright);font-size:11px;letter-spacing:.12em;
+}
+.sel .lbl2{font-size:8.5px;letter-spacing:.13em;color:var(--dim)}
+.sel .lbl{font-size:8.5px;letter-spacing:.15em;color:var(--dim);margin-right:2px}
+.sel button{position:relative;padding:6px 11px}
+.sel button .dot{position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--dim)}
+.sel button.has .dot{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sel button.on .dot{background:var(--dn)}
+.ctrls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+#btnPanel{display:none}
+/* ---------------- board + sections ---------------- */
+main{flex:1 1 auto;display:flex;min-height:0;overflow:hidden}
+.board{
+flex:1 1 auto;overflow-y:auto;overflow-x:hidden;position:relative;padding:10px 12px 24px;
+background-image:
+  linear-gradient(to right,rgba(255,255,255,.028) 1px,transparent 1px),
+  linear-gradient(to bottom,rgba(255,255,255,.028) 1px,transparent 1px);
+background-size:50px 50px;
+}
+.board::-webkit-scrollbar{width:12px;height:12px}
+.board::-webkit-scrollbar-track{background:var(--bg)}
+.board::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+.board::-webkit-scrollbar-thumb:hover{background:var(--track)}
+
+.sec{margin:0 0 10px;border:1px solid var(--border);background:rgba(15,23,42,.55);border-radius:3px}
+.sec-hd{
+display:flex;align-items:center;gap:12px;padding:5px 11px;font-size:9.5px;letter-spacing:.14em;
+background:rgba(11,18,32,.9);border-bottom:1px solid var(--border);color:var(--dim);
+}
+.sec-hd .no{color:var(--bright);font-weight:700}
+.sec-hd .rng{color:var(--text)}
+.sec-hd .cnt{margin-left:auto;color:var(--dim)}
+.sec-hd .ringmark{margin-left:10px;color:var(--up);letter-spacing:.1em}
+.sec-hd .ringmark.cnt{margin-left:10px}
+.plot{padding:7px 14px 9px}
+
+.prow{position:relative}
+.prow.labels{height:17px;margin-bottom:3px}
+.prow.railrow{height:30px;margin-bottom:5px}
+.prow.railrow:last-child{margin-bottom:0}
+
+/* rail */
+.rail{
+position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;background:var(--track);
+border-radius:1px;box-shadow:0 1px 0 rgba(0,0,0,.6);
+}
+.rail::after{
+content:"";position:absolute;inset:0;opacity:.45;border-radius:1px;
+background:repeating-linear-gradient(90deg,rgba(0,0,0,.5) 0 2px,transparent 2px 14px);
+}
+.railrow.dn .rail{background:linear-gradient(180deg,#3d4d61,#2b3646)}
+.railrow.up .rail{background:linear-gradient(180deg,#3d4d61,#2b3646)}
+.dirchip{
+position:absolute;top:50%;transform:translateY(-50%);font-size:9px;color:var(--dim);
+background:var(--bg);padding:0 3px;letter-spacing:.1em;z-index:4;
+}
+.dirchip.l{left:-2px} .dirchip.r{right:-2px}
+.rowtag{
+position:absolute;left:-11px;top:50%;transform:translateY(-50%);
+font-size:8.5px;letter-spacing:.1em;color:var(--dim);width:9px;text-align:center;
+}
+.plot{padding-left:26px}
+
+/* station labels */
+.lbl{
+position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;
+font-size:10.5px;letter-spacing:.05em;color:var(--station);
+}
+.lbl.edge{transform:translateX(0)}
+.lbl.edge.e{transform:translateX(-100%)}
+
+/* occupancy node + led */
+.ov{position:absolute;inset:0;pointer-events:none}
+.node{
+position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;
+background:var(--bg);border:2px solid var(--station);cursor:help;pointer-events:auto;
+transition:border-color .18s,box-shadow .18s;z-index:6;
+}
+.node.occ{border-color:var(--green);box-shadow:0 0 9px rgba(34,197,94,.75)}
+.node.dwl{border-color:var(--green);box-shadow:0 0 9px rgba(34,197,94,.85);
+        animation:blink .85s steps(1,end) infinite}
+.led{
+position:absolute;top:50%;width:6px;height:6px;margin:-3px 0 0 0;border-radius:50%;
+background:#0b1220;transform:translate(9px,-9px);transition:background .18s,box-shadow .18s;z-index:7;
+}
+.led.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.led.dwl{background:var(--green);box-shadow:0 0 6px var(--green);
+       animation:blink .85s steps(1,end) infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.16}}
+
+/* trains */
+.train{
+position:absolute;top:50%;width:52px;height:22px;margin-top:-11px;margin-left:-26px;
+display:flex;align-items:center;justify-content:center;border-radius:3px;
+font-size:11.5px;font-weight:700;letter-spacing:.05em;font-variant-numeric:tabular-nums;
+color:#000;cursor:help;pointer-events:auto;z-index:20;will-change:left;white-space:nowrap;
+}
+.train.dn{background:linear-gradient(180deg,#fcd34d,var(--dn));border:1px solid var(--dn-lt);box-shadow:0 0 10px var(--dn-glow)}
+.train.up{background:linear-gradient(180deg,#67e8f9,var(--up));border:1px solid var(--up-lt);box-shadow:0 0 10px var(--up-glow)}
+/* dark pip on the leading edge: DN runs left-to-right so it leads on the
+ right, UP runs right-to-left so it leads on the left */
+.lead{position:absolute;top:50%;margin-top:-4px;width:0;height:0;
+    border:4px solid transparent;pointer-events:none;z-index:2}
+.train.dn .lead{right:-10px;border-left-color:rgba(0,0,0,.6)}
+.train.up .lead{left:-10px;border-right-color:rgba(0,0,0,.6)}
+/* Dwelling. Amber used to mean "dwelling", which would now be indistinguishable
+ from a DN train, so dwell is carried by a blinking green platform LED plus a
+ dashed halo in the train's own colour. */
+.train.dwl{animation:pulse 1.1s ease-in-out infinite}
+.train.dwl::after{
+content:"";position:absolute;inset:-4px;border:1px dashed;border-radius:5px;
+animation:ring 1.1s ease-out infinite;pointer-events:none;
+}
+.train.dn.dwl::after{border-color:var(--dn-lt)}
+.train.up.dwl::after{border-color:var(--up-lt)}
+.train.flag::before{
+content:"!";position:absolute;top:-14px;right:-5px;width:12px;height:12px;border-radius:50%;
+background:var(--amber);color:#231a00;font-size:8px;font-weight:700;
+display:flex;align-items:center;justify-content:center;
+}
+.train.cont-up,.train.cont-down{opacity:.58}
+.cont{position:absolute;left:50%;margin-left:-5px;font-size:10px;line-height:1;font-style:normal;
+    display:none;color:rgba(138,180,248,.95);pointer-events:none}
+.train.cont-up .cont{display:block;top:-14px}
+.train.cont-down .cont{display:block;bottom:-14px}
+.train.enter{animation:fadein .45s ease-out}
+@keyframes pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.4)}}
+@keyframes ring{0%{transform:scale(.9);opacity:.9}100%{transform:scale(1.28);opacity:0}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+/* ---------------- service panel ---------------- */
+aside{
+flex:0 0 320px;background:linear-gradient(180deg,#0c1522,#070d16);
+border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;
+}
+aside .hd{
+flex:0 0 auto;padding:7px 12px;border-bottom:1px solid var(--border);display:flex;
+justify-content:space-between;align-items:center;font-size:9.5px;letter-spacing:.15em;color:var(--dim);
+}
+aside .hd b{color:var(--bright)}
+aside .list{flex:1 1 auto;overflow-y:auto;overflow-x:hidden}
+aside .list::-webkit-scrollbar{width:10px}
+aside .list::-webkit-scrollbar-track{background:var(--bg)}
+aside .list::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+.grp{
+position:sticky;top:0;z-index:5;padding:4px 12px;font-size:9px;letter-spacing:.15em;
+background:#0e1a2b;border-block:1px solid var(--border);display:flex;justify-content:space-between;
+}
+.grp.dn{color:var(--dn)} .grp.up{color:var(--up)}
+.row{
+display:grid;grid-template-columns:42px 1fr auto;gap:7px;align-items:center;
+padding:4px 12px;border-bottom:1px solid #101a28;font-size:11px;cursor:help;
+}
+.row:hover{background:#111e30}
+.row .no{font-weight:700;font-variant-numeric:tabular-nums}
+.row.dn .no{color:var(--dn)} .row.up .no{color:var(--up)}
+.row .path{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .path b{color:var(--bright);font-weight:400}
+.row .eta{font-variant-numeric:tabular-nums;color:var(--bright);text-align:right;min-width:50px;font-size:10.5px}
+.row .eta small{display:block;color:var(--dim);font-size:8.5px}
+.row .eta .h{color:var(--amber)}
+.row .fx{color:var(--amber);font-size:8.5px;margin-left:3px}
+.empty{padding:22px 12px;text-align:center;color:var(--dim);font-size:10.5px;letter-spacing:.1em}
+
+/* ---------------- not-loaded notice ---------------- */
+.notload{
+display:none;margin:0 0 10px;border:1px solid rgba(245,158,11,.35);
+background:rgba(245,158,11,.05);border-radius:3px;
+}
+body.nl .notload{display:block}
+.nlbar{display:flex;align-items:center;gap:10px;padding:6px 11px;flex-wrap:wrap}
+.nlbar b{font-size:10.5px;letter-spacing:.14em;color:var(--amber);white-space:nowrap}
+.nlbar #nlBody{font-size:10.5px;line-height:1.5;color:var(--dim);flex:1 1 200px;min-width:0}
+.nlbar #nlBody b{font-size:10.5px;letter-spacing:.02em;color:var(--text)}
+.nldet{flex:0 0 auto}
+.nldet>summary{font-size:8.5px;letter-spacing:.13em;color:var(--dim);cursor:pointer;
+list-style:none;padding:3px 7px;border:1px solid var(--border);border-radius:2px;
+-webkit-user-select:none;user-select:none}
+.nldet>summary::-webkit-details-marker{display:none}
+.nldet>summary:hover{color:var(--amber);border-color:rgba(245,158,11,.45)}
+.nldet[open]>summary{color:var(--amber);border-color:rgba(245,158,11,.45)}
+.nlmore{padding:8px 1px 2px;margin-top:7px;border-top:1px solid var(--border)}
+.nlmore p{font-size:10.5px;line-height:1.65;color:var(--text);max-width:720px}
+.nlmore .src{margin-top:7px;font-size:9.5px;color:var(--dim);letter-spacing:.06em}
+.nlmore .row2{margin-top:9px;display:flex;gap:7px;flex-wrap:wrap}
+/* The board is the product. Flagging a wrong day must not wash it out, so this
+ only ever marks the train rows, never the whole diagram. */
+body.nl .row{opacity:.45}
+body.nlw .notload{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.08)}
+
+/* A substitution (FALLBACK) or a refusal to substitute (STRICT) is a state of
+ the whole board, not a detail of one readout, so the notice is promoted: a
+ brighter edge, a coloured spine, and a slow pulse that a glance will catch.
+ Strict mode is red because it means nothing is on the board. */
+body.fb .notload{border-color:rgba(251,146,60,.7);background:rgba(251,146,60,.11);
+ box-shadow:inset 4px 0 0 #fb923c}
+body.fb .nlbar b{color:#fb923c}
+body.strict .notload{border-color:rgba(239,68,68,.8);background:rgba(239,68,68,.1);
+ box-shadow:inset 4px 0 0 var(--red)}
+body.strict .nlbar b{color:var(--red)}
+body.fb .notload,body.strict .notload{animation:fbpulse 2.4s ease-in-out infinite}
+@keyframes fbpulse{0%,100%{opacity:1}50%{opacity:.76}}
+@media (prefers-reduced-motion:reduce){
+ body.fb .notload,body.strict .notload{animation:none}
+}
+
+.note{font-size:9.5px;line-height:1.65;color:var(--dim);letter-spacing:.04em}
+.note.warn{color:var(--amber)}
+
+/* ---------------- footer ---------------- */
+footer{
+flex:0 0 auto;display:flex;align-items:center;gap:0;height:25px;background:#070d16;
+border-top:1px solid var(--border);font-size:9.5px;letter-spacing:.09em;color:var(--dim);
+overflow:hidden;white-space:nowrap;
+}
+footer .c{padding:0 12px;border-right:1px solid var(--border);line-height:25px;height:25px}
+footer .c b{color:var(--text);font-weight:400}
+footer .lg{display:flex;align-items:center;gap:5px;padding:0 10px}
+footer .sw{width:10px;height:10px;border:1px solid #000;display:inline-block}
+footer .sw.tr{background:var(--dn)} footer .sw.st{background:var(--station);border-radius:50%}
+footer .sw.ok{background:var(--green);border-radius:50%}
+footer .sw.dw{background:var(--green);border-radius:50%;animation:blink .85s steps(1,end) infinite}
+footer .c.ok{color:var(--green)} footer .c.wn{color:var(--amber)}
+
+/* ---------------- tooltip ---------------- */
+#tip{
+position:fixed;z-index:9998;display:none;pointer-events:none;max-width:300px;
+background:#0b1622;border:1px solid #2f4a68;padding:8px 11px;font-size:10.5px;line-height:1.6;
+box-shadow:0 6px 22px rgba(0,0,0,.75);border-radius:2px;
+}
+#tip b{color:var(--bright)} #tip .k{color:var(--dim)} #tip hr{border:0;border-top:1px solid var(--border);margin:5px 0}
+#tip .w{color:var(--amber)}
+@media (max-width:1099px){
+aside{position:fixed;top:0;right:0;bottom:0;width:min(320px,88%);z-index:85;
+     transform:translateX(100%);transition:transform .2s ease}
+body.pnl aside{transform:translateX(0)}
+#btnPanel{display:inline-block}
+}
+@media (max-width:640px){
+.badge{max-width:none;width:100%}
+.hrow{gap:9px;padding:7px 10px}
+.readout .v{font-size:15px}
+.plot{padding-left:20px;padding-right:8px}
+.lbl{font-size:9.5px}
+}
+
+/* ---------------- data error banner ----------------
+   Shown only when the boot-time shape check rejects window.L7_DATA or
+   window.L7_META. It replaces the board rather than overlaying it: a board
+   drawn from data that failed validation would be worse than no board,
+   because it would look authoritative while being unreliable. */
+body.dataerr #board,body.dataerr #panel,body.dataerr footer{display:none}
+.dataerr{border:1px solid var(--red);background:rgba(239,68,68,.06);padding:18px 20px}
+.dataerr h2{font-size:12.5px;letter-spacing:.22em;color:var(--red);margin:0 0 4px}
+.dataerr .sub{font-size:10.5px;letter-spacing:.14em;color:var(--text);
+  opacity:.75;margin:0 0 14px}
+.dataerr .why{font-size:11px;line-height:1.7;margin:0 0 14px;padding:9px 11px;
+  border:1px solid var(--border);background:#0b1220;word-break:break-word}
+.dataerr .why b{color:var(--bright);font-weight:400}
+.dataerr ul{margin:0;padding:0;list-style:none;font-size:10.5px;line-height:1.75}
+.dataerr li:before{content:"- ";color:var(--red)}

@@ -1,0 +1,19 @@
+{
+  "name": "time-table-view",
+  "version": "1.0.0",
+  "main": "l7-data.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node ci/l7-ci.js --mode http && node tests/parity.test.js",
+    "test:file": "node ci/l7-ci.js --mode file"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "playwright": "^1.64.1"
+  }
+}
