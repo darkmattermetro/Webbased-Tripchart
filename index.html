@@ -950,6 +950,7 @@
                 fwCanvas.id = 'dwFireworksCanvas';
                 fwCanvas.setAttribute('aria-hidden', 'true');
                 layer.appendChild(fwCanvas);
+                fwCanvas.style.display = 'block';
                 try {
                     fwCtx = fwCanvas.getContext('2d', { alpha: true, desynchronized: true });
                 } catch (error) {
@@ -963,6 +964,7 @@
 
             function wakeFireworkEngine() {
                 if (!fwCanvas || !fwCtx || fwRaf) return;
+                if (fwCanvas) fwCanvas.style.display = 'block';
                 fwLastFrame = 0;
                 fwRaf = window.requestAnimationFrame(drawFireworkFrame);
             }
@@ -1284,7 +1286,8 @@
                     fwRaf = window.requestAnimationFrame(drawFireworkFrame);
                 } else {
                     fwLastFrame = 0;
-                    fwCtx.clearRect(0, 0, fwWidth, fwHeight);
+                    if (fwCtx) fwCtx.clearRect(0, 0, fwWidth, fwHeight);
+                    if (fwCanvas) fwCanvas.style.display = 'none';
                 }
             }
 
