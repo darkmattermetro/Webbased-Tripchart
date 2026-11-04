@@ -19,7 +19,7 @@
             <div class="orb"></div>
         </div>
     </div>
-    
+
     <!-- POPUP MODAL -->
     <div class="popup-overlay" id="popupOverlay">
         <div class="popup-modal">
@@ -29,7 +29,7 @@
             <button class="popup-btn" onclick="closePopup()">UNDERSTOOD</button>
         </div>
     </div>
-    
+
     <header class="jarvis-header">
         <div class="header-content">
             <div class="header-left">
@@ -55,11 +55,11 @@
             </div>
         </div>
     </header>
-    
-    <div class="status-bar">⚡ SYSTEM ONLINE • SAFETY FIRST • SERVICE ALWAYS • KKDA CREW CONTROL ⚡</div>
-    
+
+
+
     <div class="main-wrapper">
-        
+
         <div id="loginModal" class="login-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:1000;justify-content:center;align-items:center;">
             <div class="glass-card" style="max-width:350px;width:90%;position:relative;">
                 <button onclick="toggleLoginModal()" style="position:absolute;top:10px;right:10px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:20px;cursor:pointer;">✕</button>
@@ -81,7 +81,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="registerModal" class="login-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:1000;justify-content:center;align-items:center;">
             <div class="glass-card" style="max-width:380px;width:90%;position:relative;max-height:90vh;overflow-y:auto;">
                 <button onclick="toggleRegisterModal()" style="position:absolute;top:10px;right:10px;background:none;border:none;color:rgba(255,255,255,0.5);font-size:20px;cursor:pointer;">✕</button>
@@ -108,10 +108,10 @@
                 <button class="jarvis-btn btn-primary" onclick="handleRegister()" style="width:100%;">REGISTER</button>
             </div>
         </div>
-        
+
         <div id="pageLogin" class="page"></div>
         <div id="pageRegister" class="page"></div>
-        
+
         <div id="pageHome" class="page active">
             <div id="userMsgBanner" class="user-msg-banner" style="display:none;">
                 <span class="msg-icon">📢</span>
@@ -145,7 +145,7 @@
             </div>
 
         </div>
-        
+
         <div id="pageResult" class="page">
             <div class="quick-search">
                 <input type="number" id="dutyInputQuick" placeholder="Quick Search..." inputmode="numeric">
@@ -164,7 +164,7 @@
                         <div id="adminUserLevel" style="font-size:10px;color:var(--orange);">Access: <span id="adminLoggedLevel">-</span></div>
                     </div>
                 </div>
-                
+
                 <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;border-bottom:2px solid rgba(0,212,255,0.3);padding-bottom:10px;">
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabMessages" onclick="switchAdminTab('messages')" style="background:linear-gradient(135deg,var(--orange),#cc5500);">📢 Messages</button>
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabUpload" onclick="switchAdminTab('upload')" style="background:linear-gradient(135deg,var(--cyan),#0099cc);">📤 Data Upload</button>
@@ -174,7 +174,7 @@
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabUsers" onclick="switchAdminTab('users')" style="background:linear-gradient(135deg,var(--red),#991b1b);display:none;">👥 Users</button>
                     <button class="jarvis-btn btn-sm admin-only-tab" id="tabTimetable" onclick="switchAdminTab('timetable')" style="background:linear-gradient(135deg,var(--cyan),#0e7490);">🗓️ Time Table</button>
                 </div>
-                
+
                 <!-- Tab: Messages -->
                 <div id="adminTabMessages" class="admin-tab-content">
                     <div class="section-header orange">
@@ -228,7 +228,7 @@
                                 <div id="visitWeek" style="font-size:18px;color:var(--red);font-weight:bold;">-</div>
                             </div>
                         </div>
-                        
+
                         <!-- Visitor Trend Chart (collapsible) -->
                         <div style="margin-top:15px;">
                             <div onclick="toggleVisitorChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(0,150,200,0.1));border-radius:8px;border-left:4px solid var(--cyan);">
@@ -240,7 +240,7 @@
                                 <canvas id="visitorChart" style="width:100%;height:250px;"></canvas>
                             </div>
                         </div>
-                        
+
                         <!-- Hour of Day (collapsible) -->
                         <div style="margin-top:10px;">
                             <div onclick="toggleHourChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(255,107,53,0.2),rgba(200,80,30,0.1));border-radius:8px;border-left:4px solid var(--orange);">
@@ -252,7 +252,7 @@
                                 <canvas id="hourChart" style="width:100%;height:250px;"></canvas>
                             </div>
                         </div>
-                        
+
                         <!-- Page Popularity (collapsible) -->
                         <div style="margin-top:10px;">
                             <div onclick="togglePageChart()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(100,50,200,0.1));border-radius:8px;border-left:4px solid var(--purple);">
@@ -277,9 +277,9 @@
                             </table>
                         </div>
                     </div>
-                    
+
                 </div>
-                
+
                 <!-- Tab: Data Upload -->
                 <div id="adminTabUpload" class="admin-tab-content" style="display:none;">
                     <div class="section-header">
@@ -358,7 +358,7 @@
                     </div>
                     <button class="jarvis-btn btn-orange" onclick="processUploads()" style="font-size:11px; padding:12px;">💾 PUBLISH TRIP DATA</button>
                 </div>
-                
+
                 <!-- Tab: Chart -->
                 <div id="adminTabChart" class="admin-tab-content" style="display:none;">
                     <div class="section-header purple">
@@ -400,7 +400,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Tab: KM Analysis -->
                 <div id="adminTabKm" class="admin-tab-content" style="display:none;">
                     <div class="section-header orange">
@@ -442,7 +442,7 @@
                             </table>
                         </div>
                     </div>
-                    
+
                     <!-- Missing KM Audit -->
                     <div style="margin-top:25px;padding-top:20px;border-top:2px solid rgba(255,107,53,0.3);">
                         <div class="section-header orange">
@@ -477,7 +477,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Tab: Tetra Key -->
                 <div id="adminTabTetra" class="admin-tab-content" style="display:none;">
                     <div class="section-header" style="border-left-color:var(--red);background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(200,0,0,0.1));">
@@ -523,20 +523,20 @@
                     <button class="jarvis-btn btn-green" onclick="downloadTetraExcel()" style="margin-bottom:15px;">📥 EXPORT EXCEL</button>
                     <div id="tetraKeyOutput"></div>
                 </div>
-                
 
-                
+
+
                 <!-- Tab: Users -->
                 <div id="adminTabUsers" class="admin-tab-content" style="display:none;">
                     <div class="section-header" style="border-left-color:var(--red);background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(239,68,68,0.1));">
                         <div class="section-icon" style="background:linear-gradient(135deg,var(--red),#991b1b);">👥</div>
                         <div class="section-title">User Access Management</div>
                     </div>
-                    
+
                     <div id="userMgmtAccessError" style="display:none;background:rgba(239,68,68,0.2);border:1px solid var(--red);border-radius:8px;padding:10px;margin-bottom:15px;text-align:center;color:var(--red);font-size:12px;">
                         Only Admins can access this section!
                     </div>
-                    
+
                     <div id="userMgmtContent">
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
                             <div class="glass-card" style="padding:15px;">
@@ -555,7 +555,7 @@
                                 </div>
                                 <button class="jarvis-btn btn-sm" onclick="addNewUserAccess()" style="background:linear-gradient(135deg,var(--green),#15803d);width:100%;">➕ ADD ACCESS</button>
                             </div>
-                            
+
                             <div class="glass-card" style="padding:15px;">
                                 <h4 style="color:var(--red);margin-bottom:10px;font-family:'Syncopate';font-size:11px;">REMOVE ACCESS</h4>
                                 <div class="input-group">
@@ -573,7 +573,7 @@
                                 <button class="jarvis-btn btn-sm" onclick="removeUserAccess()" style="background:linear-gradient(135deg,var(--red),#991b1b);width:100%;">➖ REMOVE ACCESS</button>
                             </div>
                         </div>
-                        
+
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
                             <div style="background:rgba(0,0,0,0.3);padding:15px;border-radius:12px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -582,7 +582,7 @@
                                 </div>
                                 <div id="adminAccessList" style="font-size:11px;color:rgba(255,255,255,0.7);max-height:150px;overflow-y:auto;"></div>
                             </div>
-                            
+
                             <div style="background:rgba(0,0,0,0.3);padding:15px;border-radius:12px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                                     <h4 style="color:var(--green);margin:0;font-family:'Syncopate';font-size:11px;">CREW CONTROLLER ACCESS LIST</h4>
@@ -591,7 +591,7 @@
                                 <div id="ccAccessList" style="font-size:11px;color:rgba(255,255,255,0.7);max-height:150px;overflow-y:auto;"></div>
                             </div>
                         </div>
-                        
+
                         <div class="glass-card" style="padding:15px;">
                             <h4 style="color:var(--purple);margin-bottom:10px;font-family:'Syncopate';font-size:11px;">REGISTERED USERS</h4>
                             <div class="table-wrap" style="max-height:200px;overflow-y:auto;">
@@ -601,7 +601,7 @@
                                 </table>
                             </div>
                         </div>
-                        
+
                         <div class="glass-card" style="padding:15px;margin-top:15px;">
                             <h4 style="color:var(--purple);margin-bottom:10px;font-family:'Syncopate';font-size:11px;">CHANGE PASSWORD</h4>
                             <div style="margin-bottom:8px;font-size:12px;color:rgba(255,255,255,0.6);">
@@ -612,10 +612,10 @@
                                 <button class="jarvis-btn btn-sm" onclick="changePassword()" style="background:linear-gradient(135deg,var(--purple),#7c3aed);">🔑 CHANGE PASSWORD</button>
                             </div>
                         </div>
-                        
+
                     </div>
                 </div>
-                
+
                 <!-- Tab: Time Table -->
                 <div id="adminTabTimetable" class="admin-tab-content" style="display:none;">
                     <div class="section-header" style="border-left-color:var(--cyan);background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(0,150,200,0.1));">
@@ -630,7 +630,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Tetra Dashboard Page -->
         <div id="pageTetraDashboard" class="page">
             <div class="glass-card cinematic-enter" style="padding:20px;">
@@ -645,7 +645,7 @@
                         <button class="jarvis-btn btn-sm" onclick="showPage('pageHome')" style="background:rgba(255,255,255,0.1);font-size:9px;padding:6px 10px;">← BACK</button>
                     </div>
                 </div>
-                
+
                 <!-- Filters -->
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:15px;">
                     <div style="flex:1;min-width:150px;">
@@ -669,7 +669,7 @@
                         <button class="jarvis-btn btn-sm" onclick="generateTetraDashboard()" style="background:linear-gradient(135deg,var(--red),#b91c1c);font-size:10px;padding:8px 14px;">🔄 REFRESH</button>
                     </div>
                 </div>
-                
+
                 <!-- Summary Cards -->
                 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px;">
                     <div style="background:rgba(0,212,255,0.15);padding:12px;border-radius:8px;text-align:center;border:1px solid rgba(0,212,255,0.3);">
@@ -689,7 +689,7 @@
                         <div id="tetraDashNet" class="summary-val" style="font-size:22px;font-weight:bold;">-</div>
                     </div>
                 </div>
-                
+
                 <!-- AI Analysis (collapsible) -->
                 <div id="tetraDashAiSection" style="display:none;margin-bottom:12px;">
                     <div onclick="toggleTetraAi()" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(168,85,247,0.2),rgba(100,50,200,0.1));border-radius:8px;border-left:4px solid var(--purple);margin-bottom:6px;">
@@ -713,7 +713,7 @@
                         </table>
                     </div>
                 </div>
-                
+
                 <!-- Sign On/Off at IPE/MKPR (collapsible) -->
                 <div id="tetraDashSignOnSection" style="display:none;margin-bottom:12px;">
                     <div onclick="toggleTetraSignOn()" style="cursor:pointer;display:flex;align-items:center;gap:8px;margin-bottom:0;padding:6px 10px;background:linear-gradient(135deg,rgba(255,160,0,0.2),rgba(200,100,0,0.1));border-radius:6px;border-left:3px solid var(--orange);">
@@ -741,7 +741,7 @@
                         </table>
                     </div>
                 </div>
-                
+
                 <!-- Complete Tetra Key Events -->
                 <div>
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(21,128,61,0.1));border-radius:8px;border-left:4px solid var(--green);">
@@ -777,7 +777,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- KM Analysis Page -->
         <div id="pageKmAnalysis" class="page">
             <div class="glass-card cinematic-enter" style="padding:20px;">
@@ -787,7 +787,7 @@
                         <button class="jarvis-btn btn-sm" onclick="showPage('pageHome')" style="background:rgba(255,255,255,0.1);font-size:9px;padding:6px 10px;">← BACK</button>
                     </div>
                 </div>
-                
+
                 <!-- Filters -->
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:15px;">
                     <div style="flex:1;min-width:150px;">
@@ -804,7 +804,7 @@
                         <button class="jarvis-btn btn-sm" onclick="generateKmAnalysis()" style="background:linear-gradient(135deg,var(--green),#15803d);font-size:10px;padding:8px 14px;">🔄 REFRESH</button>
                     </div>
                 </div>
-                
+
                 <!-- KM Summary -->
                 <div>
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(21,128,61,0.1));border-radius:8px;border-left:4px solid var(--green);">
@@ -821,7 +821,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Time Table View Page -->
         <div id="pageTimetable" class="page">
             <div class="glass-card cinematic-enter" style="padding:20px;">
@@ -839,12 +839,12 @@
                 </div>
             </div>
         </div>
-        
+
         <div style="text-align:center;padding:16px 10px 10px;font-size:9px;color:rgba(255,255,255,0.25);font-family:'Syncopate',sans-serif;letter-spacing:1px;text-transform:uppercase;border-top:1px solid rgba(255,255,255,0.06);margin-top:20px;">
             &copy; 2026 All Rights Reserved
         </div>
     </div>
-    
+
     <div id="appFooter" style="position:fixed;bottom:25px;left:25px;padding:10px 20px;font-size:13px;color:rgba(255,255,255,0.2);font-family:Arial,sans-serif;font-weight:bold;letter-spacing:2px;pointer-events:none;z-index:40;text-transform:uppercase;">
     <div style="margin-bottom: 5px;">
       Built from Spark to Script by<br>
@@ -855,7 +855,801 @@
     <div id="minimalLoginTrigger" style="position:fixed;bottom:20px;right:20px;padding:8px 14px;background:rgba(0,0,0,0.6);border:1px solid rgba(0,212,255,0.3);border-radius:20px;cursor:pointer;z-index:50;font-size:11px;color:rgba(0,212,255,0.7);font-family:'Syncopate';letter-spacing:1px;" title="Staff Login">
         <span id="minimalLoginText">👤 LOGIN</span>
     </div>
-    
+
     <script src="app.js"></script>
+    <!-- Diwali theme + interactive rocket launcher: active 04-09 Nov 2026, India Standard Time. -->
+    <script>
+        (function () {
+            'use strict';
+
+            // IST boundaries stored as UTC instants; the end is exclusive (10 Nov 00:00 IST).
+            var DIWALI_START = new Date(Date.UTC(2026, 10, 3, 18, 30, 0, 0));
+            var DIWALI_END = new Date(Date.UTC(2026, 10, 9, 18, 30, 0, 0));
+            var decorationsBuilt = false;
+            var diyaSvgCounter = 0;
+            var rocketIsLaunching = false;
+            var audioEnabled = true;
+            var audioContext = null;
+            var masterGain = null;
+            var activeVisualEffects = 0;
+
+            // Full-viewport Canvas effects engine. It only runs while a cracker is active.
+            var fwCanvas = null;
+            var fwCtx = null;
+            var fwWidth = 0;
+            var fwHeight = 0;
+            var fwDpr = 1;
+            var fwParticles = [];
+            var fwFlights = [];
+            var fwEmitters = [];
+            var fwSpinners = [];
+            var fwEvents = [];
+            var fwRaf = 0;
+            var fwLastFrame = 0;
+            var fwLastLaunchAt = 0;
+            var fwResizeHandler = null;
+            var FW_MAX_PARTICLES = (window.innerWidth || 1024) < 600 ? 210 : 340;
+
+            function isDiwaliWindow() {
+                var now = new Date();
+                return now >= DIWALI_START && now < DIWALI_END;
+            }
+
+            function diyaSvg() {
+                var glowId = 'dwGlowGrad' + (++diyaSvgCounter);
+                return '<svg class="dw-diya" viewBox="0 0 120 92" role="img" aria-label="Lit diya" xmlns="http://www.w3.org/2000/svg">' +
+                    '<defs><radialGradient id="' + glowId + '" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fde68a" stop-opacity=".85"/><stop offset="1" stop-color="#f97316" stop-opacity="0"/></radialGradient><linearGradient id="dwBowlGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcd34d"/><stop offset=".55" stop-color="#f97316"/><stop offset="1" stop-color="#9a3412"/></linearGradient></defs>' +
+                    '<ellipse class="dw-glow" cx="60" cy="43" rx="43" ry="34" fill="url(#' + glowId + ')"/>' +
+                    '<path class="dw-flame" d="M60 8 C46 25 51 34 60 39 C69 32 75 24 60 8Z" fill="#fb923c" stroke="#fef3c7" stroke-width="1.5"/>' +
+                    '<path d="M60 17 C55 27 58 31 61 34 C65 28 65 23 60 17Z" fill="#fff7cc"/>' +
+                    '<path d="M15 53 Q60 91 105 53 Q99 81 60 84 Q21 81 15 53Z" fill="url(#dwBowlGrad)" stroke="#fde68a" stroke-width="2"/>' +
+                    '<path d="M17 53 Q60 68 103 53" fill="none" stroke="#fff1b8" stroke-width="3" stroke-linecap="round"/>' +
+                    '<path d="M33 75 Q60 83 87 75" fill="none" stroke="#7c2d12" stroke-opacity=".55" stroke-width="2"/>' +
+                    '</svg>';
+            }
+
+            function lanternSvg() {
+                return '<svg viewBox="0 0 60 120" role="img" aria-label="Festive lantern" xmlns="http://www.w3.org/2000/svg">' +
+                    '<path d="M30 0 V15" stroke="#fcd34d" stroke-width="2"/>' +
+                    '<path d="M19 15 Q30 8 41 15 L45 29 L41 88 Q30 103 19 88 L15 29Z" fill="#b45309" stroke="#fcd34d" stroke-width="2"/>' +
+                    '<path d="M19 29 H41 M18 76 H42" stroke="#fde68a" stroke-width="2"/>' +
+                    '<path d="M20 30 L40 76 M40 30 L20 76" stroke="#fb923c" stroke-width="2" opacity=".9"/>' +
+                    '<path d="M30 94 V110 M24 110 H36" stroke="#fcd34d" stroke-width="2" stroke-linecap="round"/>' +
+                    '<circle cx="30" cy="55" r="13" fill="#fde68a" opacity=".7"/>' +
+                    '<circle cx="30" cy="55" r="7" fill="#fff7cc"/>' +
+                    '</svg>';
+            }
+
+            function rangoliSvg() {
+                return '<svg viewBox="0 0 300 300" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">' +
+                    '<g fill="none" stroke="#fbbf24" stroke-width="2">' +
+                    '<circle cx="150" cy="150" r="28"/><circle cx="150" cy="150" r="58"/><circle cx="150" cy="150" r="92"/><circle cx="150" cy="150" r="126"/>' +
+                    '<path d="M150 18 C178 65 178 95 150 122 C122 95 122 65 150 18Z"/><path d="M150 178 C178 205 178 235 150 282 C122 235 122 205 150 178Z"/>' +
+                    '<path d="M18 150 C65 122 95 122 122 150 C95 178 65 178 18 150Z"/><path d="M178 150 C205 122 235 122 282 150 C235 178 205 178 178 150Z"/>' +
+                    '<path d="M56 56 Q150 100 244 56 Q200 150 244 244 Q150 200 56 244 Q100 150 56 56Z"/>' +
+                    '</g><g fill="#fb7185"><circle cx="150" cy="24" r="4"/><circle cx="150" cy="276" r="4"/><circle cx="24" cy="150" r="4"/><circle cx="276" cy="150" r="4"/></g>' +
+                    '</svg>';
+            }
+
+            function resizeFireworkCanvas() {
+                if (!fwCanvas || !fwCtx) return;
+                fwWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+                fwHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+                fwDpr = Math.min(window.devicePixelRatio || 1, fwWidth < 600 ? 1 : 1.12);
+                FW_MAX_PARTICLES = fwWidth < 600 ? 210 : 340;
+                fwCanvas.width = Math.round(fwWidth * fwDpr);
+                fwCanvas.height = Math.round(fwHeight * fwDpr);
+                fwCanvas.style.width = fwWidth + 'px';
+                fwCanvas.style.height = fwHeight + 'px';
+                fwCtx.setTransform(fwDpr, 0, 0, fwDpr, 0, 0);
+            }
+
+            function initFireworkCanvas(layer) {
+                if (!layer || fwCanvas) return;
+                fwCanvas = document.createElement('canvas');
+                fwCanvas.id = 'dwFireworksCanvas';
+                fwCanvas.setAttribute('aria-hidden', 'true');
+                layer.appendChild(fwCanvas);
+                try {
+                    fwCtx = fwCanvas.getContext('2d', { alpha: true, desynchronized: true });
+                } catch (error) {
+                    fwCtx = fwCanvas.getContext('2d');
+                }
+                if (!fwCtx) return;
+                resizeFireworkCanvas();
+                fwResizeHandler = resizeFireworkCanvas;
+                window.addEventListener('resize', fwResizeHandler, { passive: true });
+            }
+
+            function wakeFireworkEngine() {
+                if (!fwCanvas || !fwCtx || fwRaf) return;
+                fwLastFrame = 0;
+                fwRaf = window.requestAnimationFrame(drawFireworkFrame);
+            }
+
+            function scheduleFirework(delay, callback) {
+                fwEvents.push({ at: (window.performance ? performance.now() : Date.now()) + delay, run: callback });
+                wakeFireworkEngine();
+            }
+
+            function spawnFireworkParticle(x, y, angle, speed, color, options) {
+                if (fwParticles.length >= FW_MAX_PARTICLES) return;
+                options = options || {};
+                var spread = options.spread || 0;
+                angle += (Math.random() - 0.5) * spread;
+                speed *= 0.82 + Math.random() * 0.36;
+                fwParticles.push({
+                    x: x, y: y, px: x, py: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    gravity: options.gravity == null ? 105 : options.gravity,
+                    drag: options.drag == null ? 0.988 : options.drag,
+                    life: options.life || 1.25,
+                    age: 0,
+                    size: options.size || (1.8 + Math.random() * 1.8),
+                    color: color || '#fde68a',
+                    glow: options.glow == null ? 5 : options.glow,
+                    twinkle: options.twinkle !== false
+                });
+            }
+
+            function addFireworkFlash(x, y, color, radius) {
+                if (fwParticles.length >= FW_MAX_PARTICLES) return;
+                fwParticles.push({ x: x, y: y, px: x, py: y, vx: 0, vy: 0, gravity: 0, drag: 1,
+                    life: 0.24, age: 0, size: radius || 15, color: color || '#fff7cc', glow: 16, flash: true, twinkle: false });
+            }
+
+            function createFireworkBurst(x, y, pattern) {
+                if (!fwCtx) return;
+                pattern = pattern || 'chrysanthemum';
+                var palettes = {
+                    peony: ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c', '#f9a8d4', '#ffffff'],
+                    chrysanthemum: ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c', '#fb7185', '#ffffff'],
+                    willow: ['#fff7cc', '#fde68a', '#fbbf24', '#f59e0b', '#ffffff'],
+                    crossette: ['#fff7cc', '#fde68a', '#fb7185', '#f9a8d4', '#93c5fd'],
+                    palm: ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c', '#ffffff'],
+                    crackle: ['#fff7cc', '#fde68a', '#fb7185', '#fbbf24']
+                };
+                var colors = palettes[pattern] || palettes.chrysanthemum;
+                var quality = fwWidth < 600 ? 0.62 : 0.82;
+                addFireworkFlash(x, y, colors[0], pattern === 'chrysanthemum' ? 19 : 14);
+
+                if (pattern === 'palm') {
+                    var branches = Math.round(7 * quality);
+                    for (var b = 0; b < branches; b++) {
+                        var baseAngle = -Math.PI / 2 + (b - (branches - 1) / 2) * 0.22;
+                        var branchSpeed = 275 + Math.random() * 100;
+                        for (var q = 0; q < 6; q++) {
+                            spawnFireworkParticle(x, y, baseAngle + (Math.random() - 0.5) * 0.13,
+                                branchSpeed * (0.72 + q * 0.045), colors[(b + q) % colors.length],
+                                { life: 0.92 + Math.random() * 0.28, gravity: 235, drag: 0.989, size: 2.1 + Math.random() * 1.5, spread: 0.06 });
+                        }
+                    }
+                } else if (pattern === 'willow') {
+                    var willowCount = Math.round(52 * quality);
+                    for (var w = 0; w < willowCount; w++) {
+                        var wa = Math.PI * 2 * w / willowCount;
+                        spawnFireworkParticle(x, y, wa, 190 + Math.random() * 140, colors[w % colors.length],
+                            { life: 1.05 + Math.random() * 0.34, gravity: 265, drag: 0.989, size: 1.8 + Math.random() * 1.6, glow: 2 });
+                    }
+                } else if (pattern === 'crossette') {
+                    var crossCount = Math.round(32 * quality);
+                    for (var c = 0; c < crossCount; c++) {
+                        var ca = Math.PI * 2 * c / crossCount;
+                        spawnFireworkParticle(x, y, ca, 190 + Math.random() * 115, colors[c % colors.length],
+                            { life: 0.52 + Math.random() * 0.17, gravity: 110, drag: 0.982, size: 2.1 + Math.random() * 1.3 });
+                    }
+                    scheduleFirework(320, function () {
+                        for (var s = 0; s < 6; s++) {
+                            var sa = Math.PI * 2 * s / 6;
+                            createMiniBurst(x + Math.cos(sa) * 66, y + Math.sin(sa) * 66, colors[(s + 1) % colors.length]);
+                        }
+                    });
+                } else if (pattern === 'crackle') {
+                    var crackCount = Math.round(84 * quality);
+                    for (var k = 0; k < crackCount; k++) {
+                        var ka = Math.random() * Math.PI * 2;
+                        spawnFireworkParticle(x, y, ka, 85 + Math.random() * 285, colors[k % colors.length],
+                            { life: 0.22 + Math.random() * 0.28, gravity: 135, drag: 0.975, size: 1.2 + Math.random() * 1.4, glow: 2 });
+                    }
+                } else {
+                    var count = Math.round((pattern === 'chrysanthemum' ? 82 : 62) * quality);
+                    for (var i = 0; i < count; i++) {
+                        var angle = Math.PI * 2 * i / count;
+                        var speed = pattern === 'chrysanthemum' ? 285 + Math.random() * 190 : 255 + Math.random() * 170;
+                        spawnFireworkParticle(x, y, angle, speed, colors[(i + Math.floor(Math.random() * colors.length)) % colors.length],
+                            { life: 0.72 + Math.random() * 0.38, gravity: 115 + Math.random() * 40, drag: 0.981, size: 1.9 + Math.random() * 1.8, glow: 2 });
+                    }
+                    if (pattern === 'chrysanthemum') {
+                        scheduleFirework(430, function () {
+                            for (var q = 0; q < 18; q++) {
+                                var qa = Math.random() * Math.PI * 2;
+                                spawnFireworkParticle(x + (Math.random() - 0.5) * 100, y + (Math.random() - 0.5) * 100,
+                                    qa, 45 + Math.random() * 105, colors[q % colors.length],
+                                    { life: 0.24 + Math.random() * 0.20, gravity: 115, drag: 0.978, size: 1.2 + Math.random() * 1.0, glow: 2 });
+                            }
+                        });
+                    }
+                }
+                wakeFireworkEngine();
+            }
+
+            function createMiniBurst(x, y, color) {
+                addFireworkFlash(x, y, color, 6);
+                for (var i = 0; i < 13; i++) {
+                    spawnFireworkParticle(x, y, Math.PI * 2 * i / 13, 70 + Math.random() * 95, color,
+                        { life: 0.20 + Math.random() * 0.13, gravity: 95, drag: 0.976, size: 1.2 + Math.random() * 1.1, glow: 2 });
+                }
+            }
+
+            function launchAerial(pattern, fromLauncher) {
+                if (!fwCanvas) return;
+                var startX;
+                if (fromLauncher) {
+                    var launcher = document.getElementById('dwCrackerToggle');
+                    var rect = launcher ? launcher.getBoundingClientRect() : null;
+                    startX = rect ? rect.left + rect.width / 2 : fwWidth * 0.82;
+                } else {
+                    startX = fwWidth * (0.08 + Math.random() * 0.84);
+                }
+                var targetX = fwWidth * (0.07 + Math.random() * 0.86);
+                var targetY = fwHeight * (0.13 + Math.random() * 0.40);
+                fwFlights.push({ x0: startX, y0: fwHeight + 22, x1: targetX, y1: targetY,
+                    start: performance.now(), duration: 430 + Math.random() * 190, pattern: pattern,
+                    px: startX, py: fwHeight + 22, lastTrail: 0 });
+                wakeFireworkEngine();
+            }
+
+            function createFountain(x, y) {
+                var now = performance.now();
+                fwEmitters.push({ kind: 'fountain', x: x, y: y, start: now, ends: now + 1250, nextAt: now,
+                    finish: function () { createFireworkBurst(x + (Math.random() - 0.5) * 60, y - fwHeight * 0.34, 'chrysanthemum'); } });
+                wakeFireworkEngine();
+            }
+
+            function createChakri(x, y) {
+                var now = performance.now();
+                fwSpinners.push({ x: x, y: y, start: now, ends: now + 2000, nextAt: now, angle: 0 });
+                wakeFireworkEngine();
+            }
+
+            function createSparkler(x, y) {
+                var now = performance.now();
+                fwEmitters.push({ kind: 'sparkler', x: x, y: y, start: now, ends: now + 1500, nextAt: now });
+                wakeFireworkEngine();
+            }
+
+            function createLadi() {
+                var patterns = ['peony', 'chrysanthemum', 'willow', 'crossette', 'palm', 'chrysanthemum', 'peony', 'crackle', 'willow'];
+                for (var i = 0; i < patterns.length; i++) {
+                    (function (index) {
+                        scheduleFirework(index * 92, function () { launchAerial(patterns[index], false); });
+                    })(i);
+                }
+            }
+
+            function createGrandFinale() {
+                var patterns = ['peony', 'chrysanthemum', 'willow', 'palm', 'crossette', 'crackle', 'peony', 'chrysanthemum', 'willow', 'palm', 'crossette', 'crackle', 'peony', 'chrysanthemum', 'willow', 'crossette'];
+                for (var i = 0; i < patterns.length; i++) {
+                    (function (index) {
+                        scheduleFirework(index * 105, function () {
+                            launchAerial(patterns[index], false);
+                            if (index % 4 === 3) {
+                                scheduleFirework(240, function () {
+                                    createFireworkBurst(fwWidth * (0.15 + Math.random() * 0.70), fwHeight * (0.15 + Math.random() * 0.40), 'crossette');
+                                });
+                            }
+                        });
+                    })(i);
+                }
+                // Ground effects so every cracker type participates in the finale.
+                scheduleFirework(120, function () { createFountain(fwWidth * 0.22, fwHeight * 0.84); });
+                scheduleFirework(360, function () { createChakri(fwWidth * 0.50, fwHeight * 0.84); });
+                scheduleFirework(600, function () { createSparkler(fwWidth * 0.78, fwHeight * 0.84); });
+                scheduleFirework(880, function () { createLadi(); });
+            }
+
+            function drawFireworkFrame(timestamp) {
+                fwRaf = 0;
+                if (!fwCtx || !fwCanvas) return;
+                var now = timestamp || performance.now();
+                var dt = fwLastFrame ? Math.min(0.055, Math.max(0.001, (now - fwLastFrame) / 1000)) : 0.016;
+                fwLastFrame = now;
+                fwCtx.clearRect(0, 0, fwWidth, fwHeight);
+                fwCtx.globalCompositeOperation = 'lighter';
+                fwCtx.shadowBlur = 0;
+
+                // Process staged split bursts and finale cues.
+                for (var e = fwEvents.length - 1; e >= 0; e--) {
+                    if (now >= fwEvents[e].at) {
+                        var event = fwEvents.splice(e, 1)[0];
+                        try { event.run(); } catch (error) { /* A single effect must never break the renderer. */ }
+                    }
+                }
+
+                // Lifted rockets travel from the lower edge to different areas of the full viewport.
+                for (var f = fwFlights.length - 1; f >= 0; f--) {
+                    var flight = fwFlights[f];
+                    var progress = Math.min(1, (now - flight.start) / flight.duration);
+                    var eased = 1 - Math.pow(1 - progress, 2.15);
+                    var rx = flight.x0 + (flight.x1 - flight.x0) * eased;
+                    var ry = flight.y0 + (flight.y1 - flight.y0) * eased;
+                    if (now - flight.lastTrail > 34) {
+                        spawnFireworkParticle(rx, ry + 7, -Math.PI / 2 + (Math.random() - 0.5) * 0.65,
+                            55 + Math.random() * 125, Math.random() > 0.45 ? '#fde68a' : '#fb923c',
+                            { life: 0.35 + Math.random() * 0.2, gravity: 120, drag: 0.97, size: 1.5 + Math.random() * 1.4, glow: 4 });
+                        flight.lastTrail = now;
+                    }
+                    fwCtx.save();
+                    fwCtx.strokeStyle = '#fff1b8'; fwCtx.lineWidth = 2.2; fwCtx.shadowColor = '#fb923c'; fwCtx.shadowBlur = 13;
+                    fwCtx.beginPath(); fwCtx.moveTo(flight.px, flight.py); fwCtx.lineTo(rx, ry); fwCtx.stroke();
+                    fwCtx.fillStyle = '#fff7cc'; fwCtx.beginPath(); fwCtx.arc(rx, ry, 3.1, 0, Math.PI * 2); fwCtx.fill();
+                    fwCtx.restore();
+                    flight.px = rx; flight.py = ry;
+                    if (progress >= 1) {
+                        fwFlights.splice(f, 1);
+                        createFireworkBurst(flight.x1, flight.y1, flight.pattern);
+                    }
+                }
+
+                // Ground-based fountains and handheld sparklers throw sparks upward and across the screen.
+                for (var m = fwEmitters.length - 1; m >= 0; m--) {
+                    var emitter = fwEmitters[m];
+                    if (now >= emitter.nextAt && now < emitter.ends) {
+                        var isFountain = emitter.kind === 'fountain';
+                        var n = isFountain ? 6 : 10;
+                        for (var q = 0; q < n; q++) {
+                            var a = isFountain ? (-Math.PI / 2 + (Math.random() - 0.5) * 0.9) : (-Math.PI / 2 + (Math.random() - 0.5) * 2.0);
+                            var v = isFountain ? 255 + Math.random() * 250 : 135 + Math.random() * 280;
+                            spawnFireworkParticle(emitter.x, emitter.y, a, v,
+                                isFountain ? ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c'][q % 4] : ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c', '#fb7185', '#ffffff'][q % 6],
+                                { life: isFountain ? 0.48 + Math.random() * 0.32 : 0.42 + Math.random() * 0.40,
+                                  gravity: isFountain ? 220 : 150, drag: 0.978, size: 1.6 + Math.random() * 2.2, glow: 2 });
+                        }
+                        emitter.nextAt = now + (isFountain ? 55 : 40);
+                    }
+                    if (now >= emitter.ends) {
+                        fwEmitters.splice(m, 1);
+                        if (emitter.finish) emitter.finish();
+                    }
+                }
+
+                // Chakri: spinning ground wheel with a continuous circular spray.
+                for (var w = fwSpinners.length - 1; w >= 0; w--) {
+                    var spinner = fwSpinners[w];
+                    var elapsed = now - spinner.start;
+                    if (now >= spinner.nextAt && now < spinner.ends) {
+                        spinner.angle += 0.82;
+                        var radius = 29 + Math.min(52, elapsed / 28);
+                        for (var s = 0; s < 10; s++) {
+                            var sa = spinner.angle + Math.PI * 2 * s / 10;
+                            var sx = spinner.x + Math.cos(sa) * radius;
+                            var sy = spinner.y + Math.sin(sa) * radius;
+                            spawnFireworkParticle(sx, sy, sa + (Math.random() - 0.5) * 0.5,
+                                125 + Math.random() * 175, ['#fff7cc', '#fde68a', '#fbbf24', '#fb923c', '#ffffff'][s % 5],
+                                { life: 0.30 + Math.random() * 0.30, gravity: 105, drag: 0.968, size: 1.8 + Math.random() * 1.6, glow: 2 });
+                        }
+                        spinner.nextAt = now + 45;
+                    }
+                    fwCtx.save();
+                    fwCtx.translate(spinner.x, spinner.y);
+                    fwCtx.rotate(spinner.angle);
+                    fwCtx.strokeStyle = 'rgba(255,220,130,.76)'; fwCtx.lineWidth = 2; fwCtx.shadowColor = '#fbbf24'; fwCtx.shadowBlur = 13;
+                    for (var r = 0; r < 8; r++) {
+                        fwCtx.rotate(Math.PI / 4); fwCtx.beginPath(); fwCtx.moveTo(12, 0); fwCtx.lineTo(59, 0); fwCtx.stroke();
+                    }
+                    fwCtx.restore();
+                    if (now >= spinner.ends) fwSpinners.splice(w, 1);
+                }
+
+                // Particle physics and glowing trails.
+                for (var p = fwParticles.length - 1; p >= 0; p--) {
+                    var particle = fwParticles[p];
+                    particle.age += dt;
+                    if (particle.age >= particle.life) { fwParticles.splice(p, 1); continue; }
+                    var fade = Math.max(0, 1 - particle.age / particle.life);
+                    if (particle.flash) {
+                        var flashAlpha = Math.min(1, fade * 1.35);
+                        fwCtx.globalAlpha = 1;
+                        var flashRadius = particle.size * (1 + particle.age * 7);
+                        var gradient = fwCtx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, flashRadius);
+                        gradient.addColorStop(0, 'rgba(255,255,235,' + (0.46 * flashAlpha) + ')');
+                        gradient.addColorStop(0.24, 'rgba(251,191,36,' + (0.30 * flashAlpha) + ')');
+                        gradient.addColorStop(1, 'rgba(255,180,50,0)');
+                        fwCtx.fillStyle = gradient;
+                        fwCtx.beginPath(); fwCtx.arc(particle.x, particle.y, flashRadius, 0, Math.PI * 2); fwCtx.fill();
+                        continue;
+                    }
+                    particle.px = particle.x; particle.py = particle.y;
+                    particle.x += particle.vx * dt;
+                    particle.y += particle.vy * dt;
+                    particle.vx *= Math.pow(particle.drag, dt * 60);
+                    particle.vy = particle.vy * Math.pow(particle.drag, dt * 60) + particle.gravity * dt;
+                    var alpha = Math.min(1, fade * 1.6);
+                    if (particle.twinkle) alpha *= 0.76 + Math.sin((particle.age * 28) + particle.x * 0.04) * 0.24;
+                    fwCtx.globalAlpha = Math.max(0, alpha);
+                    fwCtx.strokeStyle = particle.color;
+                    fwCtx.lineWidth = Math.max(1.05, particle.size * (0.70 + fade * 0.45));
+                    fwCtx.lineCap = 'round';
+                    // A single bright, rounded trail stroke replaces two shapes plus an expensive
+                    // shadow-blur pass for every particle. Overlapping additive trails retain the glow.
+                    fwCtx.shadowBlur = 0;
+                    fwCtx.beginPath(); fwCtx.moveTo(particle.px, particle.py); fwCtx.lineTo(particle.x, particle.y); fwCtx.stroke();
+                }
+
+                fwCtx.globalAlpha = 1;
+                fwCtx.globalCompositeOperation = 'source-over';
+                fwCtx.shadowBlur = 0;
+                if (fwParticles.length || fwFlights.length || fwEmitters.length || fwSpinners.length || fwEvents.length) {
+                    fwRaf = window.requestAnimationFrame(drawFireworkFrame);
+                } else {
+                    fwLastFrame = 0;
+                    fwCtx.clearRect(0, 0, fwWidth, fwHeight);
+                }
+            }
+
+            function launchRocket() {
+                launchAerial('chrysanthemum', true);
+            }
+
+            // Audio helpers: generated locally with Web Audio (no external sound files).
+            // All audio is started from the user's click, which satisfies browser autoplay policies.
+            function getAudioContext() {
+                if (!audioEnabled) return null;
+                var AudioCtor = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtor) return null;
+                try {
+                    if (!audioContext || audioContext.state === 'closed') {
+                        audioContext = new AudioCtor();
+                        masterGain = audioContext.createGain();
+                        masterGain.gain.setValueAtTime(0.18, audioContext.currentTime);
+                        masterGain.connect(audioContext.destination);
+                    }
+                    if (audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+                        var resumeTask = audioContext.resume();
+                        if (resumeTask && typeof resumeTask.catch === 'function') resumeTask.catch(function () {});
+                    }
+                    return audioContext;
+                } catch (error) {
+                    // Sound is optional; a browser audio limitation must not stop the visual effect.
+                    return null;
+                }
+            }
+
+            function scheduleCrackerTone(ctx, frequency, endFrequency, when, duration, wave, level) {
+                if (!ctx || !masterGain) return;
+                var oscillator = ctx.createOscillator();
+                var envelope = ctx.createGain();
+                oscillator.type = wave || 'sine';
+                oscillator.frequency.setValueAtTime(Math.max(25, frequency), when);
+                oscillator.frequency.exponentialRampToValueAtTime(Math.max(25, endFrequency), when + duration);
+                envelope.gain.setValueAtTime(0.0001, when);
+                envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, level || 0.12), when + Math.min(0.025, duration * 0.25));
+                envelope.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+                oscillator.connect(envelope);
+                envelope.connect(masterGain);
+                oscillator.start(when);
+                oscillator.stop(when + duration + 0.035);
+            }
+
+            function scheduleCrackerNoise(ctx, when, duration, level, cutoff, filterType) {
+                if (!ctx || !masterGain) return;
+                var sampleCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+                var buffer = ctx.createBuffer(1, sampleCount, ctx.sampleRate);
+                var samples = buffer.getChannelData(0);
+                for (var i = 0; i < sampleCount; i++) {
+                    // Slightly shaped noise sounds less harsh than unfiltered white noise.
+                    samples[i] = (Math.random() * 2 - 1) * (0.72 + 0.28 * Math.sin(Math.PI * i / sampleCount));
+                }
+                var source = ctx.createBufferSource();
+                var filter = ctx.createBiquadFilter();
+                var envelope = ctx.createGain();
+                source.buffer = buffer;
+                filter.type = filterType || 'lowpass';
+                filter.frequency.setValueAtTime(Math.max(120, cutoff || 2600), when);
+                filter.Q.setValueAtTime(0.65, when);
+                envelope.gain.setValueAtTime(0.0001, when);
+                envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, level || 0.08), when + Math.min(0.035, duration * 0.2));
+                envelope.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+                source.connect(filter);
+                filter.connect(envelope);
+                envelope.connect(masterGain);
+                source.start(when);
+                source.stop(when + duration + 0.04);
+            }
+
+            function scheduleCrackerBoom(ctx, when, strength) {
+                var amount = strength || 1;
+                scheduleCrackerTone(ctx, 105, 38, when, 0.34, 'sine', 0.24 * amount);
+                scheduleCrackerNoise(ctx, when, 0.42, 0.19 * amount, 520, 'lowpass');
+                scheduleCrackerNoise(ctx, when + 0.035, 0.20, 0.08 * amount, 1900, 'bandpass');
+            }
+
+            function playCrackerSound(type) {
+                if (!audioEnabled) return;
+                try {
+                    var ctx = getAudioContext();
+                    if (!ctx || !masterGain) return;
+                    var now = ctx.currentTime + 0.025;
+                    if (type === 'rocket') {
+                        scheduleCrackerTone(ctx, 270, 1350, now, 0.48, 'sawtooth', 0.105);
+                        scheduleCrackerNoise(ctx, now + 0.40, 0.16, 0.11, 3400, 'highpass');
+                        scheduleCrackerBoom(ctx, now + 0.47, 1.05);
+                    } else if (type === 'anar') {
+                        scheduleCrackerNoise(ctx, now, 1.05, 0.095, 4200, 'highpass');
+                        scheduleCrackerTone(ctx, 430, 920, now + 0.04, 0.92, 'sawtooth', 0.035);
+                        for (var a = 0; a < 7; a++) scheduleCrackerNoise(ctx, now + 0.12 + a * 0.13, 0.10, 0.055, 5200, 'highpass');
+                    } else if (type === 'chakri') {
+                        scheduleCrackerTone(ctx, 155, 540, now, 0.92, 'sawtooth', 0.075);
+                        scheduleCrackerNoise(ctx, now, 0.90, 0.07, 2200, 'bandpass');
+                        for (var c = 0; c < 9; c++) scheduleCrackerNoise(ctx, now + c * 0.09, 0.075, 0.045, 4300, 'highpass');
+                    } else if (type === 'phuljhadi') {
+                        scheduleCrackerNoise(ctx, now, 1.0, 0.078, 5700, 'highpass');
+                        for (var p = 0; p < 11; p++) scheduleCrackerTone(ctx, 1250 + Math.random() * 1500, 700 + Math.random() * 600, now + p * 0.075, 0.075, 'sine', 0.025);
+                    } else if (type === 'ladi') {
+                        for (var l = 0; l < 10; l++) {
+                            scheduleCrackerNoise(ctx, now + l * 0.075, 0.13, 0.09, 1500 + Math.random() * 900, 'bandpass');
+                            scheduleCrackerTone(ctx, 120 + Math.random() * 35, 48, now + l * 0.075, 0.12, 'sine', 0.065);
+                        }
+                    } else if (type === 'grand') {
+                        scheduleCrackerTone(ctx, 260, 1050, now, 0.46, 'sawtooth', 0.085);
+                        for (var g = 0; g < 12; g++) scheduleCrackerBoom(ctx, now + 0.38 + g * 0.12, 0.65 + Math.random() * 0.3);
+                        scheduleCrackerNoise(ctx, now + 0.48, 1.15, 0.06, 4600, 'highpass');
+                    } else {
+                        // Peony, chrysanthemum, willow, crossette and palm aerial effects.
+                        scheduleCrackerTone(ctx, 300, 880, now, 0.38, 'sawtooth', 0.07);
+                        scheduleCrackerNoise(ctx, now + 0.31, 0.13, 0.075, 3200, 'highpass');
+                        scheduleCrackerBoom(ctx, now + 0.35, type === 'chrysanthemum' ? 1 : 0.8);
+                        if (type === 'crossette' || type === 'crackle') {
+                            for (var x = 0; x < 6; x++) scheduleCrackerNoise(ctx, now + 0.53 + x * 0.055, 0.07, 0.035, 4800, 'highpass');
+                        }
+                    }
+                } catch (error) {
+                    // Never allow audio failure to cancel a cracker animation.
+                }
+            }
+
+            function launchCracker(type) {
+                if (!isDiwaliWindow()) return;
+                var toggle = document.getElementById('dwCrackerToggle');
+                var menu = document.getElementById('dwCrackerMenu');
+                if (!toggle || !menu || !fwCanvas || !fwCtx) return;
+                var launchNow = performance.now();
+                if (launchNow - fwLastLaunchAt < 140) return; // Prevent accidental rapid-fire overload.
+                fwLastLaunchAt = launchNow;
+                try { playCrackerSound(type); } catch (soundError) { /* Visual fireworks work without audio. */ }
+                menu.parentNode.classList.remove('is-open');
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.setAttribute('aria-label', 'Open Diwali firecracker menu');
+
+                var x = fwWidth * (0.12 + Math.random() * 0.76);
+                var groundY = fwHeight * 0.84;
+                if (type === 'rocket') launchRocket();
+                else if (type === 'anar') createFountain(fwWidth * (0.2 + Math.random() * 0.6), groundY);
+                else if (type === 'chakri') createChakri(fwWidth * (0.18 + Math.random() * 0.64), groundY);
+                else if (type === 'phuljhadi') createSparkler(fwWidth * (0.16 + Math.random() * 0.68), groundY);
+                else if (type === 'ladi') createLadi();
+                else if (type === 'grand') createGrandFinale();
+                else launchAerial(type, false);
+            }
+
+            function buildCrackerDock() {
+                if (document.getElementById('dwCrackerDock')) return;
+                var dock = document.createElement('div');
+                dock.id = 'dwCrackerDock';
+                dock.className = 'dw-cracker-dock';
+                dock.innerHTML =
+                    '<div class="dw-cracker-menu" id="dwCrackerMenu" role="group" aria-label="Choose a Diwali firecracker">' +
+                        '<div class="dw-cracker-menu-head"><span>🪔 FESTIVE CRACKERS</span><button type="button" id="dwSoundToggle" class="dw-sound-toggle" aria-pressed="true">🔊 SOUND ON</button></div>' +
+                        '<div class="dw-cracker-grid">' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="rocket"><span>🚀</span><b>ROCKET</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="anar"><span>🎇</span><b>ANAR</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="chakri"><span>🌀</span><b>CHAKRI</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="phuljhadi"><span>✨</span><b>PHULJHADI</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="chrysanthemum"><span>🎆</span><b>CHRYSANTHEMUM</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="crossette"><span>💫</span><b>CROSSETTE</b></button>' +
+                            '<button type="button" class="dw-cracker-option" data-cracker="ladi"><span>🧨</span><b>LADI / BURST</b></button>' +
+                            '<button type="button" class="dw-cracker-option wide" data-cracker="grand"><span>🎉</span><b>GRAND FINALE • FULL SKY</b></button>' +
+                        '</div>' +
+                        '<p class="dw-sound-note">Sound starts after your tap. Keep volume comfortable.</p>' +
+                    '</div>' +
+                    '<button type="button" id="dwCrackerToggle" class="dw-cracker-toggle" aria-expanded="false" aria-controls="dwCrackerMenu" aria-label="Open Diwali firecracker menu">' +
+                        '<span class="dw-cracker-toggle-art">🎆</span><span class="dw-cracker-toggle-label">CRACKERS</span>' +
+                    '</button>';
+                document.body.appendChild(dock);
+                var toggle = dock.querySelector('#dwCrackerToggle');
+                var menu = dock.querySelector('#dwCrackerMenu');
+                toggle.addEventListener('click', function () {
+                    var open = dock.classList.toggle('is-open');
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    toggle.setAttribute('aria-label', open ? 'Close Diwali firecracker menu' : 'Open Diwali firecracker menu');
+                });
+                dock.querySelectorAll('[data-cracker]').forEach(function (button) {
+                    button.addEventListener('click', function () { launchCracker(button.getAttribute('data-cracker')); });
+                });
+                dock.querySelector('#dwSoundToggle').addEventListener('click', function () {
+                    audioEnabled = !audioEnabled;
+                    var soundButton = dock.querySelector('#dwSoundToggle');
+                    soundButton.textContent = audioEnabled ? '🔊 SOUND ON' : '🔇 SOUND OFF';
+                    soundButton.setAttribute('aria-pressed', audioEnabled ? 'true' : 'false');
+                    if (audioEnabled) {
+                        var soundContext = getAudioContext();
+                        if (soundContext && masterGain) masterGain.gain.setTargetAtTime(0.18, soundContext.currentTime, 0.025);
+                    } else if (audioContext && masterGain && audioContext.state !== 'closed') {
+                        masterGain.gain.setTargetAtTime(0.0001, audioContext.currentTime, 0.025);
+                    }
+                });
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && dock.classList.contains('is-open')) {
+                        dock.classList.remove('is-open');
+                        toggle.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+
+            function buildDecorations() {
+                if (decorationsBuilt) return;
+
+                var back = document.createElement('div');
+                back.id = 'dwBack';
+                back.setAttribute('aria-hidden', 'true');
+                back.innerHTML = '<div class="dw-corner bl">' + rangoliSvg() + '</div><div class="dw-corner br">' + rangoliSvg() + '</div>';
+                document.body.insertBefore(back, document.body.firstChild);
+
+                var front = document.createElement('div');
+                front.id = 'dwFront';
+                front.setAttribute('aria-hidden', 'true');
+                var floatPositions = [
+                    ['6%', '36px', '22s', '-4s', '18px'],
+                    ['22%', '28px', '27s', '-16s', '-15px'],
+                    ['73%', '34px', '24s', '-9s', '20px'],
+                    ['91%', '30px', '29s', '-21s', '-18px']
+                ];
+                floatPositions.forEach(function (p, i) {
+                    var diya = document.createElement('div');
+                    diya.className = 'dw-rise';
+                    diya.style.left = p[0];
+                    diya.style.setProperty('--s', p[1]);
+                    diya.style.setProperty('--d', p[2]);
+                    diya.style.setProperty('--dl', p[3]);
+                    diya.style.setProperty('--sw', p[4]);
+                    diya.innerHTML = diyaSvg();
+                    front.appendChild(diya);
+                });
+                var petalColors = ['#fbbf24', '#fb7185', '#fb923c', '#f9a8d4', '#fde68a', '#c084fc'];
+                for (var i = 0; i < 12; i++) {
+                    var petal = document.createElement('span');
+                    petal.className = 'dw-petal';
+                    petal.style.left = ((i * 37 + 7) % 97) + '%';
+                    petal.style.setProperty('--c', petalColors[i % petalColors.length]);
+                    petal.style.setProperty('--d', (17 + (i % 5) * 4) + 's');
+                    petal.style.setProperty('--dl', (-i * 2.3) + 's');
+                    petal.style.setProperty('--sw', ((i % 2 ? 1 : -1) * (12 + i)) + 'px');
+                    front.appendChild(petal);
+                }
+                document.body.appendChild(front);
+
+                var fireworkLayer = document.createElement('div');
+                fireworkLayer.id = 'dwFireworksLayer';
+                fireworkLayer.setAttribute('aria-hidden', 'true');
+                document.body.appendChild(fireworkLayer);
+                initFireworkCanvas(fireworkLayer);
+                buildCrackerDock();
+
+                var statusBar = document.querySelector('.status-bar');
+                if (statusBar && !statusBar.querySelector('.dw-wish')) {
+                    var wish = document.createElement('span');
+                    wish.className = 'dw-wish';
+                    wish.textContent = '  🪔  HAPPY DIWALI • LIGHT • JOY • TOGETHERNESS  🪔';
+                    statusBar.appendChild(wish);
+                }
+
+                var home = document.getElementById('pageHome');
+                if (home && !home.querySelector('.dw-hero')) {
+                    var hero = document.createElement('section');
+                    hero.className = 'dw-hero';
+                    hero.setAttribute('aria-label', 'Happy Diwali greeting');
+                    hero.innerHTML =
+                        '<div class="dw-rangoli" aria-hidden="true">' + rangoliSvg() + '</div>' +
+                        '<div class="dw-garland" aria-hidden="true">' +
+                            '<i style="--c:#fbbf24"></i><i style="--c:#fb7185"></i><i style="--c:#fb923c"></i><i style="--c:#fde68a"></i><i style="--c:#c084fc"></i><i style="--c:#fbbf24"></i><i style="--c:#fb7185"></i><i style="--c:#fb923c"></i>' +
+                        '</div>' +
+                        '<div class="dw-lan l" aria-hidden="true">' + lanternSvg() + '</div>' +
+                        '<div class="dw-lan r" aria-hidden="true">' + lanternSvg() + '</div>' +
+                        '<div class="dw-deva">शुभ दीपावली</div>' +
+                        '<h2 class="dw-title">HAPPY DIWALI</h2>' +
+                        '<p class="dw-sub">May your days shine with happiness, peace &amp; prosperity</p>' +
+                        '<div class="dw-diyas" aria-hidden="true">' +
+                            '<span class="d" style="--w:42;--fd:-.2s">' + diyaSvg() + '</span>' +
+                            '<span class="d" style="--w:58;--fd:-.7s">' + diyaSvg() + '</span>' +
+                            '<span class="d" style="--w:72;--fd:-.4s">' + diyaSvg() + '</span>' +
+                            '<span class="d" style="--w:58;--fd:-.9s">' + diyaSvg() + '</span>' +
+                            '<span class="d" style="--w:42;--fd:-.1s">' + diyaSvg() + '</span>' +
+                        '</div>' +
+                        '<span class="dw-spark" style="top:42%;left:18%">✦</span>' +
+                        '<span class="dw-spark" style="top:35%;right:18%;animation-delay:-.8s">✧</span>';
+                    var firstCard = home.querySelector('.glass-card');
+                    home.insertBefore(hero, firstCard || home.firstChild);
+                }
+
+                // A compact greeting on every functional non-home page; it does not wrap or resize page content.
+                var pages = document.querySelectorAll('.main-wrapper > .page');
+                pages.forEach(function (page) {
+                    if (page.id === 'pageHome' || page.id === 'pageLogin' || page.id === 'pageRegister') return;
+                    if (!page.firstElementChild || page.querySelector('.dw-ribbon')) return;
+                    var ribbon = document.createElement('div');
+                    ribbon.className = 'dw-ribbon';
+                    ribbon.setAttribute('aria-label', 'Happy Diwali');
+                    ribbon.innerHTML = diyaSvg() + '<b>🪔 Happy Diwali • शुभ दीपावली 🪔</b>' + diyaSvg();
+                    page.insertBefore(ribbon, page.firstElementChild);
+                });
+
+                decorationsBuilt = true;
+            }
+
+            function removeDecorations() {
+                rocketIsLaunching = false;
+                if (audioContext && audioContext.state !== 'closed') {
+                    try { audioContext.close(); } catch (error) { /* Ignore browser audio cleanup errors. */ }
+                }
+                audioContext = null;
+                masterGain = null;
+                if (fwRaf) window.cancelAnimationFrame(fwRaf);
+                fwRaf = 0; fwCanvas = null; fwCtx = null; fwLastFrame = 0; fwLastLaunchAt = 0;
+                fwParticles = []; fwFlights = []; fwEmitters = []; fwSpinners = []; fwEvents = [];
+                if (fwResizeHandler) window.removeEventListener('resize', fwResizeHandler);
+                fwResizeHandler = null;
+                ['dwBack', 'dwFront', 'dwFireworksLayer', 'dwCrackerDock'].forEach(function (id) {
+                    var node = document.getElementById(id);
+                    if (node) node.remove();
+                });
+                document.querySelectorAll('.dw-hero, .dw-ribbon, .dw-wish').forEach(function (node) {
+                    node.remove();
+                });
+                document.body.classList.remove('dw-home');
+                decorationsBuilt = false;
+            }
+
+            function syncHome() {
+                var home = document.getElementById('pageHome');
+                document.body.classList.toggle('dw-home', isDiwaliWindow() && !!(home && home.classList.contains('active')));
+            }
+
+            function applyTheme() {
+                var active = isDiwaliWindow();
+                document.body.classList.toggle('diwali', active);
+                if (active) {
+                    buildDecorations();
+                    syncHome();
+                } else {
+                    removeDecorations();
+                }
+            }
+
+            // Keep the home/non-home decorative treatment in sync with the existing page navigation.
+            var originalShowPage = window.showPage;
+            if (typeof originalShowPage === 'function') {
+                window.showPage = function () {
+                    var result = originalShowPage.apply(this, arguments);
+                    syncHome();
+                    return result;
+                };
+            }
+
+            // Also refresh after the date boundary without requiring the user to reload the page.
+            function scheduleNextBoundary() {
+                var now = new Date();
+                var next = now < DIWALI_START ? DIWALI_START : (now < DIWALI_END ? DIWALI_END : null);
+                if (!next) return;
+                window.setTimeout(function () {
+                    applyTheme();
+                    scheduleNextBoundary();
+                }, Math.min(2147483000, Math.max(0, next.getTime() - now.getTime()) + 50));
+            }
+
+            applyTheme();
+            scheduleNextBoundary();
+        })();
+    </script>
 </body>
 </html>
