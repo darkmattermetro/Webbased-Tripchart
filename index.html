@@ -950,6 +950,7 @@
                 fwCanvas.id = 'dwFireworksCanvas';
                 fwCanvas.setAttribute('aria-hidden', 'true');
                 layer.appendChild(fwCanvas);
+                layer.style.display = 'none';
                 fwCanvas.style.display = 'block';
                 try {
                     fwCtx = fwCanvas.getContext('2d', { alpha: true, desynchronized: true });
@@ -964,6 +965,8 @@
 
             function wakeFireworkEngine() {
                 if (!fwCanvas || !fwCtx || fwRaf) return;
+                var fwLayer = document.getElementById('dwFireworksLayer');
+                if (fwLayer) fwLayer.style.display = 'block';
                 if (fwCanvas) fwCanvas.style.display = 'block';
                 fwLastFrame = 0;
                 fwRaf = window.requestAnimationFrame(drawFireworkFrame);
@@ -1287,6 +1290,8 @@
                 } else {
                     fwLastFrame = 0;
                     if (fwCtx) fwCtx.clearRect(0, 0, fwWidth, fwHeight);
+                    var fwLayer = document.getElementById('dwFireworksLayer');
+                    if (fwLayer) fwLayer.style.display = 'none';
                     if (fwCanvas) fwCanvas.style.display = 'none';
                 }
             }
